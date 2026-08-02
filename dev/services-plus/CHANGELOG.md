@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.9-phase2
+
+- Show category-specific request templates before the general request option.
+- Consolidate appointments, complaints, information and callback requests into one universal free-text general request.
+- Safely discard the removed duplicate general template identifiers from stored company settings.
+
 ## 0.2.8-phase2
 
 - Separate universal free-text requests from category-specific structured requests in definitions, citizen selection and leader configuration.

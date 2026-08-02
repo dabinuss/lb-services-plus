@@ -21,14 +21,9 @@ ServicesPlus.RequestDefinitions = {
             { value = "immediate", label = { en = "Immediate", de = "Sofort" } }
         } }
     },
-    generalTemplates = { "general", "appointment", "complaint", "information", "callback" },
+    generalTemplates = { "general" },
     templates = {
         general = { kind = "general", name = { en = "General request", de = "Allgemeine Anfrage" }, fields = { { id = "subject", required = true }, { id = "description", required = true }, { id = "phone", required = false } } },
-        appointment = { kind = "general", name = { en = "Appointment request", de = "Terminanfrage" }, fields = { { id = "description", required = true }, { id = "phone", required = false } } },
-        complaint = { kind = "general", name = { en = "Complaint", de = "Beschwerde" }, fields = { { id = "description", required = true }, { id = "phone", required = false } } },
-        information = { kind = "general", name = { en = "Information request", de = "Informationen anfordern" }, fields = { { id = "description", required = true }, { id = "phone", required = false } } },
-        callback = { kind = "general", name = { en = "Request a callback", de = "Rückruf anfordern" }, fields = { { id = "description", required = true }, { id = "phone", required = false } } },
-
         immediate_pickup = { kind = "specialized", categoryId = "taxi_transport", name = { en = "Pickup", de = "Abholung" }, fields = { { id = "location", required = true }, { id = "people", required = true }, { id = "phone", required = false } } },
         roadside_assistance = { kind = "specialized", categoryId = "vehicle_services", name = { en = "Roadside or towing assistance", de = "Pannen- oder Abschlepphilfe" }, fields = { { id = "location", required = true }, { id = "description", required = true }, { id = "vehicle_plate", required = false }, { id = "phone", required = false } } },
         delivery = { kind = "specialized", categoryId = "restaurants_food", name = { en = "Delivery", de = "Lieferung" }, fields = { { id = "description", required = true }, { id = "location", required = true }, { id = "phone", required = false } } },

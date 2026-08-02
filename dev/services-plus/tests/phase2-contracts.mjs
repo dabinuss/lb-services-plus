@@ -79,7 +79,8 @@ assert.match(requests, /requestNavigation/);
 assert.match(requests, /navigationOnAccept/);
 assert.match(requests, /resolvedTemplateIds/);
 assert.match(requests, /field\.type == "select"[\s\S]*option\.value == value/);
-assert.match(definitions, /generalTemplates = \{ "general", "appointment", "complaint", "information", "callback" \}/);
+assert.match(definitions, /generalTemplates = \{ "general" \}/);
+for (const removed of ["appointment =", "complaint =", "information =", "callback ="]) assert.ok(!definitions.includes(removed), `General request should not be duplicated as ${removed}`);
 assert.match(definitions, /immediate_pickup[\s\S]*location[\s\S]*people[\s\S]*phone/);
 assert.doesNotMatch(definitions, /scheduled_pickup/);
 for (const template of ["roadside_assistance", "delivery", "reservation", "medical_transport", "property_viewing", "legal_assistance", "police_report"]) {
@@ -89,6 +90,7 @@ assert.match(definitions, /legal_area[\s\S]*criminal_law[\s\S]*civil_law/);
 assert.match(serverApi, /phoneNumber = ServicesPlus\.Bridge\.GetEquippedPhoneNumber\(source\)[\s\S]*settings\.defaultPhone = phoneNumber and tostring\(phoneNumber\) or ""/);
 assert.match(requestComposer, /optgroup label=\{t\(locale, "generalRequests"\)\}/);
 assert.match(requestComposer, /optgroup label=\{t\(locale, "specialRequests"\)\}/);
+assert.ok(requestComposer.indexOf('specialRequests') < requestComposer.indexOf('generalRequests'), "Special requests must render before general requests");
 assert.match(requestComposer, /initialValues[\s\S]*defaultPhone/);
 assert.match(requests, /customData[\s\S]*requestNotificationAction[\s\S]*action = "accept"/);
 assert.match(clientApp, /handleRequestOfferAction[\s\S]*RequestServer\(action/);
@@ -127,7 +129,7 @@ assert.match(publicApi, /ApiAllowedResources/);
 assert.match(publicApi, /externalId/);
 assert.doesNotMatch(events, /deleteCall/);
 assert.match(definitions, /immediate_pickup/);
-assert.match(definitions, /order/);
+assert.match(definitions, /delivery/);
 assert.match(definitions, /restaurants_food/);
 assert.doesNotMatch(events, /TriggerClientEvent\([^\n]*-1/);
 

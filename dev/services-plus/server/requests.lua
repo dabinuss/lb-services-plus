@@ -14,8 +14,8 @@ local function localeName(value, locale)
 end
 
 local function defaultTemplateIds(company)
-    local result = copy(definitions.generalTemplates)
-    for _, id in ipairs(definitions.categoryTemplates[company.categoryId] or {}) do result[#result + 1] = id end
+    local result = copy(definitions.categoryTemplates[company.categoryId] or {})
+    for _, id in ipairs(definitions.generalTemplates) do result[#result + 1] = id end
     return result
 end
 
