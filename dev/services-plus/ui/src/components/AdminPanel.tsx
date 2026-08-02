@@ -1,0 +1,60 @@
+import { Building2, Inbox, Plus, Save, Send, Settings2, Trash2, X } from "lucide-react";
+import { useState } from "react";
+import { t, type Locale } from "../lib/i18n";
+import type { AdminCompany, AdminState, AppSettings, CompanyPatch } from "../types";
+
+interface Props {
+  data: AdminState; locale: Locale; busy: boolean;
+  onSaveCompany: (company: CompanyPatch) => Promise<boolean>;
+  onDeleteCompany: (companyId: string) => void;
+  onSaveSettings: (settings: AppSettings) => void;
+}
+
+const emptyCompany = (categoryId: string): CompanyPatch => ({
+  id: "", job: "", displayName: "", logo: "", backgroundImage: "", categoryId, description: "", location: "", openingHours: "",
+  keywords: [], requestsEnabled: false, messagesEnabled: true, dispatchMode: "ring_all", numbers: []
+});
+
+function toPatch(company: AdminCompany): CompanyPatch {
+  return { id: company.id, job: company.job, displayName: company.displayName, logo: company.logo || "", backgroundImage: company.backgroundImage || "", categoryId: company.categoryId,
+    description: company.description, location: company.location, openingHours: company.openingHours, keywords: company.keywords,
+    requestsEnabled: company.requestsEnabled, messagesEnabled: company.messagesEnabled, dispatchMode: company.dispatchMode,
+    numbers: company.numbers.map(({ label, number, distribution, sharedInbox }) => ({ label, number, distribution, sharedInbox })) };
+}
+
+export function AdminPanel({ data, locale, busy, onSaveCompany, onDeleteCompany, onSaveSettings }: Props) {
+  const [editing, setEditing] = useState<CompanyPatch | null>(null);
+  const [settings, setSettings] = useState<AppSettings>(data.settings);
+  const field = <K extends keyof CompanyPatch>(key: K, value: CompanyPatch[K]) => setEditing((current) => current ? { ...current, [key]: value } : current);
+  const saveCompany = async () => { if (editing && await onSaveCompany(editing)) setEditing(null); };
+
+  return <main className="admin-panel">
+    <section className="admin-section"><header><div><span className="eyebrow">Services+</span><h2>{t(locale, "system")}</h2></div><Settings2 size={20} /></header>
+      <label className="admin-text-field"><span>{t(locale, "directoryTitle")}</span><input maxLength={80} value={settings.directoryTitle} onChange={(event) => setSettings({ ...settings, directoryTitle: event.target.value })} /></label>
+      <div className="switch-list compact"><label><span><strong>{t(locale, "globalCalls")}</strong></span><input type="checkbox" checked={settings.callsEnabled} onChange={(event) => setSettings({ ...settings, callsEnabled: event.target.checked })} /></label><label><span><strong>{t(locale, "globalRequests")}</strong></span><input type="checkbox" checked={settings.requestsEnabled} onChange={(event) => setSettings({ ...settings, requestsEnabled: event.target.checked })} /></label></div>
+      <button type="button" className="save-button" disabled={busy || settings.directoryTitle.trim().length < 2} onClick={() => onSaveSettings(settings)}><Save size={17} />{t(locale, "save")}</button>
+    </section>
+    <section className="admin-section company-management"><header><div><span className="eyebrow">{data.framework}</span><h2>{t(locale, "companyManagement")}</h2></div><button type="button" className="icon-action add" onClick={() => setEditing(emptyCompany(data.categories[0]?.id ?? "other"))} aria-label={t(locale, "addCompany")} title={t(locale, "addCompany")}><Plus size={19} /></button></header>
+      <div className="admin-company-list">{data.companies.map((company) => <article key={company.id}><img src={company.logo || "./icon.svg"} alt="" onError={(event) => { event.currentTarget.src = "./icon.svg"; }} /><button type="button" className="admin-company-main" onClick={() => setEditing(toPatch(company))}><strong>{company.displayName}</strong><small>{company.job} · {company.categoryName}</small></button><button type="button" className="delete-icon" onClick={() => { if (window.confirm(`${t(locale, "deleteCompany")}: ${company.displayName}?`)) onDeleteCompany(company.id); }} aria-label={t(locale, "deleteCompany")}><Trash2 size={17} /></button></article>)}</div>
+    </section>
+    {editing && <div className="editor-overlay" role="dialog" aria-modal="true"><section className="leader-editor admin-editor">
+      <header><div><span className="eyebrow">{editing.id || t(locale, "addCompany")}</span><h2>{t(locale, "saveCompany")}</h2></div><button type="button" className="icon-action" onClick={() => setEditing(null)} aria-label="Close"><X size={19} /></button></header>
+      <div className="form-grid">
+        <label><span>ID</span><input disabled={Boolean(data.companies.some((item) => item.id === editing.id))} value={editing.id} maxLength={64} onChange={(event) => field("id", event.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ""))} /></label>
+        <label><span>{t(locale, "job")}</span><input value={editing.job} maxLength={64} onChange={(event) => field("job", event.target.value)} /></label>
+        <label className="full"><span>{t(locale, "name")}</span><input value={editing.displayName} maxLength={100} onChange={(event) => field("displayName", event.target.value)} /></label>
+        <label><span>{t(locale, "category")}</span><select value={editing.categoryId} onChange={(event) => field("categoryId", event.target.value)}>{data.categories.map((category) => <option key={category.id} value={category.id}>{category.names[locale] || category.name}</option>)}</select></label>
+        <label><span>{t(locale, "openingHours")}</span><input value={editing.openingHours} maxLength={100} onChange={(event) => field("openingHours", event.target.value)} /></label>
+        <label className="full"><span>{t(locale, "logo")}</span><input value={editing.logo} maxLength={500} onChange={(event) => field("logo", event.target.value)} /></label>
+        <label className="full"><span>{t(locale, "backgroundImage")}</span><input value={editing.backgroundImage} maxLength={500} onChange={(event) => field("backgroundImage", event.target.value)} /></label>
+        <label className="full"><span>{t(locale, "description")}</span><textarea rows={3} value={editing.description} maxLength={500} onChange={(event) => field("description", event.target.value)} /></label>
+        <label><span>{t(locale, "location")}</span><input value={editing.location} maxLength={150} onChange={(event) => field("location", event.target.value)} /></label>
+        <label><span>{t(locale, "keywords")}</span><input value={editing.keywords.join(", ")} onChange={(event) => field("keywords", event.target.value.split(",").map((value) => value.trim()).filter(Boolean).slice(0, 20))} /></label>
+      </div>
+      <label className="admin-text-field"><span>{t(locale, "dispatchMode")}</span><select value={editing.dispatchMode} onChange={(event) => field("dispatchMode", event.target.value as CompanyPatch["dispatchMode"])}><option value="ring_all">{t(locale, "ringAll")}</option><option value="random">{t(locale, "random")}</option><option value="dispatch_only">{t(locale, "dispatchOnly")}</option></select></label>
+      <div className="switch-list compact"><label><span><Send size={17} /><strong>{t(locale, "requests")}</strong></span><input type="checkbox" checked={editing.requestsEnabled} onChange={(event) => field("requestsEnabled", event.target.checked)} /></label><label><span><Building2 size={17} /><strong>{t(locale, "messages")}</strong></span><input type="checkbox" checked={editing.messagesEnabled} onChange={(event) => field("messagesEnabled", event.target.checked)} /></label></div>
+      <div className="number-editor"><header><strong>{t(locale, "phoneNumbers")}</strong><button type="button" className="icon-action" onClick={() => field("numbers", [...editing.numbers, { label: "Main Line", number: "", distribution: "ring_all", sharedInbox: true }])} aria-label={t(locale, "addNumber")}><Plus size={17} /></button></header>{editing.numbers.map((number, index) => <div className="number-row" key={index}><input value={number.label} maxLength={80} placeholder="Label" onChange={(event) => field("numbers", editing.numbers.map((item, itemIndex) => itemIndex === index ? { ...item, label: event.target.value } : item))} /><input value={number.number} maxLength={32} placeholder="Number" onChange={(event) => field("numbers", editing.numbers.map((item, itemIndex) => itemIndex === index ? { ...item, number: event.target.value } : item))} /><select value={number.distribution} onChange={(event) => field("numbers", editing.numbers.map((item, itemIndex) => itemIndex === index ? { ...item, distribution: event.target.value as typeof item.distribution } : item))}><option value="ring_all">{t(locale, "ringAll")}</option><option value="random">{t(locale, "random")}</option><option value="dispatch_only">{t(locale, "dispatchOnly")}</option></select><label className="number-shared" title={t(locale, "numberInbox")}><Inbox size={15} /><span>{t(locale, "numberInbox")}</span><input type="checkbox" checked={number.sharedInbox} onChange={(event) => field("numbers", editing.numbers.map((item, itemIndex) => itemIndex === index ? { ...item, sharedInbox: event.target.checked } : item))} /></label><button type="button" className="delete-icon" onClick={() => field("numbers", editing.numbers.filter((_, itemIndex) => itemIndex !== index))} aria-label="Remove"><Trash2 size={16} /></button></div>)}</div>
+      <button type="button" className="save-button" disabled={busy || editing.id.length < 2 || editing.job.length < 1 || editing.displayName.length < 2} onClick={() => void saveCompany()}><Save size={17} />{t(locale, "saveCompany")}</button>
+    </section></div>}
+  </main>;
+}

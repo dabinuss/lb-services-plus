@@ -1,0 +1,4 @@
+ui/node_modules/
+ui/.vite/
+ui/*.tsbuildinfo
+ui/node_modules/.tmp/
