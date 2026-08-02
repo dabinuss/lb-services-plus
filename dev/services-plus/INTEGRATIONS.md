@@ -10,4 +10,12 @@ Services+ is a separate resource and only uses documented FiveM, LB Phone, frame
 - No third-party files, global framework state, jobs, inventories, invoices or map state are modified.
 - External side effects must be added behind `integrations/server.lua`, with server-side permission checks and rate limits.
 
-The Phase 1 prototypes observe documented LB Phone call and message events for diagnostics only. Call distribution and shared inbox behavior remain Phase 2 scope.
+Phase 2 uses documented LB Phone custom-number callbacks, call lifecycle events, messaging exports, notification exports and contact APIs. Services+ does not replace LB Phone audio, messages or contacts; it coordinates company permissions and persists its own workflow metadata.
+
+Message attachments are selected through the custom-app `components.setGallery` API. LB Phone remains responsible for gallery access and configured media uploads; Services+ only validates and forwards the selected HTTPS URLs. Emoji messages use ordinary LB Phone message text, while Services+-specific message reactions are stored in the Services+ database.
+
+Company calls remain native LB Phone calls under both native and NUI audio configurations. Existing optional dispatch, billing, notification, inventory and map resources are untouched unless a disabled-by-default adapter is explicitly configured. Adapters must degrade gracefully across resource start/stop order changes.
+
+Trusted server resources use the exports in `API.md` and must be listed in `Config.ApiAllowedResources`. External request creation requires a stable `externalId`; Services+ scopes it to the invoking resource and returns the existing request when retried. Integration resources should consume local lifecycle events and must not call Services+ client/server network events directly.
+
+Services+ conversation deletion is intentionally local to the Services+ shared-inbox projection. It does not delete or rewrite native LB Phone messages. Equipped-number changes are consumed through the documented `lb-phone:numberChanged` event and invalidate active duty after server-side number verification.

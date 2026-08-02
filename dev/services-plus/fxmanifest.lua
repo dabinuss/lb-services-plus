@@ -2,8 +2,8 @@ fx_version "cerulean"
 game "gta5"
 
 author "Services+"
-description "Company directory and duty portal for LB Phone"
-version "0.1.0-phase1"
+description "Company communication and request workflows for LB Phone"
+version "0.2.8-phase2"
 
 lua54 "yes"
 
@@ -18,6 +18,7 @@ files {
 shared_scripts {
     "shared/constants.lua",
     "shared/categories.lua",
+    "shared/request_definitions.lua",
     "config.lua"
 }
 
@@ -39,7 +40,11 @@ server_scripts {
     "server/repository.lua",
     "server/companies.lua",
     "server/employees.lua",
+    "server/calls.lua",
+    "server/inboxes.lua",
+    "server/requests.lua",
     "server/api.lua",
+    "server/exports.lua",
     "server/events.lua",
     "server/prototypes.lua",
     "server/main.lua"

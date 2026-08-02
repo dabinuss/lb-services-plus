@@ -2,6 +2,7 @@ ServicesPlus.Companies = ServicesPlus.Companies or {}
 
 local Companies = ServicesPlus.Companies
 local cache = {}
+local categorySettings = {}
 local version = 0
 local settings = { directoryTitle = "Los Santos Services", callsEnabled = true, requestsEnabled = true }
 
@@ -13,6 +14,7 @@ end
 
 function Companies.Load()
     cache = ServicesPlus.Repository.LoadCompanies()
+    categorySettings = ServicesPlus.Repository.LoadCategorySettings()
     local storedSettings = ServicesPlus.Repository.LoadSettings()
     settings.directoryTitle = storedSettings.directoryTitle or settings.directoryTitle
     settings.callsEnabled = storedSettings.callsEnabled ~= false
@@ -42,6 +44,15 @@ function Companies.FindByJob(job)
     return nil
 end
 
+function Companies.FindByNumber(value)
+    for _, company in pairs(cache) do
+        for _, number in ipairs(company.numbers) do
+            if number.number == value or number.id == value then return company, number end
+        end
+    end
+    return nil, nil
+end
+
 function Companies.GetCategoryList(locale)
     local categories = {}
     for id, category in pairs(ServicesPlus.Categories) do
@@ -50,11 +61,31 @@ function Companies.GetCategoryList(locale)
             icon = category.icon,
             name = category.name[locale] or category.name.en,
             names = category.name,
-            keywords = copyArray(category.keywords)
+            keywords = copyArray(category.keywords),
+            requestCompetition = categorySettings[id] and categorySettings[id].requestCompetition == true or false
         }
     end
     table.sort(categories, function(a, b) return a.name < b.name end)
     return categories
+end
+
+function Companies.GetCategoryRequestCompetition(categoryId)
+    return categorySettings[categoryId] and categorySettings[categoryId].requestCompetition == true or false
+end
+
+function Companies.GetByCategory(categoryId)
+    local result = {}
+    for _, company in pairs(cache) do if company.categoryId == categoryId then result[#result + 1] = company end end
+    return result
+end
+
+function Companies.UpdateCategoryCompetition(categoryId, enabled)
+    if not ServicesPlus.Categories[categoryId] or type(enabled) ~= "boolean" then return false, "validation_failed" end
+    local definition = categorySettings[categoryId] or {}
+    definition.requestCompetition = enabled
+    if not ServicesPlus.Repository.SaveCategorySettings(categoryId, definition) then return false, "category_update_failed" end
+    categorySettings[categoryId] = definition
+    return true
 end
 
 function Companies.GetAdminList()
@@ -79,7 +110,15 @@ function Companies.ToPublic(company)
             label = number.label,
             number = number.number,
             distribution = number.distribution,
-            sharedInbox = number.sharedInbox
+            sharedInbox = number.sharedInbox,
+            enabled = number.enabled,
+            callsEnabled = number.callsEnabled,
+            inboxEnabled = number.inboxEnabled,
+            requestsEnabled = number.requestsEnabled,
+            publicVisible = number.publicVisible,
+            staffingMode = number.staffingMode,
+            available = ServicesPlus.Employees and ServicesPlus.Employees.NumberHasCoverage(company.id, number, true) or false,
+            restricted = number.staffingMode == "restricted" or #(number.eligibleIdentifiers or {}) > 0
         }
     end
     return {
@@ -98,10 +137,51 @@ function Companies.ToPublic(company)
         requestsEnabled = company.requestsEnabled,
         messagesEnabled = company.messagesEnabled,
         dispatchMode = company.dispatchMode,
-        primaryNumber = numbers[1] and numbers[1].number or nil,
+        primaryNumber = (function() for _, number in ipairs(numbers) do if number.enabled and number.callsEnabled and number.publicVisible then return number.number end end end)(),
         numbers = numbers,
         version = version
     }
+end
+
+function Companies.SetNumberEligibility(companyId, numberId, identifier, enabled)
+    local company = cache[companyId]
+    if not company then return false end
+    for _, number in ipairs(company.numbers) do
+        if number.id == numberId then
+            ServicesPlus.Repository.SetNumberEmployee(numberId, identifier, enabled)
+            if not enabled then ServicesPlus.Repository.SetNumberSubscription(numberId, identifier, false) end
+            local nextValues = {}; local found = false
+            for _, value in ipairs(number.eligibleIdentifiers or {}) do if value == identifier then found = true elseif value ~= identifier then nextValues[#nextValues + 1] = value end end
+            if enabled then nextValues[#nextValues + 1] = identifier end
+            number.eligibleIdentifiers = nextValues
+            return true
+        end
+    end
+    return false
+end
+
+function Companies.UpdateNumberOperations(companyId, updates)
+    local company = cache[companyId]
+    if not company then return false, "company_not_found" end
+    local byId = {}
+    for _, number in ipairs(company.numbers) do byId[number.id] = number end
+    for _, update in ipairs(updates or {}) do
+        local number = byId[update.id]
+        if not number then return false, "number_not_found" end
+    end
+    if not ServicesPlus.Repository.UpdateNumberOperations(companyId, updates) then return false, "number_update_failed" end
+    for _, update in ipairs(updates) do
+        local number = byId[update.id]
+        number.enabled = update.enabled
+        number.callsEnabled = update.callsEnabled
+        number.inboxEnabled = update.inboxEnabled
+        number.requestsEnabled = update.requestsEnabled
+        number.publicVisible = update.publicVisible
+        number.staffingMode = update.staffingMode
+        number.distribution = update.distribution
+    end
+    version = version + 1
+    return true, Companies.ToPublic(company)
 end
 
 function Companies.UpdateOperations(companyId, patch)

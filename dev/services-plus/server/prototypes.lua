@@ -1,4 +1,4 @@
--- Phase 1 diagnostics for LB Phone contracts used by later phases.
+-- Optional diagnostics for the documented LB Phone contracts used by Services+.
 AddEventHandler("lb-phone:newCall", function(call)
     ServicesPlus.Logger.Debug("Observed LB Phone call start", { callId = call and call.callId, company = call and call.company })
 end)

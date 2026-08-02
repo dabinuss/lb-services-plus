@@ -1,5 +1,77 @@
 # Changelog
 
+## 0.2.8-phase2
+
+- Separate universal free-text requests from category-specific structured requests in definitions, citizen selection and leader configuration.
+- Add pickup, roadside/towing assistance, delivery, table reservation, medical transport, property viewing, legal assistance and police request templates with the requested minimal fields.
+- Add server-validated select fields for legal area and urgency.
+- Prefill request phone fields from the currently equipped LB Phone number while keeping the field editable and removable.
+- Filter obsolete stored template identifiers and fall back to valid category defaults after definition updates.
+
+## 0.2.7-phase2
+
+- Rename ambiguous number settings and add localized explanations for every staffing mode and number capability.
+- Move restricted employee eligibility out of request configuration into dedicated line access sections in both the admin editor and company portal.
+- Expose the citizen-directory toggle to company leaders and clarify that it controls citizen access without hiding internal inboxes.
+
+## 0.2.6-phase2
+
+- Make dispatch activation staff every authorized active line by default while allowing per-session line deselection.
+- Keep enabled authorized number inboxes visible and usable independently of active call-line staffing.
+- Add visible localized labels for every phone-number field and capability group in the company admin editor.
+
+## 0.2.5-phase2
+
+- Added granular per-number call, inbox, request, visibility and operational enablement controls.
+- Added persistent employee line subscriptions with separate access authorization and runtime LB Phone custom-number registration.
+- Added explicit number inbox tabs, including empty staffed inboxes and per-number unread counters.
+- Added live citizen request updates and persistent LB Phone status notifications.
+- Added configurable disabled, prompted or automatic GTA waypoint routing when a request is accepted.
+- Added an allow-listed server export API and local lifecycle events for MDT, dispatch and other trusted resources.
+- Added migration 007 for number staffing, request navigation and idempotent external request references.
+
+## 0.2.4-phase2
+
+- Added an administrator-controlled request competition toggle for every category.
+- Allow available employees from different companies in a competitive category to race for requests through the existing atomic assignment contract.
+- Keep duty active while the app is closed and across Services+ restarts for the same connected player and equipped phone.
+- Invalidate duty on explicit logout, disconnect, employment change, phone removal or equipped-number change.
+- Allow active dispatch employees to soft-delete their own company's requests, shared-inbox conversations and individual messages; call history remains immutable.
+- Added migration 006 for audited request, conversation and message soft deletion.
+
+## 0.2.3-phase2
+
+- Added interactive LB Phone request notifications with direct decline (`-`) and accept (`+`) actions.
+- Routed notification actions through the existing validated and rate-limited request API.
+- Clear stale in-app request offers after notification actions or assignment changes.
+- Bring the Services+ request offer on screen and mirror LB Phone's default `ENTER`/`BACKSPACE` call controls with dedicated configurable key mappings.
+- Reworked incoming requests into a full-screen offer view using the company background, logo, category and the three most relevant request fields.
+
+## 0.2.2-phase2
+
+- Added the red manual `occupied` employee status without conflating it with active-work Busy state.
+- Excluded occupied employees from call and request offers while keeping messages available.
+- Added LB Phone notifications for eligible incoming company calls; requests already use the same notification path.
+- Changed incoming call and request actions to circular minus/plus controls.
+
+## 0.2.1-phase2
+
+- Replaced manual attachment URLs with the official LB Phone gallery picker.
+- Added a fixed set of five general and five GTA-themed emojis for message composition.
+- Added persistent, toggleable per-user message reactions with live inbox updates.
+- Added server-side conversation authorization and emoji allowlist validation for reactions.
+
+## 0.2.0-phase2
+
+- Added native multi-number company call routing with ring-all, random and dispatch-only distribution.
+- Added atomic call/request acceptance, per-number queues, queue updates, Busy-state restoration and restart cleanup.
+- Added per-number employee eligibility enforced for calls and shared inboxes.
+- Added shared conversations, read state, company-number replies, attachments and locations.
+- Added extensible category request definitions, company-specific labels/templates/fields/phases and generic forms.
+- Added request offers, assignment, transitions, completion, return, cancellation and recovery.
+- Added personal and company communication histories with cursor-based server pagination.
+- Added citizen and employee communication views and leader configuration controls.
+
 ## 0.1.0-phase1
 
 - Added restart-safe LB Phone custom app registration.

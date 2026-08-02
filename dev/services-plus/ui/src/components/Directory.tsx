@@ -8,10 +8,10 @@ import { CompanyCard } from "./CompanyCard";
 
 interface Props {
   companies: Company[]; categories: Category[]; settings: AppSettings; locale: Locale;
-  onCall: (company: Company) => void; onRequest: (company: Company) => void;
+  onCall: (company: Company) => void; onRequest: (company: Company) => void; onMessage: (company: Company) => void;
 }
 
-export function Directory({ companies, categories, settings, locale, onCall, onRequest }: Props) {
+export function Directory({ companies, categories, settings, locale, onCall, onRequest, onMessage }: Props) {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("all");
   const filtered = useMemo(() => filterCompanies(companies, categories, query, category), [companies, categories, query, category]);
@@ -27,7 +27,7 @@ export function Directory({ companies, categories, settings, locale, onCall, onR
     <div className="category-groups">
       {groups.map((group) => <section className="category-section" key={group.category.id}>
         <header><CategoryIcon name={group.category.icon} size={17} /><h2>{group.category.names[locale] || group.category.name}</h2><span>{group.companies.length}</span></header>
-        <div className="company-grid">{group.companies.map((company) => <CompanyCard key={company.id} company={company} locale={locale} settings={settings} onCall={onCall} onRequest={onRequest} />)}</div>
+        <div className="company-grid">{group.companies.map((company) => <CompanyCard key={company.id} company={company} locale={locale} settings={settings} onCall={onCall} onRequest={onRequest} onMessage={onMessage} />)}</div>
       </section>)}
       {filtered.length === 0 && <div className="empty-state"><Search size={24} /><h2>{t(locale, "noServices")}</h2><p>{t(locale, "noServicesHint")}</p></div>}
     </div>

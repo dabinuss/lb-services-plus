@@ -125,6 +125,12 @@ function Bridge.HasEquippedPhone(source)
     return ok and type(number) == "string" and number ~= ""
 end
 
+function Bridge.GetEquippedPhoneNumber(source)
+    if not Config.RequireEquippedPhone then return "phone-not-required" end
+    local ok, number = pcall(function() return exports["lb-phone"]:GetEquippedPhoneNumber(source) end)
+    return ok and type(number) == "string" and number ~= "" and number or nil
+end
+
 function Bridge.IsServerAdmin(source)
     if IsPlayerAceAllowed(source, Config.AdminAce) then return true end
     if activeFramework == "esx" then

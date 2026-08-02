@@ -5,14 +5,38 @@ local allowedActions = {
     updateStatus = true,
     toggleDispatch = true,
     updateCompanyOperations = true,
+    updateNumberOperations = true,
+    toggleNumberSubscription = true,
     startCompanyCall = true,
     getEmployeeContact = true,
+    registerIncomingCall = true,
+    acceptCall = true,
+    declineCall = true,
+    endCustomCall = true,
+    getRequestOptions = true,
+    getCompanyWorkspace = true,
+    acceptRequest = true,
+    declineRequest = true,
+    transitionRequest = true,
+    returnRequest = true,
+    cancelRequest = true,
+    updateRequestSettings = true,
+    updateNumberEligibility = true,
+    sendCitizenMessage = true,
+    sendEmployeeMessage = true,
+    getCitizenInbox = true,
+    getConversationMessages = true,
+    reactToMessage = true,
     createRequest = true,
     getMyActivity = true,
     getAdminState = true,
     adminSaveCompany = true,
     adminDeleteCompany = true,
-    adminUpdateSettings = true
+    adminUpdateSettings = true,
+    adminUpdateCategory = true,
+    deleteRequest = true,
+    deleteConversation = true,
+    deleteMessage = true
 }
 
 RegisterNetEvent("services-plus:server:request", function(requestId, action, payload)
@@ -40,6 +64,11 @@ RegisterNetEvent("services-plus:server:request", function(requestId, action, pay
     TriggerClientEvent("services-plus:client:response", requestSource, requestId, response)
 end)
 
+
 RegisterNetEvent("services-plus:server:appClosed", function()
     ServicesPlus.Api.RemoveSubscriber(source)
+end)
+
+RegisterNetEvent("services-plus:server:phoneChanged", function()
+    ServicesPlus.Employees.ValidatePhone(source)
 end)

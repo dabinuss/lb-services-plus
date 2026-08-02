@@ -11,6 +11,9 @@ Config.ServerCallbackTimeoutMs = 10000
 Config.MaxCompanies = 100
 Config.RequireEquippedPhone = true
 Config.AdminAce = "servicesplus.admin"
+Config.ApiAllowedResources = {
+    -- "your-mdt-resource"
+}
 
 Config.RateLimits = {
     initialState = { limit = 12, windowMs = 60000 },
@@ -19,14 +22,41 @@ Config.RateLimits = {
     updateStatus = { limit = 15, windowMs = 30000 },
     toggleDispatch = { limit = 10, windowMs = 30000 },
     updateCompanyOperations = { limit = 8, windowMs = 60000 },
+    updateNumberOperations = { limit = 8, windowMs = 60000 },
+    toggleNumberSubscription = { limit = 20, windowMs = 60000 },
+    externalCreateRequest = { limit = 6, windowMs = 60000 },
+    externalTransitionRequest = { limit = 20, windowMs = 30000 },
+    externalSendCompanyMessage = { limit = 20, windowMs = 60000 },
     startCompanyCall = { limit = 8, windowMs = 30000 },
     getEmployeeContact = { limit = 10, windowMs = 30000 },
+    registerIncomingCall = { limit = 20, windowMs = 30000 },
+    acceptCall = { limit = 8, windowMs = 30000 },
+    declineCall = { limit = 12, windowMs = 30000 },
+    endCustomCall = { limit = 12, windowMs = 30000 },
     createRequest = { limit = 4, windowMs = 60000 },
+    getRequestOptions = { limit = 15, windowMs = 60000 },
+    getCompanyWorkspace = { limit = 15, windowMs = 60000 },
+    acceptRequest = { limit = 8, windowMs = 30000 },
+    declineRequest = { limit = 12, windowMs = 30000 },
+    transitionRequest = { limit = 15, windowMs = 30000 },
+    returnRequest = { limit = 8, windowMs = 30000 },
+    cancelRequest = { limit = 6, windowMs = 60000 },
+    updateRequestSettings = { limit = 6, windowMs = 60000 },
+    updateNumberEligibility = { limit = 20, windowMs = 60000 },
+    sendCitizenMessage = { limit = 12, windowMs = 60000 },
+    sendEmployeeMessage = { limit = 20, windowMs = 60000 },
+    getCitizenInbox = { limit = 15, windowMs = 60000 },
+    getConversationMessages = { limit = 20, windowMs = 60000 },
+    reactToMessage = { limit = 30, windowMs = 60000 },
     getMyActivity = { limit = 12, windowMs = 60000 },
     getAdminState = { limit = 8, windowMs = 60000 },
     adminSaveCompany = { limit = 10, windowMs = 60000 },
     adminDeleteCompany = { limit = 5, windowMs = 60000 },
-    adminUpdateSettings = { limit = 8, windowMs = 60000 }
+    adminUpdateSettings = { limit = 8, windowMs = 60000 },
+    adminUpdateCategory = { limit = 12, windowMs = 60000 },
+    deleteRequest = { limit = 10, windowMs = 60000 },
+    deleteConversation = { limit = 10, windowMs = 60000 },
+    deleteMessage = { limit = 20, windowMs = 60000 }
 }
 
 Config.OptionalIntegrations = {
