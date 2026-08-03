@@ -125,6 +125,16 @@ export interface AdminCompany extends Company {
   job: string;
 }
 
+export interface DeletedCompany {
+  id: string;
+  job: string;
+  displayName: string;
+  logo?: string;
+  categoryId: string;
+  deletedAt: string;
+  deletedBy?: string;
+}
+
 export interface CompanyPatch {
   id: string;
   job: string;
@@ -254,6 +264,7 @@ export interface MyActivity { calls: CitizenCall[]; requests: CitizenRequest[]; 
 
 export interface AdminState {
   companies: AdminCompany[];
+  deletedCompanies: DeletedCompany[];
   categories: Category[];
   settings: AppSettings;
   framework: string;

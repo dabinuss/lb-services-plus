@@ -241,7 +241,30 @@ function Repository.NumberInUse(number, excludeNumberId)
 end
 
 function Repository.DeleteCompany(companyId, actorIdentifier)
-    return MySQL.update.await("UPDATE `services_plus_companies` SET `deleted_at` = CURRENT_TIMESTAMP, `deleted_by` = ? WHERE `id` = ? AND `deleted_at` IS NULL", { actorIdentifier, companyId })
+    return MySQL.transaction.await({
+        { query = "UPDATE `services_plus_companies` SET `deleted_at` = CURRENT_TIMESTAMP, `deleted_by` = ? WHERE `id` = ? AND `deleted_at` IS NULL", values = { actorIdentifier, companyId } },
+        { query = "UPDATE `services_plus_company_numbers` SET `deleted_at` = CURRENT_TIMESTAMP WHERE `company_id` = ? AND `deleted_at` IS NULL", values = { companyId } }
+    })
+end
+
+function Repository.GetDeletedCompanies(limit)
+    return MySQL.query.await([=[
+        SELECT `id`, `job`, `display_name`, `logo`, `category_id`, `deleted_at`, `deleted_by`
+        FROM `services_plus_companies`
+        WHERE `deleted_at` IS NOT NULL
+        ORDER BY `deleted_at` DESC
+        LIMIT ?
+    ]=], { limit }) or {}
+end
+
+-- Restores exactly the company row and the numbers that were soft-deleted alongside it
+-- (see Repository.DeleteCompany); returns false when the id was never soft-deleted.
+function Repository.RestoreCompany(companyId)
+    local restored = MySQL.update.await("UPDATE `services_plus_companies` SET `deleted_at` = NULL, `deleted_by` = NULL WHERE `id` = ? AND `deleted_at` IS NOT NULL", { companyId }) == 1
+    if restored then
+        MySQL.update.await("UPDATE `services_plus_company_numbers` SET `deleted_at` = NULL WHERE `company_id` = ? AND `deleted_at` IS NOT NULL", { companyId })
+    end
+    return restored
 end
 
 function Repository.LoadSettings()

@@ -187,11 +187,27 @@ end
 
 function Companies.DeleteAdmin(companyId, actorIdentifier)
     if not cache[companyId] then return false, "company_not_found" end
-    local affected = ServicesPlus.Repository.DeleteCompany(companyId, actorIdentifier)
-    if affected ~= 1 then return false, "company_delete_failed" end
+    local success = ServicesPlus.Repository.DeleteCompany(companyId, actorIdentifier)
+    if not success then return false, "company_delete_failed" end
     cache[companyId] = nil
     version = version + 1
     return true
+end
+
+function Companies.GetDeletedList()
+    local result = {}
+    for _, row in ipairs(ServicesPlus.Repository.GetDeletedCompanies(50)) do
+        result[#result + 1] = { id = row.id, job = row.job, displayName = row.display_name, logo = row.logo, categoryId = row.category_id, deletedAt = row.deleted_at, deletedBy = row.deleted_by }
+    end
+    return result
+end
+
+function Companies.RestoreAdmin(companyId)
+    if cache[companyId] then return false, "company_not_deleted" end
+    if not ServicesPlus.Repository.RestoreCompany(companyId) then return false, "company_not_found" end
+    Companies.Load()
+    version = version + 1
+    return true, Companies.ToPublic(cache[companyId])
 end
 
 function Companies.UpdateSettings(nextSettings)

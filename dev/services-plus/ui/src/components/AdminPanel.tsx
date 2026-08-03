@@ -1,4 +1,4 @@
-import { Building2, Plus, Save, Send, Settings2, Trash2, X } from "lucide-react";
+import { Building2, Plus, RotateCcw, Save, Send, Settings2, Trash2, X } from "lucide-react";
 import { useState } from "react";
 import { t, type Locale } from "../lib/i18n";
 import type { AdminCompany, AdminState, AppSettings, Category, CompanyPatch } from "../types";
@@ -7,6 +7,7 @@ interface Props {
   data: AdminState; locale: Locale; busy: boolean;
   onSaveCompany: (company: CompanyPatch) => Promise<boolean>;
   onDeleteCompany: (companyId: string) => void;
+  onRestoreCompany: (companyId: string) => void;
   onSaveSettings: (settings: AppSettings) => void;
   onSaveCategory: (categoryId: string, requestCompetition: boolean) => void;
 }
@@ -23,7 +24,7 @@ function toPatch(company: AdminCompany): CompanyPatch {
     numbers: company.numbers.map(({ id, label, number, distribution, sharedInbox, enabled, callsEnabled, inboxEnabled, requestsEnabled, publicVisible }) => ({ id, label, number, distribution, sharedInbox, enabled, callsEnabled, inboxEnabled, requestsEnabled, publicVisible })) };
 }
 
-export function AdminPanel({ data, locale, busy, onSaveCompany, onDeleteCompany, onSaveSettings, onSaveCategory }: Props) {
+export function AdminPanel({ data, locale, busy, onSaveCompany, onDeleteCompany, onRestoreCompany, onSaveSettings, onSaveCategory }: Props) {
   const [editing, setEditing] = useState<CompanyPatch | null>(null);
   const [settings, setSettings] = useState<AppSettings>(data.settings);
   const field = <K extends keyof CompanyPatch>(key: K, value: CompanyPatch[K]) => setEditing((current) => current ? { ...current, [key]: value } : current);
@@ -42,6 +43,9 @@ export function AdminPanel({ data, locale, busy, onSaveCompany, onDeleteCompany,
     <section className="admin-section company-management"><header><div><span className="eyebrow">{data.framework}</span><h2>{t(locale, "companyManagement")}</h2></div><button type="button" className="icon-action add" onClick={() => setEditing(emptyCompany(data.categories[0]?.id ?? "other"))} aria-label={t(locale, "addCompany")} title={t(locale, "addCompany")}><Plus size={19} /></button></header>
       <div className="admin-company-list">{data.companies.map((company) => <article key={company.id}><img src={company.logo || "./icon.svg"} alt="" onError={(event) => { event.currentTarget.src = "./icon.svg"; }} /><button type="button" className="admin-company-main" onClick={() => setEditing(toPatch(company))}><strong>{company.displayName}</strong><small>{company.job} · {company.categoryName}</small></button><button type="button" className="delete-icon" onClick={() => { if (window.confirm(`${t(locale, "deleteCompany")}: ${company.displayName}?`)) onDeleteCompany(company.id); }} aria-label={t(locale, "deleteCompany")}><Trash2 size={17} /></button></article>)}</div>
     </section>
+    {data.deletedCompanies.length > 0 && <section className="admin-section company-management deleted-companies"><header><div><span className="eyebrow">{t(locale, "companyManagement")}</span><h2>{t(locale, "deletedCompanies")}</h2></div><Trash2 size={20} /></header>
+      <div className="admin-company-list">{data.deletedCompanies.map((company) => <article key={company.id}><img src={company.logo || "./icon.svg"} alt="" onError={(event) => { event.currentTarget.src = "./icon.svg"; }} /><div className="admin-company-main"><strong>{company.displayName}</strong><small>{company.job} · {t(locale, "deletedOn")} {new Date(company.deletedAt).toLocaleDateString(locale)}</small></div><button type="button" className="icon-action" disabled={busy} onClick={() => { if (window.confirm(`${t(locale, "restoreCompany")}: ${company.displayName}?`)) onRestoreCompany(company.id); }} aria-label={t(locale, "restoreCompany")} title={t(locale, "restoreCompany")}><RotateCcw size={17} /></button></article>)}</div>
+    </section>}
     {editing && <div className="editor-overlay" role="dialog" aria-modal="true"><section className="leader-editor admin-editor">
       <header><div><span className="eyebrow">{editing.id || t(locale, "addCompany")}</span><h2>{t(locale, "saveCompany")}</h2></div><button type="button" className="icon-action" onClick={() => setEditing(null)} aria-label="Close"><X size={19} /></button></header>
       <div className="form-grid">

@@ -40,6 +40,7 @@ API version: `11`
 | `getAdminState` | None | `AdminState` | `getAdminState` |
 | `adminSaveCompany` | `company: object` | `Company` | `adminSaveCompany` |
 | `adminDeleteCompany` | `companyId: string (maxLength 64)` | `Identifier` | `adminDeleteCompany` |
+| `adminRestoreCompany` | `companyId: string (maxLength 64)` | `Company` | `adminRestoreCompany` |
 | `adminUpdateSettings` | `settings: object` | `AppSettings` | `adminUpdateSettings` |
 | `adminUpdateCategory` | `categoryId: string (maxLength 64)`, `requestCompetition: boolean` | `Category` | `adminUpdateCategory` |
 | `deleteRequest` | `id: integer (min 1)` | `Identifier` | `deleteRequest` |

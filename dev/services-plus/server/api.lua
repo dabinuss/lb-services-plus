@@ -512,7 +512,7 @@ end
 function Api.getAdminState(source)
     local adminError = requireAdmin(source)
     if adminError then return adminError end
-    return ServicesPlus.Ok({ companies = ServicesPlus.Companies.GetAdminList(), settings = ServicesPlus.Companies.GetSettings(), categories = ServicesPlus.Companies.GetCategoryList(Config.Locale), framework = ServicesPlus.Bridge.GetName() })
+    return ServicesPlus.Ok({ companies = ServicesPlus.Companies.GetAdminList(), deletedCompanies = ServicesPlus.Companies.GetDeletedList(), settings = ServicesPlus.Companies.GetSettings(), categories = ServicesPlus.Companies.GetCategoryList(Config.Locale), framework = ServicesPlus.Bridge.GetName() })
 end
 
 function Api.adminSaveCompany(source, payload)
@@ -552,6 +552,16 @@ function Api.adminDeleteCompany(source, payload)
     ServicesPlus.Employees.RemoveCompany(payload.companyId)
     for target in pairs(subscribers) do TriggerClientEvent("services-plus:client:push", target, { type = "company.deleted", timestamp = os.time(), payload = { id = payload.companyId } }) end
     return ServicesPlus.Ok({ id = payload.companyId })
+end
+
+function Api.adminRestoreCompany(source, payload)
+    local adminError = requireAdmin(source)
+    if adminError then return adminError end
+    if type(payload) ~= "table" or type(payload.companyId) ~= "string" then return ServicesPlus.Error("invalid_payload", "Invalid company identifier.", false) end
+    local success, result = ServicesPlus.Companies.RestoreAdmin(payload.companyId)
+    if not success then return ServicesPlus.Error(result, "The company could not be restored.", true) end
+    for target in pairs(subscribers) do TriggerClientEvent("services-plus:client:push", target, { type = "company.updated", version = result.version, timestamp = os.time(), payload = result }) end
+    return ServicesPlus.Ok(result)
 end
 
 function Api.adminUpdateSettings(source, payload)

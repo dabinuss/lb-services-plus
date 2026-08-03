@@ -74,6 +74,7 @@ Config.RateLimits = {
     getAdminState = { limit = 8, windowMs = 60000 },
     adminSaveCompany = { limit = 10, windowMs = 60000 },
     adminDeleteCompany = { limit = 5, windowMs = 60000 },
+    adminRestoreCompany = { limit = 5, windowMs = 60000 },
     adminUpdateSettings = { limit = 8, windowMs = 60000 },
     adminUpdateCategory = { limit = 12, windowMs = 60000 },
     deleteRequest = { limit = 10, windowMs = 60000 },

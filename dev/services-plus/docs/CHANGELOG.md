@@ -2,6 +2,8 @@
 
 ## 0.7.0-rc1
 
+- Fix `adminDeleteCompany` to also soft-delete the company's own numbers (previously only the company row was soft-deleted, leaving its numbers untouched even though the API reference already documented cascading deletion).
+- Add `adminRestoreCompany` and an `AdminState.deletedCompanies` list so administrators can restore a soft-deleted company (and the numbers deleted alongside it) from the admin panel instead of only being able to revive it by re-creating the same `id`.
 - Fix client-authoritative call termination: only the caller or the currently assigned employee may end a company call token; a bystander who was previously offered the call can no longer end it for everyone.
 - Roll back and re-offer a call to other eligible employees instead of ending it outright when server-side assignment or the native LB Phone handoff fails; add an `endCustomCall` `reoffer` flag for the native-handoff-failure path.
 - Stop physically deleting companies and company numbers; `adminDeleteCompany` and number removal now soft-delete (`deleted_at`/`deleted_by`) so call, request and conversation history stays readable, and add migration 011 with the required schema and indexes.

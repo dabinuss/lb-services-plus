@@ -29,6 +29,7 @@ local callbacks = {
     "getAdminState",
     "adminSaveCompany",
     "adminDeleteCompany",
+    "adminRestoreCompany",
     "adminUpdateSettings",
     "adminUpdateCategory",
     "deleteRequest",

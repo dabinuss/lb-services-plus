@@ -20,7 +20,7 @@ assert.equal(exportsList.length, 11);
 for (const name of exportsList) assert.ok(docs.includes(`| \`${name}\` |`), `API reference is missing export ${name}`);
 
 const actions = Object.keys(JSON.parse(await read("shared/api_contracts.json")).actions);
-assert.equal(actions.length, 37);
+assert.equal(actions.length, 38);
 for (const action of actions) {
   assert.ok(docs.includes(`\`${action} `) || docs.includes(`\`${action} {`) || docs.includes(`\`${action}\``), `API reference is missing action ${action}`);
   assert.match(config, new RegExp(`\\b${action}\\s*=\\s*\\{\\s*limit\\s*=`), `Action ${action} has no configured rate limit`);

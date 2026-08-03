@@ -1,4 +1,4 @@
-import type { AdminCompany, AdminState, ApiResponse, CitizenRequest, Company, CompanyOperationsPatch, CompanyPatch, CompanyWorkspace, ConversationData, InboxConversation, InboxMessage, InitialState, MessageReactionUpdate, MyActivity, RequestSettings, WorkspaceCursor, WorkspaceSection } from "../types";
+import type { AdminCompany, AdminState, ApiResponse, CitizenRequest, Company, CompanyOperationsPatch, CompanyPatch, CompanyWorkspace, ConversationData, DeletedCompany, InboxConversation, InboxMessage, InitialState, MessageReactionUpdate, MyActivity, RequestSettings, WorkspaceCursor, WorkspaceSection } from "../types";
 import { browserFixture } from "../test/fixture";
 import type { Employee } from "../types";
 
@@ -150,10 +150,22 @@ export async function fetchNui<T>(event: string, data: unknown = {}): Promise<Ap
   }
   if (event === "adminDeleteCompany") {
     const companyId = (data as { companyId: string }).companyId;
+    const removed = browserState.companies.find((company) => company.id === companyId);
     browserState.companies = browserState.companies.filter((company) => company.id !== companyId);
-    delete jobs[companyId];
+    if (removed) browserDeletedCompanies.unshift({ id: removed.id, job: jobs[removed.id] ?? removed.id, displayName: removed.displayName, logo: removed.logo, categoryId: removed.categoryId, deletedAt: new Date().toISOString() });
     persistBrowserConfiguration();
     return { success: true, data: { id: companyId } as T };
+  }
+  if (event === "adminRestoreCompany") {
+    const companyId = (data as { companyId: string }).companyId;
+    const index = browserDeletedCompanies.findIndex((company) => company.id === companyId);
+    if (index < 0) return { success: false, error: { code: "company_not_found", message: "Company not found.", retryable: false } };
+    const [restored] = browserDeletedCompanies.splice(index, 1);
+    const category = browserState.categories.find((item) => item.id === restored.categoryId);
+    const company: Company = { id: restored.id, displayName: restored.displayName, logo: restored.logo ?? "", backgroundImage: "", categoryId: restored.categoryId, categoryName: category?.name ?? restored.categoryId, description: "", location: "", openingHours: "", keywords: [], available: false, employeeCount: 0, requestsEnabled: false, messagesEnabled: true, dispatchMode: "ring_all", numbers: [], version: Date.now() };
+    browserState.companies.push(company);
+    persistBrowserConfiguration();
+    return { success: true, data: structuredClone(company) as T };
   }
   if (event === "adminUpdateCategory") {
     const payload = data as { categoryId: string; requestCompetition: boolean };
@@ -249,6 +261,7 @@ if (browserWorkspaceCompany) {
   browserWorkspace.requestSettings.requestNumbers = browserWorkspaceCompany.numbers.filter((number) => number.enabled && number.requestsEnabled).map((number) => ({ id: number.id, label: number.label }));
 }
 const jobs: Record<string, string> = { pillbox: "ambulance", "downtown-cab": "taxi", bennys: "mechanic", ...persistedBrowserConfiguration?.jobs };
+const browserDeletedCompanies: DeletedCompany[] = [];
 function persistBrowserConfiguration() {
   try {
     window.localStorage.setItem(browserStorageKey, JSON.stringify({ settings: browserState.settings, companies: browserState.companies, categories: browserState.categories, currentUser: browserState.currentUser, jobs } satisfies BrowserConfiguration));
@@ -257,7 +270,7 @@ function persistBrowserConfiguration() {
   }
 }
 function makeAdminState(): AdminState {
-  return { framework: "browser", categories: structuredClone(browserState.categories), settings: structuredClone(browserState.settings), companies: browserState.companies.map((company) => ({ ...structuredClone(company), job: jobs[company.id] ?? company.id } as AdminCompany)) };
+  return { framework: "browser", categories: structuredClone(browserState.categories), settings: structuredClone(browserState.settings), companies: browserState.companies.map((company) => ({ ...structuredClone(company), job: jobs[company.id] ?? company.id } as AdminCompany)), deletedCompanies: structuredClone(browserDeletedCompanies) };
 }
 
 export function getInitialState() {
