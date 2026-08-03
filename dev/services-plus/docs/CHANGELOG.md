@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.0-rc1
+
+- Add stable composite conversation cursors, independent section loading, server-side inbox filters, and authoritative workspace badge summaries.
+- Reject stale UI pagination responses and extend the browser preview beyond 50 records per workspace section.
+- Add aggregated rate-limit rejection telemetry and startup validation for the configured media-domain allow-list.
+- Add schema metadata and pre-handler payload validation for every NUI action; increment API version from 9 to 10.
+- Add schema migration 10 with the company/number/activity inbox index.
+
 ## 0.5.0-rc1
 
 - Add independent server cursors and `hasMore` state for company requests, calls, and conversations; the portal incrementally loads only the active list while retaining eight-item UI pages.

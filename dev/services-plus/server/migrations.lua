@@ -10,8 +10,8 @@ function Migrations.Validate()
     if not ok then
         return false, "Database schema is missing. Apply sql/install.sql before starting Services+."
     end
-    if (tonumber(version) or 0) < 9 then
-        return false, "Database schema is outdated. Apply migrations through sql/migrations/009_request_assignee_integration_contract.sql."
+    if (tonumber(version) or 0) < 10 then
+        return false, "Database schema is outdated. Apply migrations through sql/migrations/010_inbox_cursor_index.sql."
     end
     return true
 end

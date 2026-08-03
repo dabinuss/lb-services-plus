@@ -270,24 +270,47 @@ function Api.getCompanyWorkspace(source, payload)
         end
     end
     local cursors = type(payload.cursors) == "table" and payload.cursors or {}
-    local function cursorFor(section)
+    local function numericCursorFor(section)
         return math.max(1, math.floor(tonumber(cursors[section]) or 9007199254740991))
     end
-    local function page(rows)
+    local function normalizeTimestamp(value)
+        if type(value) ~= "string" then return nil end
+        local normalized = value:gsub("T", " "):gsub("Z$", ""):sub(1, 19)
+        if not normalized:match("^%d%d%d%d%-%d%d%-%d%d %d%d:%d%d:%d%d$") then return nil end
+        return normalized
+    end
+    local function conversationCursor()
+        local cursor = cursors.conversations
+        if cursor == nil then return { lastMessageAt = "9999-12-31 23:59:59", id = 9007199254740991 } end
+        if type(cursor) ~= "table" then return nil end
+        local timestamp, id = normalizeTimestamp(cursor.lastMessageAt), tonumber(cursor.id)
+        if not timestamp or not id or id < 1 or id > 9007199254740991 then return nil end
+        return { lastMessageAt = timestamp, id = math.floor(id) }
+    end
+    local function page(rows, cursorBuilder)
         local hasMore = #rows > limit
         if hasMore then table.remove(rows) end
-        return rows, { nextCursor = rows[#rows] and rows[#rows].id or nil, hasMore = hasMore }
+        local last = rows[#rows]
+        return rows, { nextCursor = last and cursorBuilder(last) or nil, hasMore = hasMore }
     end
 
     local conversations, conversationPage = {}, { hasMore = false }
     if requested.conversations then
-        local inboxOk, rows = ServicesPlus.Inboxes.GetCompanyList(source, cursorFor("conversations"), limit + 1)
-        conversations, conversationPage = page(inboxOk and rows or {})
+        local cursor = conversationCursor()
+        if not cursor then return ServicesPlus.Error("invalid_payload", "Invalid conversation cursor.", false) end
+        local numberId = type(payload.conversationNumberId) == "string" and payload.conversationNumberId or nil
+        local inboxOk, rows = ServicesPlus.Inboxes.GetCompanyList(source, cursor, limit + 1, numberId)
+        if not inboxOk then return ServicesPlus.Error(rows, "The selected inbox is unavailable.", false) end
+        conversations, conversationPage = page(rows, function(row)
+            return { lastMessageAt = normalizeTimestamp(tostring(row.lastMessageAt)), id = tonumber(row.id) }
+        end)
     end
     local company = ServicesPlus.Companies.Get(employee.companyId)
-    local queriedRequests = requested.requests and ServicesPlus.Repository.GetVisibleRequests(employee.companyId, employee.identifier, company.categoryId, company.requestsEnabled and ServicesPlus.Companies.GetCategoryRequestCompetition(company.categoryId), cursorFor("requests"), limit + 1, ServicesPlus.Employees.GetActiveNumberIds(employee)) or {}
+    local competition = company.requestsEnabled and ServicesPlus.Companies.GetCategoryRequestCompetition(company.categoryId)
+    local activeNumberIds = ServicesPlus.Employees.GetActiveNumberIds(employee)
+    local queriedRequests = requested.requests and ServicesPlus.Repository.GetVisibleRequests(employee.companyId, employee.identifier, company.categoryId, competition, numericCursorFor("requests"), limit + 1, activeNumberIds) or {}
     local rawRequestPage
-    queriedRequests, rawRequestPage = page(queriedRequests)
+    queriedRequests, rawRequestPage = page(queriedRequests, function(row) return tonumber(row.id) end)
     local visibleRequests = {}
     for _, request in ipairs(queriedRequests) do
         if ServicesPlus.Requests.CanHandle(employee, request) or request.assignedIdentifier == employee.identifier then visibleRequests[#visibleRequests + 1] = request end
@@ -299,7 +322,9 @@ function Api.getCompanyWorkspace(source, payload)
         visibleRequests[index] = public
     end
     local calls, callPage = {}, { hasMore = false }
-    if requested.calls then calls, callPage = page(ServicesPlus.Repository.GetCompanyCalls(employee.companyId, cursorFor("calls"), limit + 1)) end
+    if requested.calls then
+        calls, callPage = page(ServicesPlus.Repository.GetCompanyCalls(employee.companyId, numericCursorFor("calls"), limit + 1), function(row) return tonumber(row.id) end)
+    end
     local numberStates = {}
     for _, number in ipairs(company.numbers) do
         numberStates[#numberStates + 1] = {
@@ -313,6 +338,19 @@ function Api.getCompanyWorkspace(source, payload)
             selectedForDispatch = employee.dispatchEnabled and ServicesPlus.Employees.CanUseNumber(employee, number)
         }
     end
+    local summary
+    if payload.includeSummary ~= false then
+        local unreadMessages, unreadByNumber = ServicesPlus.Repository.GetCompanyUnreadCounts(employee.companyId, employee.identifier)
+        local seenCallId = math.max(0, math.floor(tonumber(payload.seenCallId) or 0))
+        local unseenCalls, latestCallId = ServicesPlus.Repository.GetCompanyUnseenCallSummary(employee.companyId, seenCallId)
+        summary = {
+            unansweredRequests = ServicesPlus.Repository.CountVisibleUnansweredRequests(employee.companyId, employee.identifier, company.categoryId, competition, activeNumberIds),
+            unreadMessages = unreadMessages,
+            unreadByNumber = unreadByNumber,
+            unseenCalls = unseenCalls,
+            latestCallId = latestCallId
+        }
+    end
     return ServicesPlus.Ok({
         companyId = employee.companyId,
         conversations = conversations,
@@ -320,7 +358,8 @@ function Api.getCompanyWorkspace(source, payload)
         calls = calls,
         requestSettings = ServicesPlus.Requests.ResolveSettings(company, type(payload) == "table" and payload.locale == "de" and "de" or "en"),
         numberStates = numberStates,
-        pagination = { conversations = conversationPage, requests = rawRequestPage, calls = callPage }
+        pagination = { conversations = conversationPage, requests = rawRequestPage, calls = callPage },
+        summary = summary
     })
 end
 

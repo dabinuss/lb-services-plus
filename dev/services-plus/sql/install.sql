@@ -214,7 +214,8 @@ CREATE TABLE IF NOT EXISTS `services_plus_inbox_conversations` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_services_plus_inbox_party` (`number_id`, `external_number`),
   UNIQUE KEY `uq_services_plus_inbox_channel` (`channel_id`),
-  KEY `idx_services_plus_inbox_company` (`company_id`, `last_message_at`, `id`)
+  KEY `idx_services_plus_inbox_company` (`company_id`, `last_message_at`, `id`),
+  KEY `idx_services_plus_inbox_company_number_activity` (`company_id`, `number_id`, `last_message_at`, `id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `services_plus_inbox_messages` (
@@ -271,4 +272,5 @@ INSERT IGNORE INTO `services_plus_schema_migrations` (`version`, `name`) VALUES
 INSERT IGNORE INTO `services_plus_schema_migrations` (`version`, `name`) VALUES
   (7, 'phase2_number_staffing_notifications_navigation_api'),
   (8, 'simplify_dispatch_line_selection'),
-  (9, 'request_assignee_integration_contract');
+  (9, 'request_assignee_integration_contract'),
+  (10, 'inbox_cursor_index');

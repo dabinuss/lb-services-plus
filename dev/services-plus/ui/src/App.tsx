@@ -12,14 +12,10 @@ import { RequestComposer } from "./components/RequestComposer";
 import { fetchNui, getInitialState, startCall } from "./lib/api";
 import { subscribeToNui } from "./lib/events";
 import { t, type Locale } from "./lib/i18n";
-import type { AdminState, AppMessage, AppSettings, Category, CitizenRequest, Company, CompanyNumber, CompanyOperationsPatch, CompanyPatch, CompanyWorkspace, CurrentUser, Employee, EmployeeStatus, InboxConversation, InboxMessage, InitialState, MessageReaction, MessageReactionUpdate, MyActivity, NumberOperationsPatch, RequestSettings, WorkOffer, WorkspaceSection } from "./types";
+import { appendUnique, WorkspaceRequestGate } from "./lib/workspace";
+import type { AdminState, AppMessage, AppSettings, Category, CitizenRequest, Company, CompanyNumber, CompanyOperationsPatch, CompanyPatch, CompanyWorkspace, CurrentUser, Employee, EmployeeStatus, InboxConversation, InboxMessage, InitialState, MessageReaction, MessageReactionUpdate, MyActivity, NumberOperationsPatch, RequestSettings, WorkOffer, WorkspaceCursor, WorkspaceSection } from "./types";
 
 type View = "directory" | "activity" | "portal" | "admin";
-const appendUnique = <T extends { id: number }>(current: T[], incoming: T[]) => {
-  const known = new Set(current.map((item) => item.id));
-  return [...current, ...incoming.filter((item) => !known.has(item.id))];
-};
-
 export default function App() {
   const [state, setState] = useState<InitialState | null>(null); const [view, setView] = useState<View>("directory");
   const [locale, setLocaleState] = useState<Locale>(() => localStorage.getItem("services-plus-locale") === "de" ? "de" : "en");
@@ -28,7 +24,7 @@ export default function App() {
   const [callCompanyChoice, setCallCompanyChoice] = useState<Company | null>(null);
   const [activity, setActivity] = useState<MyActivity | null>(null); const [activityLoading, setActivityLoading] = useState(false); const [workspace, setWorkspace] = useState<CompanyWorkspace | null>(null);
   const [conversation, setConversation] = useState<{ item: InboxConversation; citizen: boolean } | null>(null); const [offer, setOffer] = useState<WorkOffer | null>(null); const [adminState, setAdminState] = useState<AdminState | null>(null);
-  const toastTimer = useRef<number | undefined>(undefined); const localeRef = useRef(locale); const sourceRef = useRef<number | undefined>(undefined); const stateRef = useRef<InitialState | null>(null);
+  const toastTimer = useRef<number | undefined>(undefined); const localeRef = useRef(locale); const sourceRef = useRef<number | undefined>(undefined); const stateRef = useRef<InitialState | null>(null); const workspaceGate = useRef(new WorkspaceRequestGate()); const workspaceInboxRef = useRef<string | undefined>(undefined);
 
   const setLocale = (next: Locale) => { localStorage.setItem("services-plus-locale", next); localeRef.current = next; setLocaleState(next); };
   useEffect(() => { sourceRef.current = state?.currentUser.source; stateRef.current = state; }, [state]);
@@ -44,9 +40,16 @@ export default function App() {
       setLoading(false);
     }
   }, []);
-  const loadWorkspace = useCallback(async (section?: WorkspaceSection, cursor?: number) => {
+  const loadWorkspace = useCallback(async (section?: WorkspaceSection, cursor?: WorkspaceCursor, conversationNumberId?: string, replace = false) => {
+    if (section === "conversations" && !cursor) workspaceInboxRef.current = conversationNumberId;
+    const token = workspaceGate.current.begin(section);
     try {
-      const response = await fetchNui<CompanyWorkspace>("getCompanyWorkspace", { limit: 24, locale: localeRef.current, ...(section ? { sections: [section], cursors: { [section]: cursor } } : {}) });
+      const companyId = stateRef.current?.currentUser.employment?.companyId;
+      let seenCallId = 0;
+      try { if (companyId) seenCallId = Number(sessionStorage.getItem(`services-plus-seen-calls:${companyId}`)) || 0; } catch { /* Session persistence is optional. */ }
+      const inboxNumberId = section === "conversations" ? conversationNumberId : !section ? workspaceInboxRef.current : undefined;
+      const response = await fetchNui<CompanyWorkspace>("getCompanyWorkspace", { limit: 24, locale: localeRef.current, includeSummary: !section, seenCallId, ...(inboxNumberId ? { conversationNumberId: inboxNumberId } : {}), ...(section ? { sections: [section], cursors: cursor ? { [section]: cursor } : {} } : {}) });
+      if (!workspaceGate.current.isCurrent(token)) return false;
       if (!response.success) { notify(response.error.message); return false; }
       if (!section) setWorkspace(response.data);
       else setWorkspace((current) => {
@@ -54,7 +57,7 @@ export default function App() {
         const pagination = { ...current.pagination, [section]: response.data.pagination[section] };
         if (section === "requests") return { ...current, requests: appendUnique(current.requests, response.data.requests), pagination };
         if (section === "calls") return { ...current, calls: appendUnique(current.calls, response.data.calls), pagination };
-        return { ...current, conversations: appendUnique(current.conversations, response.data.conversations), pagination };
+        return { ...current, conversations: replace ? response.data.conversations : appendUnique(current.conversations, response.data.conversations), pagination };
       });
       return true;
     } catch {
@@ -62,7 +65,14 @@ export default function App() {
       return false;
     }
   }, [notify]);
-  const markConversationRead = useCallback((conversationId: number) => setWorkspace((current) => { if (!current?.conversations.some((item) => item.id === conversationId && Number(item.unreadCount) > 0)) return current; return { ...current, conversations: current.conversations.map((item) => item.id === conversationId ? { ...item, unreadCount: 0 } : item) }; }), []);
+  const markConversationRead = useCallback((conversationId: number) => setWorkspace((current) => {
+    const item = current?.conversations.find((entry) => entry.id === conversationId);
+    const unread = Number(item?.unreadCount || 0);
+    if (!current || !item || unread < 1) return current;
+    const byNumber = { ...(current.summary?.unreadByNumber || {}) };
+    byNumber[item.numberId] = Math.max(0, Number(byNumber[item.numberId] || 0) - unread);
+    return { ...current, conversations: current.conversations.map((entry) => entry.id === conversationId ? { ...entry, unreadCount: 0 } : entry), summary: current.summary ? { ...current.summary, unreadMessages: Math.max(0, current.summary.unreadMessages - unread), unreadByNumber: byNumber } : undefined };
+  }), []);
 
   useEffect(() => {
     let active = true; void getInitialState().then((response) => { if (!active) return; if (response.success) setState(response.data); else setError(response.error.message); }).catch(() => { if (active) setError(t(localeRef.current, "operationFailed")); }).finally(() => { if (active) setLoading(false); });
@@ -111,8 +121,8 @@ export default function App() {
     setWorkspace((current) => current ? { ...current, numberStates: current.numberStates?.map((number) => number.numberId === numberId ? { ...number, selectedForDispatch: enabled } : number) } : current);
     void loadWorkspace();
   };
-  const enterDuty = async () => { const success = await run<{ currentUser: CurrentUser; companies: Company[] }>("enterDuty", {}, applySession); if (success) await loadWorkspace(); return success; };
-  const leaveDuty = async () => { const success = await run<{ currentUser: CurrentUser; companies: Company[] }>("leaveDuty", {}, applySession); if (success) { setWorkspace(null); setView("directory"); } };
+  const enterDuty = async () => { const success = await run<{ currentUser: CurrentUser; companies: Company[] }>("enterDuty", {}, applySession); if (success) { workspaceInboxRef.current = undefined; await loadWorkspace(); } return success; };
+  const leaveDuty = async () => { const success = await run<{ currentUser: CurrentUser; companies: Company[] }>("leaveDuty", {}, applySession); if (success) { workspaceInboxRef.current = undefined; setWorkspace(null); setView("directory"); } };
   const openPortal = async () => { setView("portal"); if (state?.currentUser.employment?.onDuty) await loadWorkspace(); };
   const openActivity = async () => {
     setView("activity"); setActivityLoading(true);
@@ -200,7 +210,7 @@ export default function App() {
     <div className="app-content">{conversation ? <ConversationView conversation={conversation.item} citizen={conversation.citizen} locale={locale} busy={busy} canDelete={!conversation.citizen && state.currentUser.employment?.employee?.dispatchEnabled === true} onClose={() => setConversation(null)} onSend={sendConversationMessage} onLocation={sendConversationLocation} onReact={reactToMessage} onRead={markConversationRead} onDelete={async (id) => run<{ id: number }>("deleteMessage", { id }, () => undefined)} /> : <>
       {view === "directory" && <Directory companies={state.companies} categories={state.categories} settings={state.settings} locale={locale} onCall={(company) => void callCompany(company)} onRequest={setRequestCompany} onMessage={setMessageCompany} />}
       {view === "activity" && <Activity data={activity} locale={locale} loading={activityLoading} onConversation={(item) => setConversation({ item, citizen: true })} onCancelRequest={(id) => void run<CitizenRequest>("cancelRequest", { id }, (updated) => setActivity((current) => current ? { ...current, requests: current.requests.map((item) => item.id === id ? updated : item) } : current))} />}
-      {view === "portal" && <Portal user={state.currentUser} companies={state.companies} locale={locale} busy={busy} workspace={workspace} onLoadMore={(section, cursor) => loadWorkspace(section, cursor)} onEnter={enterDuty} onLeave={() => void leaveDuty()} onStatus={(status: EmployeeStatus) => void run("updateStatus", { status }, updateEmployee)} onDispatch={(enabled) => void run("toggleDispatch", { enabled }, updateDispatch)} onDispatchLine={(numberId, enabled) => void run<Employee>("toggleDispatchLine", { numberId, enabled }, (employee) => updateDispatchLine(numberId, enabled, employee))} onNumberOperations={(numbers: NumberOperationsPatch[]) => void run<Company>("updateNumberOperations", { numbers }, (company) => { setState((current) => current ? { ...current, companies: current.companies.map((item) => item.id === company.id ? company : item) } : current); void loadWorkspace(); })} onCallEmployee={(employee) => void callEmployee(employee)} onContactEmployee={(employee) => void run("openEmployeeContact", { targetSource: employee.source }, () => undefined)} onOpenConversation={(item) => setConversation({ item, citizen: false })} onAcceptRequest={(request) => void run<CitizenRequest>("acceptRequest", { id: request.id }, patchRequest)} onTransitionRequest={(request, phaseId) => void run<CitizenRequest>("transitionRequest", { id: request.id, phaseId }, patchRequest)} onReturnRequest={(request) => void run<CitizenRequest>("returnRequest", { id: request.id }, patchRequest)} onDeleteRequest={(request) => { if (window.confirm(`${t(locale, "deleteRequest")}?`)) void run<{ id: number }>("deleteRequest", { id: request.id }, () => void loadWorkspace()); }} onDeleteConversation={(item) => { if (window.confirm(`${t(locale, "deleteConversation")}?`)) void run<{ id: number }>("deleteConversation", { id: item.id }, () => void loadWorkspace()); }} onSaveRequestSettings={(settings) => void run<RequestSettings>("updateRequestSettings", { settings }, (saved) => setWorkspace((current) => current ? { ...current, requestSettings: saved } : current))} onCompanySave={(companyId: string, patch: CompanyOperationsPatch) => void run<Company>("updateCompanyOperations", { companyId, patch }, (company) => setState((current) => current ? { ...current, companies: current.companies.map((item) => item.id === company.id ? company : item) } : current))} />}
+      {view === "portal" && <Portal user={state.currentUser} companies={state.companies} locale={locale} busy={busy} workspace={workspace} onLoadMore={(section, cursor, numberId) => loadWorkspace(section, cursor, numberId)} onInboxChange={(numberId) => loadWorkspace("conversations", undefined, numberId, true)} onCallsSeen={() => setWorkspace((current) => current?.summary ? { ...current, summary: { ...current.summary, unseenCalls: 0 } } : current)} onEnter={enterDuty} onLeave={() => void leaveDuty()} onStatus={(status: EmployeeStatus) => void run("updateStatus", { status }, updateEmployee)} onDispatch={(enabled) => void run("toggleDispatch", { enabled }, updateDispatch)} onDispatchLine={(numberId, enabled) => void run<Employee>("toggleDispatchLine", { enabled, numberId }, (employee) => updateDispatchLine(numberId, enabled, employee))} onNumberOperations={(numbers: NumberOperationsPatch[]) => void run<Company>("updateNumberOperations", { numbers }, (company) => { setState((current) => current ? { ...current, companies: current.companies.map((item) => item.id === company.id ? company : item) } : current); void loadWorkspace(); })} onCallEmployee={(employee) => void callEmployee(employee)} onContactEmployee={(employee) => void run("openEmployeeContact", { targetSource: employee.source }, () => undefined)} onOpenConversation={(item) => setConversation({ item, citizen: false })} onAcceptRequest={(request) => void run<CitizenRequest>("acceptRequest", { id: request.id }, patchRequest)} onTransitionRequest={(request, phaseId) => void run<CitizenRequest>("transitionRequest", { id: request.id, phaseId }, patchRequest)} onReturnRequest={(request) => void run<CitizenRequest>("returnRequest", { id: request.id }, patchRequest)} onDeleteRequest={(request) => { if (window.confirm(`${t(locale, "deleteRequest")}?`)) void run<{ id: number }>("deleteRequest", { id: request.id }, () => void loadWorkspace()); }} onDeleteConversation={(item) => { if (window.confirm(`${t(locale, "deleteConversation")}?`)) void run<{ id: number }>("deleteConversation", { id: item.id }, () => void loadWorkspace()); }} onSaveRequestSettings={(settings) => void run<RequestSettings>("updateRequestSettings", { settings }, (saved) => setWorkspace((current) => current ? { ...current, requestSettings: saved } : current))} onCompanySave={(companyId: string, patch: CompanyOperationsPatch) => void run<Company>("updateCompanyOperations", { companyId, patch }, (company) => setState((current) => current ? { ...current, companies: current.companies.map((item) => item.id === company.id ? company : item) } : current))} />}
       {view === "admin" && state.currentUser.isServerAdmin && (adminState ? <AdminPanel data={adminState} locale={locale} busy={busy} onSaveCompany={async (company: CompanyPatch) => { const success = await run<Company>("adminSaveCompany", { company }, (saved) => setState((current) => current ? { ...current, companies: current.companies.some((item) => item.id === saved.id) ? current.companies.map((item) => item.id === saved.id ? saved : item) : [...current.companies, saved] } : current)); if (success) await refreshAdmin(); return success; }} onDeleteCompany={(companyId) => void run<{ id: string }>("adminDeleteCompany", { companyId }, ({ id }) => { setState((current) => current ? { ...current, companies: current.companies.filter((company) => company.id !== id) } : current); setAdminState((current) => current ? { ...current, companies: current.companies.filter((company) => company.id !== id) } : current); })} onSaveSettings={(settings) => void run<AppSettings>("adminUpdateSettings", { settings }, (saved) => { setState((current) => current ? { ...current, settings: saved } : current); setAdminState((current) => current ? { ...current, settings: saved } : current); })} onSaveCategory={(categoryId, requestCompetition) => void run<Category>("adminUpdateCategory", { categoryId, requestCompetition }, (saved) => { setState((current) => current ? { ...current, categories: current.categories.map((item) => item.id === saved.id ? saved : item) } : current); setAdminState((current) => current ? { ...current, categories: current.categories.map((item) => item.id === saved.id ? saved : item) } : current); })} /> : <div className="boot-state"><LoaderCircle className="spinner" size={25} /></div>)}
     </>}</div>
     {!conversation && <nav className="bottom-nav" aria-label="Services+ navigation"><button type="button" className={view === "directory" ? "active" : ""} onClick={() => setView("directory")} title={t(locale, "directory")}><Building2 size={21} /></button><button type="button" className={view === "activity" ? "active" : ""} onClick={() => void openActivity()} title={t(locale, "activity")}><ClipboardList size={21} />{activity?.requests.some((request) => ["pending", "active", "returned"].includes(request.status)) && <i />}</button>{state.currentUser.employment && <button type="button" className={view === "portal" ? "active" : ""} onClick={() => void openPortal()} title={t(locale, "portal")}><BriefcaseBusiness size={21} /><i /></button>}{state.currentUser.isServerAdmin && <button type="button" className={view === "admin" ? "active" : ""} onClick={() => void openAdmin()} title={t(locale, "admin")}><ShieldCheck size={21} /></button>}</nav>}

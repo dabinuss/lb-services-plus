@@ -64,7 +64,7 @@ describe("CompanyWorkspace", () => {
     await act(async () => root.render(<CompanyWorkspace data={pagedWorkspace} employees={employees} selfSource={1} locale="en" busy={false} isLeader={false} canDelete={false} onLoadMore={onLoadMore} onOpenConversation={vi.fn()} onAcceptRequest={vi.fn()} onTransition={vi.fn()} onReturn={vi.fn()} onSaveSettings={vi.fn()} onDeleteRequest={vi.fn()} onDeleteConversation={vi.fn()} onCallEmployee={vi.fn()} onContactEmployee={vi.fn()} />));
 
     await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="Next page"]')?.click());
-    expect(onLoadMore).toHaveBeenCalledWith("requests", 93);
+    expect(onLoadMore).toHaveBeenCalledWith("requests", 93, undefined);
   });
 
   it("keeps the team in its own tab and paginates long rosters", () => {
@@ -80,12 +80,33 @@ describe("CompanyWorkspace", () => {
     expect(container.textContent).toContain("2 / 2");
   });
 
+  it("loads a selected inbox with its composite cursor", async () => {
+    const onLoadMore = vi.fn().mockResolvedValue(true);
+    const onInboxChange = vi.fn().mockResolvedValue(true);
+    const cursor = { lastMessageAt: "2026-08-03 09:00:00", id: 41 };
+    const inboxWorkspace: WorkspaceData = {
+      ...workspace,
+      conversations: Array.from({ length: 8 }, (_, index) => ({ id: 48 - index, numberId: "main", numberLabel: "Main", lastMessage: "Message", lastMessageAt: new Date(Date.UTC(2026, 7, 3, 8, -index)).toISOString(), unreadCount: 0 })),
+      numberStates: [{ numberId: "main", label: "Main", enabled: true, callsEnabled: true, inboxEnabled: true, requestsEnabled: true, canSelectForDispatch: true, selectedForDispatch: true }],
+      pagination: { ...workspace.pagination, conversations: { nextCursor: cursor, hasMore: true } },
+      summary: { unansweredRequests: 0, unreadMessages: 0, unreadByNumber: { main: 0 }, unseenCalls: 0, latestCallId: 0 }
+    };
+    await act(async () => root.render(<CompanyWorkspace data={inboxWorkspace} employees={employees} selfSource={1} locale="en" busy={false} isLeader={false} canDelete={false} onLoadMore={onLoadMore} onInboxChange={onInboxChange} onOpenConversation={vi.fn()} onAcceptRequest={vi.fn()} onTransition={vi.fn()} onReturn={vi.fn()} onSaveSettings={vi.fn()} onDeleteRequest={vi.fn()} onDeleteConversation={vi.fn()} onCallEmployee={vi.fn()} onContactEmployee={vi.fn()} />));
+
+    act(() => container.querySelector<HTMLButtonElement>('button[aria-label="Shared inbox"]')?.click());
+    await act(async () => Array.from(container.querySelectorAll<HTMLButtonElement>(".inbox-number-tabs button")).find((button) => button.textContent?.includes("Main"))?.click());
+    expect(onInboxChange).toHaveBeenCalledWith("main");
+    await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="Next page"]')?.click());
+    expect(onLoadMore).toHaveBeenCalledWith("conversations", cursor, "main");
+  });
+
   it("uses red badges only for actionable and unseen items", () => {
     const signaledWorkspace: WorkspaceData = {
       ...workspace,
       requests: [{ id: 1, companyId: "downtown-cab", companyName: "Downtown Cab Co.", status: "pending" }],
       conversations: [{ id: 1, numberId: "main", numberLabel: "Main", lastMessage: "Hello", lastMessageAt: "2026-08-03T10:00:00Z", unreadCount: 2 }],
       calls: [{ id: 10, numberId: "main", status: "completed", created_at: "2026-08-03T10:00:00Z" }]
+      , summary: { unansweredRequests: 7, unreadMessages: 4, unreadByNumber: { main: 4 }, unseenCalls: 3, latestCallId: 10 }
     };
     act(() => root.render(<CompanyWorkspace data={signaledWorkspace} employees={employees} selfSource={1} locale="en" busy={false} isLeader={false} canDelete={false} onOpenConversation={vi.fn()} onAcceptRequest={vi.fn()} onTransition={vi.fn()} onReturn={vi.fn()} onSaveSettings={vi.fn()} onDeleteRequest={vi.fn()} onDeleteConversation={vi.fn()} onCallEmployee={vi.fn()} onContactEmployee={vi.fn()} />));
 

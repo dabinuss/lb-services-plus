@@ -16,6 +16,11 @@ RegisterNetEvent("services-plus:server:request", function(requestId, action, pay
         TriggerClientEvent("services-plus:client:response", requestSource, requestId, ServicesPlus.Error("rate_limited", "Too many requests. Please wait.", true))
         return
     end
+    local validPayload, validationError = ServicesPlus.Contracts.ValidateActionPayload(action, payload)
+    if not validPayload then
+        TriggerClientEvent("services-plus:client:response", requestSource, requestId, ServicesPlus.Error("invalid_payload", validationError or "Invalid payload.", false))
+        return
+    end
 
     local ok, response = pcall(ServicesPlus.Api[action], requestSource, payload)
     if not ok then
@@ -33,7 +38,6 @@ end)
 RegisterNetEvent("services-plus:server:phoneChanged", function()
     local requestSource = source
     if not ServicesPlus.RateLimiter.Allow(requestSource, "phoneChanged") then
-        ServicesPlus.Logger.Warn("Rate-limited phone change validation", { source = requestSource })
         return
     end
     ServicesPlus.Employees.ValidatePhone(requestSource)

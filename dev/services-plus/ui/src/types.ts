@@ -231,8 +231,11 @@ export interface ConversationData { conversation: { id: number; companyId: strin
 export interface CompanyCall { id: number; callerNumber?: string; numberId: string; status: string; assignedIdentifier?: string; created_at: string; }
 export interface NumberState { numberId: string; label: string; enabled: boolean; callsEnabled: boolean; inboxEnabled: boolean; requestsEnabled: boolean; canSelectForDispatch: boolean; selectedForDispatch: boolean; }
 export type WorkspaceSection = "conversations" | "requests" | "calls";
-export interface WorkspacePageState { nextCursor?: number; hasMore: boolean; }
-export interface CompanyWorkspace { companyId?: string; conversations: InboxConversation[]; requests: CitizenRequest[]; calls: CompanyCall[]; requestSettings: RequestSettings; numberStates?: NumberState[]; pagination: Record<WorkspaceSection, WorkspacePageState>; }
+export interface ConversationCursor { lastMessageAt: string; id: number; }
+export type WorkspaceCursor = number | ConversationCursor;
+export interface WorkspacePageState { nextCursor?: WorkspaceCursor; hasMore: boolean; }
+export interface WorkspaceSummary { unansweredRequests: number; unreadMessages: number; unreadByNumber: Record<string, number>; unseenCalls: number; latestCallId: number; }
+export interface CompanyWorkspace { companyId?: string; conversations: InboxConversation[]; requests: CitizenRequest[]; calls: CompanyCall[]; requestSettings: RequestSettings; numberStates?: NumberState[]; pagination: Record<WorkspaceSection, WorkspacePageState>; summary?: WorkspaceSummary; }
 export interface WorkOffer {
   kind: "call" | "request";
   id: number;

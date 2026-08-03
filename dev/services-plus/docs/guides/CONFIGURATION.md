@@ -16,6 +16,7 @@ All runtime configuration lives in `config.lua`. Database-managed companies and 
 | `Config.MaxQueueBroadcastEntries` | Maximum active entries included in one queue position pass |
 | `Config.AdminAce` | ACE permission used by the administration UI |
 | `Config.AllowedMediaDomains` | Exact hosts or `*.example.com` wildcard subdomains accepted for HTTPS message attachments |
+| `Config.RateLimitTelemetry` | Aggregation window and bounded entry count for rejection summaries; contains no player identifiers in logs |
 
 `Config.Framework = "auto"` detects Qbox, then QBCore, then ESX, and otherwise uses standalone mode. Set an explicit value on production servers to make startup failures visible.
 
@@ -29,7 +30,7 @@ All runtime configuration lives in `config.lua`. Database-managed companies and 
 
 ## Limits and Integrations
 
-`Config.RateLimits` contains every write or expensive network action, including direct phone-change validation and per-resource export budgets. Do not remove entries when adding callbacks. `Config.ApiAllowedResources` is an exact allow-list for trusted server exports; never add untrusted or client-controlled names. Set `Config.AllowedMediaDomains` to the actual upload hosts configured for LB Phone; attachments from every other host are rejected server-side.
+`Config.RateLimits` contains every write or expensive network action, including direct phone-change validation and per-resource export budgets. Do not remove entries when adding callbacks. `Config.RateLimitTelemetry` emits one bounded summary per window with totals by action and a distinct-subject count instead of logging every rejection. `Config.ApiAllowedResources` is an exact allow-list for trusted server exports; never add untrusted or client-controlled names. Set `Config.AllowedMediaDomains` to the actual upload hosts configured for LB Phone; attachments from every other host are rejected server-side.
 
 Optional integrations are disabled by default. Enable an adapter only after implementing its documented boundary in `integrations/server.lua`. Missing optional resources must not disable core Services+ workflows. See [integration boundaries](../reference/INTEGRATIONS.md) and the [API reference](../api/API.md).
 

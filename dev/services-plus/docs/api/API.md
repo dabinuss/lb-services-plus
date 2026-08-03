@@ -1,7 +1,7 @@
 # Services+ API Reference
 
-Resource version: `0.5.0-rc1`
-API version: `9`
+Resource version: `0.6.0-rc1`
+API version: `10`
 Status: release-candidate contract
 
 This is the authoritative reference for every supported Services+ integration surface. Internal Lua functions, database tables, and network events not explicitly listed here are implementation details and must not be invoked by another resource.
@@ -9,10 +9,10 @@ This is the authoritative reference for every supported Services+ integration su
 ## Compatibility and Versioning
 
 - Every response and payload is JSON-compatible.
-- API version 9 adds independent workspace cursors, enforces non-deleted `GetRequest` reads, and applies per-resource limits to trusted exports.
+- API version 10 adds composite inbox cursors, server-side workspace summaries and inbox filtering, and schema-driven NUI payload validation.
 - Additive fields may appear within the same API major version. Consumers must ignore unknown fields.
 - Removing or renaming a documented field, event, export, or semantic behavior requires an API version increment and changelog entry.
-- Deprecated contracts remain documented for at least one release cycle when technically possible. There are no deprecated contracts in API version 9.
+- Deprecated contracts remain documented for at least one release cycle when technically possible. There are no deprecated contracts in API version 10.
 - Resource exports are the only supported entry point for other server resources. Never trigger `services-plus:server:request` externally.
 
 ## Trust Model
@@ -56,7 +56,7 @@ Do not branch on human-readable `message`; use `error.code` and `retryable`.
 
 ## Entity Reference
 
-All entities below are API version 9. Optional means the field can be absent, not `null`.
+All entities below are API version 10. Optional means the field can be absent, not `null`.
 
 ### Company
 
@@ -95,11 +95,11 @@ All entities below are API version 9. Optional means the field can be absent, no
 
 ### Settings and Pagination
 
-`AppSettings` contains `directoryTitle`, `callsEnabled`, and `requestsEnabled`. Cursor lists accept integer cursors `>= 1` and limits clamped to `1..50`. Results are ordered by descending stable ID unless the contract states otherwise. `CompanyWorkspace` exposes separate `nextCursor` and `hasMore` values for conversations, requests, and calls. Trusted list exports continue with the last item ID until fewer than `limit` items are returned.
+`AppSettings` contains `directoryTitle`, `callsEnabled`, and `requestsEnabled`. Cursor lists accept integer cursors `>= 1` and limits clamped to `1..50`. Requests and calls are ordered by descending stable ID. Company conversations use `{ lastMessageAt, id }`, ordered by both fields descending, so new activity cannot skip or duplicate older pages. `CompanyWorkspace` exposes separate `nextCursor` and `hasMore` values for every section and a server-derived `summary` with `unansweredRequests`, `unreadMessages`, `unreadByNumber`, `unseenCalls`, and `latestCallId`. Trusted list exports continue with the last item ID until fewer than `limit` items are returned.
 
 ## Trusted Server Exports
 
-All exports were introduced by API version 7 and return API version 9 entities where applicable. Every trusted caller is additionally limited per invoking resource: cache and single-record reads use `externalRead`, database lists use `externalList`, and writes use `externalWrite`. Existing per-player write limits remain in force.
+All exports were introduced by API version 7 and return API version 10 entities where applicable. Every trusted caller is additionally limited per invoking resource: cache and single-record reads use `externalRead`, database lists use `externalList`, and writes use `externalWrite`. Existing per-player write limits remain in force.
 
 | Export | Input | Success data | Access and validation | Rate limit | Side effects and concurrency | Errors |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -196,7 +196,7 @@ exports["services-plus"]:ReturnRequest(officerSource, requestId)
 
 ## Local Server Events
 
-These are same-context FiveM server events emitted with `TriggerEvent`; they are not network events. Any resource can technically register a listener, but they are supported only for trusted server integrations. API version 9 request events always use `RequestIntegration`.
+These are same-context FiveM server events emitted with `TriggerEvent`; they are not network events. Any resource can technically register a listener, but they are supported only for trusted server integrations. API version 10 request events always use `RequestIntegration`.
 
 | Event | Payload | Emitted after | Notes |
 | --- | --- | --- | --- |
@@ -215,7 +215,7 @@ Listen and correlate external dispatch state:
 
 ```lua
 AddEventHandler("services-plus:server:requestLifecycle", function(update)
-    if update.version ~= 8 then return end
+    if update.version ~= 10 then return end
     local request = update.request
     local external = request.externalReference
     local externalId = external and external.id or nil
@@ -284,7 +284,7 @@ Version for all action contracts: API 8. Errors marked below are contract-specif
 | `updateCompanyOperations { companyId, patch }` | Company | Leader of same company; boolean request/message flags and distribution enum. | 8/min | Persists operations and pushes company delta. `forbidden`, `validation_failed`. |
 | `updateNumberOperations { numbers }` | Company | Same-company leader; <= 10 existing number IDs and complete boolean/distribution patch. | 8/min | Persists channel flags, resyncs numbers and offers. `number_not_found`, `number_update_failed`. |
 | `toggleDispatchLine { numberId, enabled }` | EmployeePublic | Active dispatcher; existing enabled number. | 20/min | Changes current duty-session line selection. `dispatch_required`, `number_not_found`. |
-| `getCompanyWorkspace { sections?, cursors?, limit?, locale? }` | CompanyWorkspace | On-duty employee; `sections` contains any of `conversations`, `requests`, `calls`; each matching cursor is independent; pagination `1..50`. | 15/min | Returns requested arrays plus `pagination.{section}.{nextCursor,hasMore}`. Omitted sections are empty. Request and line visibility are enforced in SQL and server logic. `not_on_duty`. |
+| `getCompanyWorkspace { sections?, cursors?, conversationNumberId?, seenCallId?, includeSummary?, limit?, locale? }` | CompanyWorkspace | On-duty employee; `sections` contains any of `conversations`, `requests`, `calls`; each matching cursor is independent; the optional inbox must be enabled and shared; pagination `1..50`. | 15/min | Filters conversations in SQL. Conversation cursors are `{ lastMessageAt, id }`; request/call cursors remain integers. `summary` is returned unless `includeSummary` is false. Omitted sections are empty. `not_on_duty`, `inbox_disabled`, `invalid_payload`. |
 
 ### Calls and Contacts
 

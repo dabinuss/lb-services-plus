@@ -4,8 +4,15 @@ import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const source = JSON.parse(await readFile(resolve(root, "shared/api_contracts.json"), "utf8"));
+const describeField = (name, schema, required) => {
+  const limits = [schema.minimum !== undefined ? `min ${schema.minimum}` : "", schema.maximum !== undefined ? `max ${schema.maximum}` : "", schema.maxLength ? `maxLength ${schema.maxLength}` : "", schema.maxItems ? `maxItems ${schema.maxItems}` : "", schema.enum ? schema.enum.join("/") : ""].filter(Boolean);
+  return `\`${name}${required ? "" : "?"}: ${schema.type || "unknown"}${limits.length ? ` (${limits.join(", ")})` : ""}\``;
+};
+const inputFields = (contract) => contract.inputSchema?.properties
+  ? Object.entries(contract.inputSchema.properties).map(([name, schema]) => describeField(name, schema, contract.inputSchema.required?.includes(name))).join(", ")
+  : contract.input.map((field) => `\`${field}\``).join(", ");
 const table = (entries) => Object.entries(entries).map(([name, contract]) =>
-  `| \`${name}\` | ${contract.input.map((field) => `\`${field}\``).join(", ") || "None"} | \`${contract.result}\` | \`${contract.rate}\` |`).join("\n");
+  `| \`${name}\` | ${inputFields(contract) || "None"} | \`${contract.result}\` | \`${contract.rate}\` |`).join("\n");
 const list = (values) => values.map((value) => `- \`${value}\``).join("\n");
 const output = `# Generated API Contract Inventory
 

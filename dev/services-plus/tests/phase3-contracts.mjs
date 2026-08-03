@@ -36,9 +36,9 @@ for (const eventName of ["requestLifecycle", "requestCreated", "requestUpdated",
   assert.ok(apiDocs.includes(`services-plus:server:${eventName}`) || apiDocs.includes(`\`${eventName}\``), `Undocumented local event: ${eventName}`);
 }
 
-assert.match(manifest, /version "0\.5\.0-rc1"/);
+assert.match(manifest, /version "0\.6\.0-rc1"/);
 assert.doesNotMatch(manifest, /server\/prototypes\.lua/, "Development prototypes are loaded in production");
-assert.match(constants, /ApiVersion = 9/);
+assert.match(constants, /ApiVersion = 10/);
 assert.match(repository, /GetNumberQueue\(numberId, limit\)[\s\S]*LIMIT \?/);
 assert.match(calls, /GetNumberQueue\(numberId, Config\.MaxQueueBroadcastEntries\)/);
 assert.match(repository, /EndOpenCalls[\s\S]*UPDATE `services_plus_call_history` h[\s\S]*JOIN `services_plus_call_queue` q/);
@@ -55,7 +55,7 @@ assert.match(exportsFile, /GetRequestByExternal[\s\S]*if existing then return Se
 
 for (const index of [
   "idx_services_plus_requests_company_status", "idx_services_plus_requests_creator", "idx_services_plus_call_queue",
-  "idx_services_plus_call_company", "idx_services_plus_inbox_company", "idx_services_plus_inbox_messages"
+  "idx_services_plus_call_company", "idx_services_plus_inbox_company", "idx_services_plus_inbox_company_number_activity", "idx_services_plus_inbox_messages"
 ]) assert.ok(schema.includes(index), `Common query index is missing: ${index}`);
 
 const requiredDocs = ["README.md", "docs/INDEX.md", "docs/CHANGELOG.md", "docs/guides/INSTALLATION.md", "docs/guides/CONFIGURATION.md", "docs/reference/COMPATIBILITY.md", "docs/guides/DATABASE.md", "docs/guides/TROUBLESHOOTING.md", "docs/reference/INTEGRATIONS.md", "docs/api/API.md", "docs/development/RELEASE_CHECKLIST.md"];

@@ -36,3 +36,5 @@ The shipped `web/` directory is the production frontend. To rebuild it, run `npm
 ## Upgrade
 
 Follow [database operations](DATABASE.md). Apply every missing migration in numeric order while `services-plus` is stopped, then deploy the matching resource version and restart it.
+
+Set `Config.AllowedMediaDomains` to the exact hosts used by the configured LB Phone upload provider. Services+ validates syntax and reports an empty, invalid, or duplicate allow-list entry at startup. This check cannot discover the provider automatically; verify one real upload and one rejected unlisted host before release.

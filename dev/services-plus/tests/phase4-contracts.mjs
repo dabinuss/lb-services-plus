@@ -10,10 +10,10 @@ const [docs, exportsFile, events, callbacks, config, requests, constants, manife
   read("server/requests.lua"), read("shared/constants.lua"), read("fxmanifest.lua"), read("README.md"), read("docs/CHANGELOG.md")
 ]);
 
-assert.match(constants, /ApiVersion = 9/);
-assert.match(manifest, /version "0\.5\.0-rc1"/);
-assert.match(docs, /API version: `9`/);
-assert.match(changelog, /API version from 8 to 9/);
+assert.match(constants, /ApiVersion = 10/);
+assert.match(manifest, /version "0\.6\.0-rc1"/);
+assert.match(docs, /API version: `10`/);
+assert.match(changelog, /API version from 9 to 10/);
 
 const exportsList = [...exportsFile.matchAll(/exports\("([A-Za-z]+)"/g)].map((match) => match[1]);
 assert.equal(exportsList.length, 11);

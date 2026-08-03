@@ -118,13 +118,34 @@ function Inboxes.SendEmployee(source, payload)
     return stored ~= nil, stored or "message_failed"
 end
 
-function Inboxes.GetCompanyList(source, cursor, limit)
+function Inboxes.GetCompanyList(source, cursor, limit, numberId)
     local employee = ServicesPlus.Employees.Get(source); if not employee then return false, "not_on_duty" end
+    if numberId and not canUseNumber(employee, numberId) then return false, "inbox_disabled" end
     local visible = {}
-    for _, conversation in ipairs(ServicesPlus.Repository.GetCompanyConversations(employee.companyId, employee.identifier, cursor, limit)) do
+    for _, conversation in ipairs(ServicesPlus.Repository.GetCompanyConversations(employee.companyId, employee.identifier, cursor, limit, numberId)) do
         if canUseNumber(employee, conversation.numberId) then visible[#visible + 1] = conversation end
     end
     return true, visible
+end
+
+function Inboxes.ValidateConfiguration()
+    local domains, seen = Config.AllowedMediaDomains or {}, {}
+    if #domains == 0 then
+        ServicesPlus.Logger.Warn("No media domains are configured; message attachments will be rejected")
+        return false
+    end
+    for _, configured in ipairs(domains) do
+        local domain = tostring(configured):lower()
+        local host = domain:sub(1, 2) == "*." and domain:sub(3) or domain
+        if host == "" or host:find("[^a-z0-9%.%-]") or host:sub(1, 1) == "." or host:sub(-1) == "." then
+            ServicesPlus.Logger.Warn("Invalid media domain configuration", { domain = configured })
+            return false
+        end
+        if seen[domain] then ServicesPlus.Logger.Warn("Duplicate media domain configuration", { domain = configured }) end
+        seen[domain] = true
+    end
+    ServicesPlus.Logger.Info("Media attachment allow-list validated", { domains = #domains })
+    return true
 end
 
 function Inboxes.GetCitizenList(source, cursor, limit)

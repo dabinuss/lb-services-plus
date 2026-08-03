@@ -3,7 +3,7 @@ ServicesPlus = ServicesPlus or {}
 ServicesPlus.Constants = {
     ResourceName = "services-plus",
     AppIdentifier = "services-plus",
-    ApiVersion = 9,
+    ApiVersion = 10,
     MessageReactions = {
         ["👍"] = true, ["❤️"] = true, ["😂"] = true, ["😮"] = true, ["😢"] = true,
         ["🚗"] = true, ["💵"] = true, ["🚨"] = true, ["🔧"] = true, ["🍔"] = true

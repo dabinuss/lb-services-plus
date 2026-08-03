@@ -1,4 +1,4 @@
-import type { AdminCompany, AdminState, ApiResponse, CitizenRequest, Company, CompanyOperationsPatch, CompanyPatch, CompanyWorkspace, ConversationData, InboxConversation, InboxMessage, InitialState, MessageReactionUpdate, MyActivity, RequestSettings } from "../types";
+import type { AdminCompany, AdminState, ApiResponse, CitizenRequest, Company, CompanyOperationsPatch, CompanyPatch, CompanyWorkspace, ConversationData, InboxConversation, InboxMessage, InitialState, MessageReactionUpdate, MyActivity, RequestSettings, WorkspaceCursor, WorkspaceSection } from "../types";
 import { browserFixture } from "../test/fixture";
 import type { Employee } from "../types";
 
@@ -94,7 +94,7 @@ export async function fetchNui<T>(event: string, data: unknown = {}): Promise<Ap
     }
   }
   if (event === "getRequestOptions") return { success: true, data: structuredClone(browserWorkspace.requestSettings) as T };
-  if (event === "getCompanyWorkspace") return { success: true, data: structuredClone(browserWorkspace) as T };
+  if (event === "getCompanyWorkspace") return { success: true, data: makeBrowserWorkspacePage(data) as T };
   if (event === "acceptRequest" || event === "transitionRequest" || event === "returnRequest") {
     const payload = data as { id: number; phaseId?: string }; const request = browserWorkspace.requests.find((item) => item.id === payload.id);
     if (request) { if (event === "acceptRequest") { request.status = "active"; request.phaseId = "accepted"; if (employment?.employee) { employment.employee.status = "busy"; employment.employee.activeRequest = true; employment.employee.activeRequestId = request.id; } } if (event === "transitionRequest" && payload.phaseId) { request.phaseId = payload.phaseId; if (payload.phaseId === "completed") request.status = "completed"; } if (event === "returnRequest") { request.status = "returned"; request.phaseId = undefined; if (employment?.employee) { employment.employee.status = "available"; employment.employee.activeRequest = false; employment.employee.activeRequestId = undefined; } } return { success: true, data: structuredClone(request) as T }; }
@@ -219,6 +219,29 @@ const requestSettings: RequestSettings = { label: "Ride Request", createLabel: "
 const browserCitizenConversations: InboxConversation[] = [{ id: 501, companyId: "downtown-cab", companyName: "Downtown Cab Co.", logo: "./icon.svg", numberId: "taxi-main", numberLabel: "Dispatch", lastMessage: "Your driver is on the way.", lastMessageAt: "2026-08-02T18:35:00Z", unreadCount: 0 }];
 const browserMessages: InboxMessage[] = [{ id: 1, senderNumber: "5550199", senderType: "citizen", body: "Can I get a pickup at Legion Square?", attachments: [], reactions: [{ emoji: "👍", count: 2, mine: false }], createdAt: "2026-08-02T18:30:00Z" }, { id: 2, senderNumber: "5550100", senderType: "employee", body: "Your driver is on the way.", attachments: [], createdAt: "2026-08-02T18:35:00Z" }];
 const browserWorkspace: CompanyWorkspace = { companyId: "downtown-cab", requestSettings, pagination: { conversations: { hasMore: false }, requests: { hasMore: false }, calls: { hasMore: false } }, numberStates: [{ numberId: "taxi-main", label: "Dispatch", enabled: true, callsEnabled: true, inboxEnabled: true, requestsEnabled: true, canSelectForDispatch: true, selectedForDispatch: true }], requests: [{ id: 701, companyId: "downtown-cab", companyName: "Downtown Cab Co.", templateId: "immediate_pickup", requestLabel: "Ride Request", status: "pending", payload: { people: 2, phone: "5550199" }, createdAt: "2026-08-02T19:10:00Z" }, { id: 700, companyId: "downtown-cab", companyName: "Downtown Cab Co.", templateId: "immediate_pickup", requestLabel: "Ride Request", status: "active", phaseId: "driving_to_pickup", payload: { people: 1, phone: "5550124" }, assignee: { name: "Mika Hart", role: "Dispatcher", source: 31 }, createdAt: "2026-08-02T18:50:00Z" }], conversations: [{ id: 501, numberId: "taxi-main", numberLabel: "Dispatch", externalNumber: "5550199", lastMessage: "Can I get a pickup at Legion Square?", lastMessageAt: "2026-08-02T18:30:00Z", unreadCount: 2 }], calls: [{ id: 301, callerNumber: "5550188", numberId: "taxi-main", status: "completed", created_at: "2026-08-02T17:20:00Z" }] };
+browserWorkspace.requests.push(...Array.from({ length: 62 }, (_, index) => ({ id: 699 - index, companyId: "downtown-cab", companyName: "Downtown Cab Co.", templateId: "immediate_pickup", requestLabel: "Ride Request", status: index % 7 === 0 ? "returned" : "completed", payload: { people: index % 4 + 1, phone: `555${String(1200 + index)}` }, createdAt: new Date(Date.UTC(2026, 6, 31, 20, 0, -index)).toISOString() })));
+browserWorkspace.calls.push(...Array.from({ length: 62 }, (_, index) => ({ id: 300 - index, callerNumber: `555${String(2000 + index)}`, numberId: "taxi-main", status: index % 5 === 0 ? "missed" : "completed", created_at: new Date(Date.UTC(2026, 6, 31, 18, 0, -index)).toISOString() })));
+browserWorkspace.conversations.push(...Array.from({ length: 62 }, (_, index) => ({ id: 500 - index, numberId: index % 2 === 0 ? "taxi-main" : "taxi-booking", numberLabel: index % 2 === 0 ? "Dispatch" : "Bookings", externalNumber: `555${String(3000 + index)}`, lastMessage: `Browser preview conversation ${index + 1}`, lastMessageAt: new Date(Date.UTC(2026, 6, 31, 16, 0, -index)).toISOString(), unreadCount: index % 9 === 0 ? 1 : 0 })));
+
+function makeBrowserWorkspacePage(input: unknown): CompanyWorkspace {
+  const payload = (input || {}) as { sections?: WorkspaceSection[]; cursors?: Partial<Record<WorkspaceSection, WorkspaceCursor>>; conversationNumberId?: string; limit?: number; includeSummary?: boolean; seenCallId?: number };
+  const requested = new Set(payload.sections || ["conversations", "requests", "calls"]);
+  const limit = Math.max(1, Math.min(50, Number(payload.limit) || 24));
+  const numericPage = <T extends { id: number }>(items: T[], section: WorkspaceSection) => {
+    const cursor = Number(payload.cursors?.[section]) || Number.MAX_SAFE_INTEGER;
+    const visible = items.filter((item) => item.id < cursor);
+    return { items: visible.slice(0, limit), state: { nextCursor: visible[Math.min(limit, visible.length) - 1]?.id, hasMore: visible.length > limit } };
+  };
+  const conversationCursor = payload.cursors?.conversations;
+  const cursor = typeof conversationCursor === "object" ? conversationCursor : undefined;
+  const visibleConversations = browserWorkspace.conversations.filter((item) => (!payload.conversationNumberId || item.numberId === payload.conversationNumberId) && (!cursor || item.lastMessageAt < cursor.lastMessageAt || item.lastMessageAt === cursor.lastMessageAt && item.id < cursor.id));
+  const conversationItems = requested.has("conversations") ? visibleConversations.slice(0, limit) : [];
+  const requestPage = requested.has("requests") ? numericPage(browserWorkspace.requests, "requests") : { items: [], state: { hasMore: false } };
+  const callPage = requested.has("calls") ? numericPage(browserWorkspace.calls, "calls") : { items: [], state: { hasMore: false } };
+  const unreadByNumber = browserWorkspace.conversations.reduce<Record<string, number>>((counts, item) => { counts[item.numberId] = (counts[item.numberId] || 0) + Number(item.unreadCount || 0); return counts; }, {});
+  const latestCallId = browserWorkspace.calls[0]?.id || 0;
+  return structuredClone({ ...browserWorkspace, conversations: conversationItems, requests: requestPage.items, calls: callPage.items, pagination: { conversations: { nextCursor: conversationItems.length ? { lastMessageAt: conversationItems.at(-1)!.lastMessageAt, id: conversationItems.at(-1)!.id } : undefined, hasMore: requested.has("conversations") && visibleConversations.length > limit }, requests: requestPage.state, calls: callPage.state }, summary: payload.includeSummary === false ? undefined : { unansweredRequests: browserWorkspace.requests.filter((item) => item.status === "pending" || item.status === "returned").length, unreadMessages: Object.values(unreadByNumber).reduce((sum, count) => sum + count, 0), unreadByNumber, unseenCalls: browserWorkspace.calls.filter((item) => item.id > Number(payload.seenCallId || 0)).length, latestCallId } });
+}
 const browserWorkspaceCompany = browserState.companies.find((company) => company.id === browserWorkspace.companyId);
 if (browserWorkspaceCompany) {
   const employee = browserState.currentUser.employment?.employee;

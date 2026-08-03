@@ -26,6 +26,12 @@ Config.AllowedMediaDomains = {
     "*.fivemanage.com"
 }
 
+Config.RateLimitTelemetry = {
+    enabled = true,
+    summaryWindowMs = 60000,
+    maxEntries = 50
+}
+
 Config.RateLimits = {
     getInitialState = { limit = 12, windowMs = 60000 },
     enterDuty = { limit = 5, windowMs = 30000 },

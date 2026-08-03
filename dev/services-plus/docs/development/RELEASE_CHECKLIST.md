@@ -1,6 +1,6 @@
 # Release Candidate Validation
 
-Version: `0.5.0-rc1`
+Version: `0.6.0-rc1`
 
 ## Automated Gates
 
@@ -15,7 +15,7 @@ Version: `0.5.0-rc1`
 - [x] API exports, events, app actions, push types, examples, and documentation links match source inventory
 - [x] Generated API inventory matches `shared/api_contracts.json`
 
-Local validation completed on 2026-08-03: 13 UI tests, TypeScript type checking, linting, production build, central API metadata checks, and all four phase contract suites. Existing browser portal smoke evidence remains valid for the unchanged visual layout; live FiveM validation is still required.
+Local validation completed on 2026-08-03: 17 UI tests on Node 22, TypeScript type checking, linting, production build, Lua parsing, generated API metadata checks, pagination model checks, and all four phase contract suites. Live FiveM validation remains required. Node `20.16.0` can run the build with a warning but is below the current Vite minimum; use Node `20.19+` or `22.12+` for release validation.
 
 Record command results in the release commit or deployment ticket. A checked item must correspond to the exact files being deployed.
 
@@ -32,6 +32,13 @@ Record command results in the release commit or deployment ticket. A checked ite
 - [ ] Multiple calls, queue limit, empty states, missing images, and long names
 - [ ] Light and dark phone themes
 - [ ] Missing optional-resource fallback and every enabled adapter
+- [ ] More than 50 requests, calls, and conversations: load every page without gaps or duplicate IDs
+- [ ] Conversation receives new activity between page loads: composite cursor still reaches all older rows
+- [ ] Rapid refresh, tab pagination, and inbox switching under injected latency: stale responses never replace newer state
+- [ ] Badge totals match direct database counts for unread messages, unanswered requests, and unseen calls
+- [ ] Every configured upload provider host is accepted and an unlisted host is rejected
+
+For every framework/LB Phone combination, record the exact resource versions, server artifact, database version, OneSync mode, test date, tester, result, and evidence link. A framework family name without exact versions is not compatibility evidence.
 
 ## Performance Record
 
@@ -47,4 +54,4 @@ Capture the server artifact, client count, company count, test dataset size, and
 
 ## Release Decision
 
-Do not promote this release candidate to a production release until all applicable live gates have evidence, no critical or high-severity issue remains, and database restore has been rehearsed. The generated API inventory and automated documentation review are complete for API version 9.
+Do not promote this release candidate to a production release until all applicable live gates have evidence, no critical or high-severity issue remains, and database restore has been rehearsed. The generated API inventory and automated documentation review must be complete for API version 10.

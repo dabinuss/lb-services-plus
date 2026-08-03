@@ -11,7 +11,7 @@
     "test": "vitest run",
     "docs:generate": "node ../tests/generate-api-inventory.mjs",
     "docs:check": "node ../tests/generate-api-inventory.mjs --check",
-    "test:contracts": "npm run docs:check && node ../tests/api-contracts.mjs && node ../tests/phase1-contracts.mjs && node ../tests/phase2-contracts.mjs && node ../tests/phase3-contracts.mjs && node ../tests/phase4-contracts.mjs"
+    "test:contracts": "npm run docs:check && node ../tests/api-contracts.mjs && node ../tests/pagination-contracts.mjs && node ../tests/phase1-contracts.mjs && node ../tests/phase2-contracts.mjs && node ../tests/phase3-contracts.mjs && node ../tests/phase4-contracts.mjs"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^5.1.0",

@@ -26,6 +26,7 @@ local function initialize()
 
     ServicesPlus.Repository.SeedConfiguredCompanies()
     ServicesPlus.Companies.Load()
+    ServicesPlus.Inboxes.ValidateConfiguration()
     ServicesPlus.Repository.RecoverActiveRequests()
     ServicesPlus.Integrations.Refresh()
     ServicesPlus.Employees.ClearAll()

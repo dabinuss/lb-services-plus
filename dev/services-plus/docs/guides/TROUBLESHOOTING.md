@@ -2,7 +2,7 @@
 
 ## Resource Does Not Initialize
 
-Confirm `oxmysql` and `lb-phone` are started first. Read the first Services+ console error; framework and schema failures intentionally keep the API unavailable. Verify `Config.Framework` matches the running resource name and all migrations through 009 are present.
+Confirm `oxmysql` and `lb-phone` are started first. Read the first Services+ console error; framework and schema failures intentionally keep the API unavailable. Verify `Config.Framework` matches the running resource name and all migrations through 010 are present.
 
 ## App Is Missing or Blank
 

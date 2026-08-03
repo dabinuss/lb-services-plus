@@ -384,15 +384,52 @@ function Repository.InsertInboxMessage(conversationId, message)
     ]=], { conversationId, message.lbMessageId, message.senderNumber, message.senderIdentifier, message.senderType, message.body, json.encode(message.attachments or {}), message.coords and json.encode(message.coords) or nil })
 end
 
-function Repository.GetCompanyConversations(companyId, identifier, cursor, limit)
-    return MySQL.query.await([=[
+function Repository.GetCompanyConversations(companyId, identifier, cursor, limit, numberId)
+    local numberClause = numberId and "AND c.`number_id` = ?" or ""
+    local params = { identifier, companyId }
+    if numberId then params[#params + 1] = numberId end
+    params[#params + 1] = cursor.lastMessageAt
+    params[#params + 1] = cursor.lastMessageAt
+    params[#params + 1] = cursor.id
+    params[#params + 1] = limit
+    return MySQL.query.await(([=[
         SELECT c.`id`, c.`number_id` AS `numberId`, n.`label` AS `numberLabel`, c.`external_number` AS `externalNumber`, c.`last_message` AS `lastMessage`, c.`last_message_at` AS `lastMessageAt`,
-          (SELECT COUNT(*) FROM `services_plus_inbox_messages` m WHERE m.`conversation_id` = c.`id` AND m.`id` > COALESCE(r.`last_read_message_id`, 0)) AS `unreadCount`
+          (SELECT COUNT(*) FROM `services_plus_inbox_messages` m WHERE m.`conversation_id` = c.`id` AND m.`deleted_at` IS NULL AND m.`id` > COALESCE(r.`last_read_message_id`, 0)) AS `unreadCount`
         FROM `services_plus_inbox_conversations` c
         JOIN `services_plus_company_numbers` n ON n.`id` = c.`number_id`
         LEFT JOIN `services_plus_inbox_reads` r ON r.`conversation_id` = c.`id` AND r.`identifier` = ?
-        WHERE c.`company_id` = ? AND c.`deleted_at` IS NULL AND n.`enabled` = 1 AND n.`inbox_enabled` = 1 AND n.`shared_inbox` = 1 AND c.`id` < ? ORDER BY c.`id` DESC LIMIT ?
-    ]=], { identifier, companyId, cursor, limit }) or {}
+        WHERE c.`company_id` = ? AND c.`deleted_at` IS NULL AND n.`enabled` = 1 AND n.`inbox_enabled` = 1 AND n.`shared_inbox` = 1 %s
+          AND (c.`last_message_at` < ? OR (c.`last_message_at` = ? AND c.`id` < ?))
+        ORDER BY c.`last_message_at` DESC, c.`id` DESC LIMIT ?
+    ]=]):format(numberClause), params) or {}
+end
+
+function Repository.GetCompanyUnreadCounts(companyId, identifier)
+    local rows = MySQL.query.await([=[
+        SELECT c.`number_id` AS `numberId`, COUNT(m.`id`) AS `count`
+        FROM `services_plus_inbox_conversations` c
+        JOIN `services_plus_company_numbers` n ON n.`id` = c.`number_id`
+        JOIN `services_plus_inbox_messages` m ON m.`conversation_id` = c.`id` AND m.`deleted_at` IS NULL
+        LEFT JOIN `services_plus_inbox_reads` r ON r.`conversation_id` = c.`id` AND r.`identifier` = ?
+        WHERE c.`company_id` = ? AND c.`deleted_at` IS NULL AND n.`enabled` = 1 AND n.`inbox_enabled` = 1 AND n.`shared_inbox` = 1
+          AND m.`id` > COALESCE(r.`last_read_message_id`, 0)
+        GROUP BY c.`number_id`
+    ]=], { identifier, companyId }) or {}
+    local total, byNumber = 0, {}
+    for _, row in ipairs(rows) do
+        local count = tonumber(row.count) or 0
+        total = total + count
+        byNumber[row.numberId] = count
+    end
+    return total, byNumber
+end
+
+function Repository.GetCompanyUnseenCallSummary(companyId, seenCallId)
+    local row = MySQL.single.await([=[
+        SELECT COALESCE(SUM(`id` > ?), 0) AS `count`, COALESCE(MAX(`id`), 0) AS `latestId`
+        FROM `services_plus_call_queue` WHERE `company_id` = ?
+    ]=], { seenCallId, companyId }) or {}
+    return tonumber(row.count) or 0, tonumber(row.latestId) or 0
 end
 
 function Repository.GetCitizenConversations(externalNumber, cursor, limit)
@@ -587,6 +624,36 @@ function Repository.GetVisibleRequests(companyId, identifier, categoryId, compet
     ]=]):format(lineClause), params) or {}
     for _, row in ipairs(rows) do row.payload = decode(row.payload, {}) end
     return rows
+end
+
+function Repository.CountVisibleUnansweredRequests(companyId, identifier, categoryId, competition, allowedNumberIds)
+    local numberPlaceholders, numberParams = {}, {}
+    for _, numberId in ipairs(allowedNumberIds or {}) do
+        numberPlaceholders[#numberPlaceholders + 1] = "?"
+        numberParams[#numberParams + 1] = numberId
+    end
+    local lineClause = "r.`target_number_id` IS NULL"
+    if #numberPlaceholders > 0 then lineClause = lineClause .. " OR r.`target_number_id` IN (" .. table.concat(numberPlaceholders, ",") .. ")" end
+
+    local query, params
+    if competition then
+        query = ([=[
+            SELECT COUNT(*) FROM `services_plus_requests` r
+            JOIN `services_plus_companies` c ON c.`id` = r.`company_id`
+            WHERE r.`deleted_at` IS NULL AND c.`category_id` = ? AND r.`status` IN ('pending','returned')
+              AND (r.`company_id` <> ? OR r.`assigned_identifier` = ? OR (%s))
+        ]=]):format(lineClause)
+        params = { categoryId, companyId, identifier }
+    else
+        query = ([=[
+            SELECT COUNT(*) FROM `services_plus_requests` r
+            WHERE r.`company_id` = ? AND r.`deleted_at` IS NULL AND r.`status` IN ('pending','returned')
+              AND (r.`assigned_identifier` = ? OR (%s))
+        ]=]):format(lineClause)
+        params = { companyId, identifier }
+    end
+    for _, value in ipairs(numberParams) do params[#params + 1] = value end
+    return tonumber(MySQL.scalar.await(query, params)) or 0
 end
 
 function Repository.GetPendingRequestsByCategory(categoryId, limit)
