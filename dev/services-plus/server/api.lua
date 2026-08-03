@@ -269,9 +269,11 @@ function Api.getCompanyWorkspace(source, payload)
     for _, request in ipairs(queriedRequests) do
         if ServicesPlus.Requests.CanHandle(employee, request) or request.assignedIdentifier == employee.identifier then visibleRequests[#visibleRequests + 1] = request end
     end
-    for _, request in ipairs(visibleRequests) do
+    for index, request in ipairs(visibleRequests) do
         local owner = ServicesPlus.Companies.Get(request.companyId or request.company_id)
-        request.phases = owner and ServicesPlus.Requests.ResolveSettings(owner, type(payload) == "table" and payload.locale == "de" and "de" or "en").phases or {}
+        local public = ServicesPlus.Requests.ToCompanyPublic(request)
+        public.phases = owner and ServicesPlus.Requests.ResolveSettings(owner, type(payload) == "table" and payload.locale == "de" and "de" or "en").phases or {}
+        visibleRequests[index] = public
     end
     local numberStates = {}
     for _, number in ipairs(company.numbers) do

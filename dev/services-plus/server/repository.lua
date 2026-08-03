@@ -520,7 +520,9 @@ function Repository.GetCompanyRequests(companyId, cursor, limit, activeOnly)
     local statusClause = activeOnly and "AND r.`status` IN ('pending','active','returned')" or ""
     local query = ([=[
         SELECT r.`id`, r.`company_id` AS `companyId`, r.`template_id` AS `templateId`, r.`request_label` AS `requestLabel`, r.`status`, r.`phase_id` AS `phaseId`,
-          r.`target_number_id` AS `targetNumberId`, r.`payload`, r.`assigned_identifier` AS `assignedIdentifier`, r.`created_at`, r.`updated_at`
+          r.`target_number_id` AS `targetNumberId`, r.`creator_number` AS `creatorNumber`, r.`payload`, r.`assigned_identifier` AS `assignedIdentifier`,
+          r.`assigned_name` AS `assignedName`, r.`assigned_role` AS `assignedRole`, r.`location_x` AS `locationX`, r.`location_y` AS `locationY`,
+          r.`external_source` AS `externalSource`, r.`external_id` AS `externalId`, r.`created_at`, r.`updated_at`
         FROM `services_plus_requests` r WHERE r.`company_id` = ? AND r.`deleted_at` IS NULL AND r.`id` < ? %s ORDER BY r.`id` DESC LIMIT ?
     ]=]):format(statusClause)
     local rows = MySQL.query.await(query, { companyId, cursor, limit }) or {}
@@ -532,8 +534,10 @@ function Repository.GetVisibleRequests(companyId, identifier, categoryId, compet
     if not competition then return Repository.GetCompanyRequests(companyId, cursor, limit, false) end
     local rows = MySQL.query.await([=[
         SELECT r.`id`, r.`company_id` AS `companyId`, c.`display_name` AS `companyName`, r.`template_id` AS `templateId`,
-          r.`request_label` AS `requestLabel`, r.`status`, r.`phase_id` AS `phaseId`, r.`target_number_id` AS `targetNumberId`, r.`payload`,
-          r.`assigned_identifier` AS `assignedIdentifier`, r.`created_at`, r.`updated_at`
+          r.`request_label` AS `requestLabel`, r.`status`, r.`phase_id` AS `phaseId`, r.`target_number_id` AS `targetNumberId`, r.`creator_number` AS `creatorNumber`, r.`payload`,
+          r.`assigned_identifier` AS `assignedIdentifier`, r.`assigned_name` AS `assignedName`, r.`assigned_role` AS `assignedRole`,
+          r.`location_x` AS `locationX`, r.`location_y` AS `locationY`, r.`external_source` AS `externalSource`, r.`external_id` AS `externalId`,
+          r.`created_at`, r.`updated_at`
         FROM `services_plus_requests` r
         JOIN `services_plus_companies` c ON c.`id` = r.`company_id`
         WHERE r.`deleted_at` IS NULL AND r.`id` < ? AND c.`category_id` = ?
@@ -555,11 +559,11 @@ function Repository.GetPendingRequestsByCategory(categoryId, limit)
     return rows
 end
 
-function Repository.AcceptRequest(requestId, identifier, phaseId)
+function Repository.AcceptRequest(requestId, employee, phaseId)
     return MySQL.update.await([=[
-        UPDATE `services_plus_requests` SET `status` = 'active', `assigned_identifier` = ?, `phase_id` = ?, `accepted_at` = CURRENT_TIMESTAMP
+        UPDATE `services_plus_requests` SET `status` = 'active', `assigned_identifier` = ?, `assigned_name` = ?, `assigned_role` = ?, `phase_id` = ?, `accepted_at` = CURRENT_TIMESTAMP
         WHERE `id` = ? AND `status` IN ('pending','returned') AND `assigned_identifier` IS NULL
-    ]=], { identifier, phaseId, requestId }) == 1
+    ]=], { employee.identifier, tostring(employee.name or ""):sub(1, 100), tostring(employee.role or ""):sub(1, 100), phaseId, requestId }) == 1
 end
 
 function Repository.TransitionRequest(requestId, identifier, status, phaseId)
@@ -583,7 +587,7 @@ end
 
 function Repository.ReturnRequest(requestId, identifier)
     return MySQL.update.await([=[
-        UPDATE `services_plus_requests` SET `status` = 'returned', `assigned_identifier` = NULL, `phase_id` = NULL
+        UPDATE `services_plus_requests` SET `status` = 'returned', `assigned_identifier` = NULL, `assigned_name` = NULL, `assigned_role` = NULL, `phase_id` = NULL
         WHERE `id` = ? AND `assigned_identifier` = ? AND `status` = 'active'
     ]=], { requestId, identifier }) == 1
 end
@@ -593,6 +597,6 @@ function Repository.AddRequestEvent(requestId, identifier, eventType, payload)
 end
 
 function Repository.RecoverActiveRequests()
-    MySQL.update.await("UPDATE `services_plus_requests` SET `status` = 'returned', `assigned_identifier` = NULL, `phase_id` = NULL WHERE `status` = 'active'")
+    MySQL.update.await("UPDATE `services_plus_requests` SET `status` = 'returned', `assigned_identifier` = NULL, `assigned_name` = NULL, `assigned_role` = NULL, `phase_id` = NULL WHERE `status` = 'active'")
     MySQL.update.await("UPDATE `services_plus_call_queue` SET `status` = 'ended', `ended_at` = CURRENT_TIMESTAMP WHERE `status` IN ('queued','offered','accepted')")
 end

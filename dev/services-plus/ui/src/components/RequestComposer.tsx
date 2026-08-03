@@ -14,12 +14,21 @@ export function RequestComposer({ company, locale, busy, onClose, onSubmit }: Pr
   const [templateId, setTemplateId] = useState("");
   const [values, setValues] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
-  useEffect(() => { let active = true; void fetchNui<RequestSettings>("getRequestOptions", { companyId: company.id, locale }).then((response) => { if (!active) return; if (response.success) { const first = response.data.templateIds[0] ?? ""; setOptions(response.data); setTemplateId(first); setValues(initialValues(response.data, first)); } else setError(response.error.message); }); return () => { active = false; }; }, [company.id, locale]);
+  useEffect(() => { let active = true; void fetchNui<RequestSettings>("getRequestOptions", { companyId: company.id, locale }).then((response) => { if (!active) return; if (response.success) { const first = response.data.templateIds[0] ?? ""; setOptions(response.data); setTemplateId(first); setValues(initialValues(response.data, first)); } else setError(t(locale, "requestCreationFailed")); }).catch(() => { if (active) setError(t(locale, "requestCreationFailed")); }); return () => { active = false; }; }, [company.id, locale]);
   const enabledTemplates = options?.templates.filter((item) => options.templateIds.includes(item.id)) ?? [];
   const template = enabledTemplates.find((item) => item.id === templateId);
   const visibleFields = template?.fields.filter((field) => field.enabled !== false) ?? [];
   const valid = Boolean(template && visibleFields.every((field) => !field.required || String(values[field.id] ?? "").trim().length > 0));
-  const submit = async () => { if (template && await onSubmit(template.id, values)) onClose(); };
+  const submit = async () => {
+    if (!template) return;
+    setError(null);
+    try {
+      if (await onSubmit(template.id, values)) onClose();
+      else setError(t(locale, "requestCreationFailed"));
+    } catch {
+      setError(t(locale, "requestCreationFailed"));
+    }
+  };
   return <div className="editor-overlay" role="dialog" aria-modal="true" aria-labelledby="request-title"><section className="leader-editor request-editor">
     <header><div><span className="eyebrow">{company.displayName}</span><h2 id="request-title">{options?.createLabel || t(locale, "requestTitle")}</h2></div><button type="button" className="icon-action" onClick={onClose} aria-label={t(locale, "cancel")}><X size={19} /></button></header>
     {!options && !error && <div className="inline-loading"><LoaderCircle className="spinner" size={20} /></div>}

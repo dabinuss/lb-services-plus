@@ -1,5 +1,49 @@
 # Changelog
 
+## 0.2.18-phase2
+
+- Show the assigned employee name and role on active and completed company requests.
+- Persist assignee snapshots through migration 009 while keeping stable identifiers limited to trusted integrations.
+- Add trusted employee reads and validated accept, decline and return request exports.
+- Add a stable sanitized `requestLifecycle` event for MDT, dispatch and business integrations.
+- Keep patrol units, multiple officers and live tracking owned by external systems linked through request IDs.
+
+## 0.2.17-phase2
+
+- Keep the request composer open when loading or submission fails.
+- Replace technical request-creation errors with localized guidance to call the company instead.
+- Add UI coverage for German submission failures and English request-option failures.
+
+## 0.2.16-phase2
+
+- Remove company-level workflow-step selection and always use the complete predefined category workflow.
+- Ignore obsolete stored `phaseIds` and remove phase controls from leader request settings.
+- Remove the taxi pickup location field and always capture server-side GTA coordinates for taxi requests.
+
+## 0.2.15-phase2
+
+- Allow leaders to configure phone fields as required while preserving automatic equipped-number prefilling and server validation.
+- Rename active request phases in the UI to the clearer workflow-steps terminology.
+- Refresh employee inbox unread state after message loading and mirror read behavior in the browser preview.
+
+## 0.2.14-phase2
+
+- Reserve red portal-tab counters for unanswered requests, unread messages and calls not yet viewed in the current app session.
+- Mark loaded calls as seen when the calls tab is opened and highlight only subsequently unseen calls.
+- Render zero counts, seen calls, team totals and empty number-inbox counters with neutral styling.
+
+## 0.2.13-phase2
+
+- Include the server-resolved numeric framework job grade in public on-duty employee state.
+- Sort the active team by leader status and descending grade before status and name.
+- Revalidate and broadcast role, grade and leader changes while an employee remains on duty.
+
+## 0.2.12-phase2
+
+- Move the active employee roster into a dedicated company-portal workspace tab beside requests, inboxes and calls.
+- Add compact pagination to every portal list and team search by employee name or role.
+- Preserve the selected portal tab for the current app session and prioritize operational statuses in the team list.
+
 ## 0.2.11-phase2
 
 - Remove administrative line-staffing modes and per-number employee allow-lists.

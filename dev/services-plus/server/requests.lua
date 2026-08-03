@@ -42,34 +42,82 @@ local navigationDefaults = {
     police_justice = "automatic"
 }
 
+local function value(request, snake, camel)
+    local resolved = request[snake]
+    if resolved == nil then resolved = request[camel] end
+    return resolved
+end
+
+local function assignee(request, includeIdentifier)
+    local identifier = value(request, "assigned_identifier", "assignedIdentifier")
+    if not identifier then return nil end
+    local active = ServicesPlus.Employees.GetByIdentifier(identifier)
+    local result = {
+        name = value(request, "assigned_name", "assignedName") or (active and active.name) or "",
+        role = value(request, "assigned_role", "assignedRole") or (active and active.role) or "",
+        source = active and active.source or nil
+    }
+    if includeIdentifier then result.identifier = identifier end
+    return result
+end
+
 function Requests.ToPublic(request)
     if not request then return nil end
+    local companyId = value(request, "company_id", "companyId")
+    local company = companyId and ServicesPlus.Companies.Get(companyId) or nil
     return {
         id = request.id,
-        companyId = request.company_id or request.companyId,
-        companyName = request.companyName,
-        templateId = request.template_id or request.templateId,
-        requestLabel = request.request_label or request.requestLabel,
+        companyId = companyId,
+        companyName = request.companyName or (company and company.displayName),
+        templateId = value(request, "template_id", "templateId"),
+        requestLabel = value(request, "request_label", "requestLabel"),
         status = request.status,
-        phaseId = request.phase_id or request.phaseId,
-        targetNumberId = request.target_number_id or request.targetNumberId,
+        phaseId = value(request, "phase_id", "phaseId"),
+        targetNumberId = value(request, "target_number_id", "targetNumberId"),
         payload = request.payload or {},
-        createdAt = request.created_at or request.createdAt,
-        updatedAt = request.updated_at or request.updatedAt
+        createdAt = value(request, "created_at", "createdAt"),
+        updatedAt = value(request, "updated_at", "updatedAt")
     }
+end
+
+function Requests.ToCompanyPublic(request)
+    local result = Requests.ToPublic(request)
+    if result then result.assignee = assignee(request, false) end
+    return result
+end
+
+function Requests.ToIntegration(request)
+    local result = Requests.ToPublic(request)
+    if not result then return nil end
+    result.assignee = assignee(request, true)
+    local x, y = tonumber(value(request, "location_x", "locationX")), tonumber(value(request, "location_y", "locationY"))
+    if x and y then result.location = { x = x, y = y } end
+    local externalSource, externalId = value(request, "external_source", "externalSource"), value(request, "external_id", "externalId")
+    if externalSource and externalId then result.externalReference = { resource = externalSource, id = externalId } end
+    result.creatorNumber = value(request, "creator_number", "creatorNumber")
+    return result
+end
+
+local lifecycleNames = {
+    requestAccepted = "accepted", requestPhaseChanged = "phase_changed", requestReturned = "returned",
+    requestCompleted = "completed", requestCancelled = "cancelled", requestDeleted = "deleted"
+}
+
+local function emitLifecycle(eventName, request)
+    TriggerEvent("services-plus:server:requestLifecycle", {
+        event = eventName,
+        version = ServicesPlus.Constants.ApiVersion,
+        timestamp = os.time(),
+        request = Requests.ToIntegration(request)
+    })
 end
 
 function Requests.ResolveSettings(company, locale)
     local stored = ServicesPlus.Repository.GetRequestSettings(company.id) or {}
     local templateIds = resolvedTemplateIds(company, stored.templateIds)
-    local enabledPhases = type(stored.phaseIds) == "table" and stored.phaseIds or nil
     local phases = {}
-    local availablePhases = {}
     for _, phase in ipairs(defaultPhases(company)) do
-        availablePhases[#availablePhases + 1] = { id = phase.id, name = localeName(phase.name, locale) }
-        local enabled = not enabledPhases
-        if enabledPhases then for _, id in ipairs(enabledPhases) do if id == phase.id then enabled = true break end end end
-        if enabled then phases[#phases + 1] = { id = phase.id, name = localeName(phase.name, locale) } end
+        phases[#phases + 1] = { id = phase.id, name = localeName(phase.name, locale) }
     end
     if #phases == 0 then phases = { { id = "accepted", name = locale == "de" and "Angenommen" or "Accepted" }, { id = "completed", name = locale == "de" and "Abgeschlossen" or "Completed" } } end
 
@@ -85,7 +133,6 @@ function Requests.ResolveSettings(company, locale)
                     local options = {}
                     for _, option in ipairs(field.options or {}) do options[#options + 1] = { value = option.value, label = localeName(option.label, locale) } end
                     local required = override and type(override.required) == "boolean" and override.required or configured.required == true
-                    if field.type == "phone" then required = false end
                     fields[#fields + 1] = { id = configured.id, type = field.type, label = localeName(field.label, locale), enabled = not override or override.enabled ~= false, required = required,
                         maxLength = field.maxLength, minimum = field.minimum, maximum = field.maximum, options = options }
                 end
@@ -101,7 +148,7 @@ function Requests.ResolveSettings(company, locale)
     local validNumber = false
     for _, number in ipairs(requestNumbers) do if number.id == numberId then validNumber = true break end end
     if not validNumber then numberId = requestNumbers[1] and requestNumbers[1].id or nil end
-    return { label = stored.label or (locale == "de" and "Anfrage" or "Request"), createLabel = stored.createLabel or (locale == "de" and "Anfrage erstellen" or "Create request"), templateIds = templateIds, templates = templates, phases = phases, availablePhases = availablePhases, phaseIds = enabledPhases or (function() local ids = {}; for _, phase in ipairs(phases) do ids[#ids + 1] = phase.id end; return ids end)(), fieldSettings = stored.fieldSettings or {}, numberId = numberId, requestNumbers = requestNumbers, navigationOnAccept = stored.navigationOnAccept or navigationDefaults[company.categoryId] or "disabled" }
+    return { label = stored.label or (locale == "de" and "Anfrage" or "Request"), createLabel = stored.createLabel or (locale == "de" and "Anfrage erstellen" or "Create request"), templateIds = templateIds, templates = templates, phases = phases, fieldSettings = stored.fieldSettings or {}, numberId = numberId, requestNumbers = requestNumbers, navigationOnAccept = stored.navigationOnAccept or navigationDefaults[company.categoryId] or "disabled" }
 end
 
 local function notifyCreator(request, eventType)
@@ -123,6 +170,7 @@ local function notifyCreator(request, eventType)
     end
     TriggerEvent(("services-plus:server:%s"):format(eventType), request)
     TriggerEvent("services-plus:server:requestUpdated", request)
+    emitLifecycle(lifecycleNames[eventType] or eventType, request)
 end
 
 local function requestPosition(source)
@@ -172,7 +220,7 @@ end
 local function pushCompany(companyId, eventType, payload, availableOnly)
     local company = ServicesPlus.Companies.Get(companyId)
     if not company then return end
-    local clientPayload = eventType:match("^request%.") and Requests.ToPublic(payload) or payload
+    local clientPayload = eventType:match("^request%.") and Requests.ToCompanyPublic(payload) or payload
     local companies = ServicesPlus.Companies.GetCategoryRequestCompetition(company.categoryId) and ServicesPlus.Companies.GetByCategory(company.categoryId) or { company }
     local sent = {}
     for _, audienceCompany in ipairs(companies) do
@@ -241,7 +289,8 @@ function Requests.Create(source, companyId, templateId, values, locale, external
     if not clean then return false, "validation_failed" end
     local phoneNumber = exports["lb-phone"]:GetEquippedPhoneNumber(source)
     local locationX, locationY
-    if resolved.navigationOnAccept ~= "disabled" then locationX, locationY = requestPosition(source) end
+    if company.categoryId == "taxi_transport" or resolved.navigationOnAccept ~= "disabled" then locationX, locationY = requestPosition(source) end
+    if company.categoryId == "taxi_transport" and (not locationX or not locationY) then return false, "location_unavailable" end
     local requestId = ServicesPlus.Repository.CreateStructuredRequest({ identifier = player.identifier, phoneNumber = phoneNumber, companyId = companyId,
         templateId = templateId, requestLabel = resolved.label, values = clean, targetNumberId = resolved.numberId, locationX = locationX, locationY = locationY,
         externalSource = external and external.source or nil, externalId = external and external.id or nil })
@@ -250,6 +299,7 @@ function Requests.Create(source, companyId, templateId, values, locale, external
     local request = ServicesPlus.Repository.GetRequestById(requestId)
     pushCompany(companyId, "request.offer", request, true)
     TriggerEvent("services-plus:server:requestCreated", request)
+    emitLifecycle("created", request)
     return true, Requests.ToPublic(request)
 end
 
@@ -260,7 +310,7 @@ function Requests.Accept(source, requestId)
     if not Requests.CanHandle(employee, request) or employee.status ~= "available" then return false, "employee_unavailable" end
     local company = ServicesPlus.Companies.Get(request.company_id)
     local phases = Requests.ResolveSettings(company, Config.Locale).phases
-    if not ServicesPlus.Repository.AcceptRequest(requestId, employee.identifier, phases[1].id) then return false, "already_accepted" end
+    if not ServicesPlus.Repository.AcceptRequest(requestId, employee, phases[1].id) then return false, "already_accepted" end
     local assigned = ServicesPlus.Employees.AssignWork(source, "request", requestId)
     if not assigned then ServicesPlus.Repository.ReturnRequest(requestId, employee.identifier); return false, "employee_unavailable" end
     ServicesPlus.Repository.AddRequestEvent(requestId, employee.identifier, "accepted", { phaseId = phases[1].id })
@@ -279,7 +329,7 @@ function Requests.Accept(source, requestId)
         end
     end
     notifyCreator(request, "requestAccepted")
-    return true, Requests.ToPublic(request)
+    return true, Requests.ToCompanyPublic(request)
 end
 
 function Requests.Decline(source, requestId)
@@ -306,7 +356,7 @@ function Requests.Transition(source, requestId, nextPhaseId)
     request = ServicesPlus.Repository.GetRequestById(requestId)
     pushCompany(request.company_id, "request.updated", request, false)
     notifyCreator(request, status == "completed" and "requestCompleted" or "requestPhaseChanged")
-    return true, Requests.ToPublic(request)
+    return true, Requests.ToCompanyPublic(request)
 end
 
 function Requests.Return(source, requestId)
@@ -318,7 +368,7 @@ function Requests.Return(source, requestId)
     pushCompany(request.company_id, "request.updated", request, false)
     pushCompany(request.company_id, "request.offer", request, true)
     notifyCreator(request, "requestReturned")
-    return true, Requests.ToPublic(request)
+    return true, Requests.ToCompanyPublic(request)
 end
 
 function Requests.Cancel(source, requestId)
@@ -375,9 +425,6 @@ function Requests.SaveSettings(source, input)
     local validTemplates = {}
     for _, id in ipairs(input.templateIds or {}) do local template = definitions.templates[id]; if templateAllowed(company, template) then validTemplates[#validTemplates + 1] = id end end
     if #validTemplates == 0 then return false, "validation_failed" end
-    local allowedPhases = {}; for _, phase in ipairs(defaultPhases(company)) do allowedPhases[phase.id] = true end
-    local phaseIds = {}; for _, id in ipairs(input.phaseIds or {}) do if allowedPhases[id] then phaseIds[#phaseIds + 1] = id end end
-    if #phaseIds < 2 then return false, "validation_failed" end
     local numberId = nil
     for _, number in ipairs(company.numbers) do if number.id == input.numberId and number.enabled and number.requestsEnabled then numberId = number.id break end end
     local fieldSettings = {}
@@ -388,14 +435,13 @@ function Requests.SaveSettings(source, input)
             fieldSettings[templateId] = {}
             for fieldId, setting in pairs(values) do
                 if supported[fieldId] and type(setting) == "table" and type(setting.enabled) == "boolean" and type(setting.required) == "boolean" then
-                    local field = definitions.fields[fieldId]
-                    fieldSettings[templateId][fieldId] = { enabled = setting.enabled, required = field and field.type == "phone" and false or setting.required }
+                    fieldSettings[templateId][fieldId] = { enabled = setting.enabled, required = setting.required }
                 end
             end
         end
     end
     if not ServicesPlus.Constants.NavigationModes[input.navigationOnAccept] then return false, "validation_failed" end
-    local settings = { label = input.label, createLabel = input.createLabel, templateIds = validTemplates, phaseIds = phaseIds, fieldSettings = fieldSettings, numberId = numberId, navigationOnAccept = input.navigationOnAccept }
+    local settings = { label = input.label, createLabel = input.createLabel, templateIds = validTemplates, fieldSettings = fieldSettings, numberId = numberId, navigationOnAccept = input.navigationOnAccept }
     ServicesPlus.Repository.SaveRequestSettings(company.id, settings)
     return true, Requests.ResolveSettings(company, Config.Locale)
 end

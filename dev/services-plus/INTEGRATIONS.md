@@ -18,4 +18,6 @@ Company calls remain native LB Phone calls under both native and NUI audio confi
 
 Trusted server resources use the exports in `API.md` and must be listed in `Config.ApiAllowedResources`. External request creation requires a stable `externalId`; Services+ scopes it to the invoking resource and returns the existing request when retried. Integration resources should consume local lifecycle events and must not call Services+ client/server network events directly.
 
+Services+ exposes one primary request assignee and a stable `services-plus:server:requestLifecycle` event. MDT and dispatch resources remain responsible for patrol units, multiple assigned officers, vehicle and officer live locations, radio state and map presentation. They should correlate that state using the Services+ request ID and employee identifier, and use the validated request action exports when synchronizing lifecycle changes back to Services+.
+
 Services+ conversation deletion is intentionally local to the Services+ shared-inbox projection. It does not delete or rewrite native LB Phone messages. Equipped-number changes are consumed through the documented `lb-phone:numberChanged` event and invalidate active duty after server-side number verification.

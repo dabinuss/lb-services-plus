@@ -58,6 +58,7 @@ local function publicEmployee(employee)
         source = employee.source,
         name = employee.name,
         role = employee.role,
+        grade = employee.grade,
         companyId = employee.companyId,
         status = employee.status,
         dispatchEnabled = employee.dispatchEnabled,
@@ -128,13 +129,43 @@ function Employees.Get(source)
     return dutyBySource[source]
 end
 
+function Employees.GetByIdentifier(identifier)
+    if not identifier then return nil end
+    for _, employee in pairs(dutyBySource) do
+        if employee.identifier == identifier then return employee end
+    end
+    return nil
+end
+
 function Employees.GetPublicForCompany(companyId)
     local result = {}
     for source in pairs(companyMembers[companyId] or {}) do
         local employee = dutyBySource[source]
         if employee then result[#result + 1] = publicEmployee(employee) end
     end
-    table.sort(result, function(a, b) return a.name < b.name end)
+    table.sort(result, function(a, b)
+        if a.isLeader ~= b.isLeader then return a.isLeader end
+        if a.grade ~= b.grade then return a.grade > b.grade end
+        return a.name < b.name
+    end)
+    return result
+end
+
+function Employees.GetIntegrationForCompany(companyId)
+    local result = {}
+    for source in pairs(companyMembers[companyId] or {}) do
+        local employee = dutyBySource[source]
+        if employee then
+            local public = publicEmployee(employee)
+            public.identifier = employee.identifier
+            result[#result + 1] = public
+        end
+    end
+    table.sort(result, function(a, b)
+        if a.isLeader ~= b.isLeader then return a.isLeader end
+        if a.grade ~= b.grade then return a.grade > b.grade end
+        return a.name < b.name
+    end)
     return result
 end
 
@@ -158,6 +189,7 @@ function Employees.EnterDuty(source)
         identifier = player.identifier,
         name = player.name ~= "" and player.name or GetPlayerName(source),
         role = player.role or ("Grade %d"):format(player.grade or 0),
+        grade = tonumber(player.grade) or 0,
         companyId = company.id,
         phoneNumber = phoneNumber,
         status = "available",
@@ -328,9 +360,11 @@ function Employees.ValidateEmployment(source)
     end
     local nextLeader = ServicesPlus.Bridge.IsLeader(player, company) or employee.explicitLeader
     local nextRole = player.role or ("Grade %d"):format(player.grade or 0)
-    if employee.isLeader ~= nextLeader or employee.role ~= nextRole then
+    local nextGrade = tonumber(player.grade) or 0
+    if employee.isLeader ~= nextLeader or employee.role ~= nextRole or employee.grade ~= nextGrade then
         employee.isLeader = nextLeader
         employee.role = nextRole
+        employee.grade = nextGrade
         employee.version = nextSequence()
         sendToCompany(employee.companyId, "employee.updated", publicEmployee(employee))
     end

@@ -21,7 +21,7 @@ ServicesPlus.RequestDefinitions = {
         } }
     },
     templates = {
-        immediate_pickup = { kind = "specialized", categoryId = "taxi_transport", name = { en = "Pickup", de = "Abholung" }, fields = { { id = "location", required = true }, { id = "people", required = true }, { id = "phone", required = false } } },
+        immediate_pickup = { kind = "specialized", categoryId = "taxi_transport", name = { en = "Pickup", de = "Abholung" }, fields = { { id = "people", required = true }, { id = "phone", required = false } } },
         roadside_assistance = { kind = "specialized", categoryId = "vehicle_services", name = { en = "Roadside or towing assistance", de = "Pannen- oder Abschlepphilfe" }, fields = { { id = "location", required = true }, { id = "description", required = true }, { id = "vehicle_plate", required = false }, { id = "phone", required = false } } },
         delivery = { kind = "specialized", categoryId = "restaurants_food", name = { en = "Delivery", de = "Lieferung" }, fields = { { id = "description", required = true }, { id = "location", required = true }, { id = "phone", required = false } } },
         reservation = { kind = "specialized", categoryId = "restaurants_food", name = { en = "Table reservation", de = "Tischreservierung" }, fields = { { id = "requested_time", required = true }, { id = "people", required = true }, { id = "phone", required = false }, { id = "notes", required = false } } },

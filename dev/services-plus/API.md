@@ -34,7 +34,7 @@ Server events are request/response based and return through `services-plus:clien
 | `returnRequest` | NUI to client to server | `{ id }` | Assigned employee | 8/30 sec | Returns request and restores status |
 | `cancelRequest` | NUI to client to server | `{ id }` | Request owner | 6/min | Cancels owned active request |
 | `deleteRequest` | NUI to client to server | `{ id }` | Active dispatch of owning company | 10/min | Soft-deletes and audits a company request |
-| `updateRequestSettings` | NUI to client to server | `{ settings }` | Company leader | 6/min | Persists controlled labels/templates/fields/phases, target number and navigation mode |
+| `updateRequestSettings` | NUI to client to server | `{ settings }` | Company leader | 6/min | Persists controlled labels, templates, fields, target number and navigation mode; category workflow steps remain fixed |
 | `sendCitizenMessage` | NUI to client to server | Message payload | Phone user | 12/min | Sends via LB Phone and stores in target number inbox |
 | `sendEmployeeMessage` | NUI to client to server | Conversation message payload | On-duty company employee with enabled inbox | 20/min | Replies through the company number |
 | `getCitizenInbox` | NUI to client to server | `{ cursor?, limit? }` | Phone user | 15/min | Loads caller-owned company conversations |
@@ -53,7 +53,7 @@ Incoming request notifications use LB Phone `customData.buttons`. Their `-` and 
 | `company.deleted` | All app clients | `{ id }` |
 | `settings.updated` | All app clients | Public global settings |
 | `category.updated` | All app clients | Public category entity including competition mode |
-| `employee.updated` | On-duty members of company | Public employee entity |
+| `employee.updated` | On-duty members of company | Public employee entity including server-resolved numeric `grade` |
 | `employee.removed` | On-duty members of company | `{ companyId, source }` |
 | `session.invalidated` | Affected player | `{ reason }` |
 | `inbox.reaction` | Authorized conversation participants | `{ messageId, conversationId, reactions }` |
@@ -69,13 +69,33 @@ Add trusted resource names to `Config.ApiAllowedResources`. All exports return t
 | --- | --- | --- |
 | `GetCompany` | `companyId` | Returns one public company entity |
 | `GetCompanyNumbers` | `companyId` | Returns operational number state |
-| `GetRequest` | `requestId` | Returns one request |
+| `GetCompanyEmployees` | `companyId` | Returns current duty employees with stable identifiers, roles, statuses and active work IDs |
+| `GetRequest` | `requestId` | Returns one integration request entity |
 | `GetCompanyRequests` | `companyId, { cursor?, limit?, activeOnly? }` | Returns a bounded request page |
 | `CreateRequest` | `source, { companyId, templateId, values, externalId, locale? }` | Creates an idempotent external request |
+| `AcceptRequest` | `source, requestId` | Accepts as the validated available employee represented by `source` |
+| `DeclineRequest` | `source, requestId` | Records a decline for the validated employee represented by `source` |
+| `ReturnRequest` | `source, requestId` | Returns the request assigned to the validated employee represented by `source` |
 | `TransitionRequest` | `source, requestId, phaseId` | Uses the assigned employee transition contract |
 | `SendCompanyMessage` | `source, messagePayload` | Uses the authorized company inbox sender contract |
 
-Local server events are emitted as `services-plus:server:requestCreated`, `requestUpdated`, `requestAccepted`, `requestPhaseChanged`, `requestReturned`, `requestCompleted`, `requestCancelled`, `requestDeleted`, and `messageReceived`. They are integration events, not client-triggerable network APIs.
+Integration request entities contain the public request fields plus `creatorNumber`, optional `{ x, y }` location, optional `{ resource, id }` external reference, and optional `assignee`. The assignee contains a stable `identifier`, accepted-name and role snapshots, and `source` only while that employee is currently on duty. Company and citizen NUI payloads do not expose the stable identifier.
+
+`services-plus:server:requestLifecycle` emits `{ event, version, timestamp, request }`, where `event` is `created`, `accepted`, `phase_changed`, `returned`, `completed`, `cancelled`, or `deleted`, and `request` is the integration entity above. Specific local events remain available as `requestCreated`, `requestUpdated`, `requestAccepted`, `requestPhaseChanged`, `requestReturned`, `requestCompleted`, `requestCancelled`, `requestDeleted`, and `messageReceived`. These are local integration events, not client-triggerable network APIs.
+
+Services+ stores one primary assignee. External MDT or dispatch resources should key their own patrol, multi-officer, live-location and unit assignment data by the Services+ request ID rather than trying to store that domain model inside Services+.
+
+```lua
+AddEventHandler("services-plus:server:requestLifecycle", function(update)
+    local requestId = update.request.id
+    -- Link requestId to patrols, officers and map markers in the external resource.
+end)
+
+local result = exports["services-plus"]:AcceptRequest(officerSource, requestId)
+if not result.success then
+    print(("Services+ rejected request acceptance: %s"):format(result.error.code))
+end
+```
 
 Malformed requests and denied actions always receive an error envelope. Internal errors are logged server-side and never exposed to clients.
 

@@ -60,6 +60,7 @@ export interface Employee {
   source: number;
   name: string;
   role: string;
+  grade: number;
   companyId: string;
   status: EmployeeStatus;
   dispatchEnabled: boolean;
@@ -158,8 +159,7 @@ export interface CitizenRequest {
   template_id?: string;
   requestLabel?: string;
   request_label?: string;
-  assignedIdentifier?: string;
-  assigned_identifier?: string;
+  assignee?: { name: string; role: string; source?: number; identifier?: string };
   phases?: RequestPhase[];
 }
 
@@ -190,10 +190,8 @@ export interface RequestSettings {
   label: string;
   createLabel: string;
   templateIds: string[];
-  phaseIds: string[];
   templates: RequestTemplate[];
   phases: RequestPhase[];
-  availablePhases?: RequestPhase[];
   fieldSettings?: Record<string, Record<string, { enabled: boolean; required: boolean }>>;
   numberId?: string;
   requestNumbers?: Array<{ id: string; label: string }>;

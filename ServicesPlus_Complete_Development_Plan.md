@@ -114,7 +114,7 @@ Example categories:
 The category controls:
 
 - Available request templates
-- Available active request phases
+- Fixed request workflow steps
 - Default icons and labels
 - Category search matching
 
@@ -128,7 +128,7 @@ Each category contains:
 - Default request creation label
 - Available request templates
 - Available request field definitions
-- Available active request phases
+- Fixed request workflow steps
 
 Adding a new category must not require writing new UI components for the normal request flow. New categories reuse the generic request creation, incoming-offer and active-request views.
 
@@ -155,11 +155,10 @@ Each company contains:
 - Company-specific request label overrides
 - Company-specific enabled templates
 - Company-specific enabled request fields
-- Company-specific active phases
 
 Company configuration is cached server-side and only reloaded or redistributed when it changes.
 
-Company-specific configuration may override category defaults, but only inside the supported template, field and phase system.
+Company-specific configuration may override supported template and field defaults. Request workflow steps remain fixed by category and cannot be customized by a company.
 
 ---
 
@@ -542,11 +541,11 @@ Company templates are resolved in this order:
 
 The server validates that the selected template is enabled for the target company.
 
+If request options cannot be loaded or the request cannot be created for any reason, the composer remains open and shows a localized player-facing message that the request was not sent and the player should call the company instead. Internal error codes and diagnostics are not displayed to the player.
+
 Taxi examples:
 
 - Immediate Pickup
-- Scheduled Pickup
-- Group Ride
 
 Vehicle service examples:
 
@@ -602,6 +601,8 @@ Template fields define:
 - Allowed attachments when relevant
 - Server-side validation rule
 
+Phone fields are prefilled from the currently equipped LB Phone number when available, but remain editable. Their required or optional state is configurable like other supported fields and is enforced server-side.
+
 The UI renders fields generically based on the template definition.
 
 Examples:
@@ -650,11 +651,11 @@ The interaction includes:
 
 Calls and requests use the same generic incoming-offer component with different payload data.
 
-### 9.4 Active Request Phases
+### 9.4 Request Workflow Steps
 
 After acceptance, the employee status automatically changes to Busy.
 
-Each company has enabled active phases derived from its category defaults.
+Each company has enabled workflow steps derived from its category defaults. These are the ordered processing statuses an accepted request moves through before completion.
 
 Taxi example:
 
@@ -685,14 +686,9 @@ Delivered
 Completed
 ```
 
-The leader may:
-
-- Enable or disable existing phases
-- Keep the predefined order
-
 Server administrators may add new predefined phases for new or existing categories.
 
-The leader may not create arbitrary complex workflows in the first release.
+Company leaders cannot remove, reorder or otherwise customize workflow steps. Every request uses the complete predefined category workflow.
 
 Every phase belongs to a configured category or company template and is validated server-side.
 
@@ -725,15 +721,23 @@ The company portal only lists employees who are currently on duty.
 
 ### 10.1 Active Employee List
 
+The active team is presented as a dedicated company-portal workspace tab beside requests, inboxes and calls. It must not push the operational queues below an unbounded roster.
+
 Displayed information:
 
 - Employee name
+- Company role or position
 - Current status
 - Dispatch enabled or disabled
 - Active call indicator
 - Active request indicator
+- Direct LB Phone call and contact actions for other employees
 
 Employees who are off duty are not shown.
+
+Long portal lists are paginated with a compact mobile page size. The team tab supports searching by employee name or company role. Leaders are listed first, followed by the framework job grade in descending order. Status priority and employee name are used only to order employees with the same leadership and grade level.
+
+Portal tab counters use red only for actionable or unseen items: unanswered requests, unread messages and calls not yet viewed in the calls tab. Zero counts, previously viewed calls and the active-team count use a neutral gray or light background.
 
 ### 10.2 Employee View
 
@@ -756,10 +760,8 @@ Only leaders can access:
 - Company data
 - Phone number settings
 - Distribution modes
-- Eligible employee configuration
 - Request settings
 - Template selection
-- Active phase configuration
 - Complete call history
 - Complete request history
 
@@ -839,7 +841,7 @@ Stored data:
 - Template
 - Assigned employee
 - Status changes
-- Active phases
+- Workflow phase history
 - Acceptance time
 - Completion time
 - Cancellation reason
@@ -870,7 +872,7 @@ This includes:
 - Cache settings
 - Default categories
 - Default request templates
-- Default active phases
+- Fixed category request workflows
 - Default request field definitions
 - Whether category administration is config-only or database-backed
 
@@ -892,7 +894,6 @@ Leaders or authorized server administrators can:
 - Override request labels
 - Select supported request fields
 - Mark supported request fields as required or optional
-- Configure active phases
 
 Changes are saved server-side and distributed only to affected clients.
 
@@ -1325,6 +1326,16 @@ Conflict prevention:
 The app must not assume that it is the only resource using company jobs, phone numbers, notifications, locations or billing.
 
 Any integration that can trigger money transfer, inventory changes, dispatch alerts, waypoints or external side effects must be isolated behind a server-side adapter and must include permission checks, rate limits and failure handling.
+
+### 14.12 External Dispatch and MDT Contract
+
+Services+ owns the request lifecycle and one primary responsible employee. It does not model patrol units, multiple unit members, live officer or vehicle locations, dispatch maps, radio channels or MDT-specific state.
+
+Trusted external resources can correlate their own domain state through stable Services+ request IDs and server-resolved employee identifiers. The documented server API provides bounded request and on-duty employee reads plus validated request acceptance, decline, transition and return actions. Every write still requires a real player source and passes the normal Services+ employment, availability, assignment, workflow and rate-limit checks.
+
+A single stable local lifecycle event exposes sanitized integration request entities containing the status, workflow step, primary assignee snapshot, optional active player source, request coordinates and external reference. Existing specific lifecycle events remain available for compatibility. External resources must consume local events or documented exports and must never invoke Services+ network events directly.
+
+An external police dispatch can therefore display a Services+ request on its own live map and associate any number of patrol units or officers in its own storage. Services+ only retains the primary employee responsible for the phone request and does not duplicate the external unit model.
 
 ---
 

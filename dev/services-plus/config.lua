@@ -25,6 +25,7 @@ Config.RateLimits = {
     updateNumberOperations = { limit = 8, windowMs = 60000 },
     toggleDispatchLine = { limit = 20, windowMs = 60000 },
     externalCreateRequest = { limit = 6, windowMs = 60000 },
+    externalRequestAction = { limit = 30, windowMs = 30000 },
     externalTransitionRequest = { limit = 20, windowMs = 30000 },
     externalSendCompanyMessage = { limit = 20, windowMs = 60000 },
     startCompanyCall = { limit = 8, windowMs = 30000 },

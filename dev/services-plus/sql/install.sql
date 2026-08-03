@@ -108,6 +108,8 @@ CREATE TABLE IF NOT EXISTS `services_plus_requests` (
   `template_id` VARCHAR(64) NOT NULL,
   `request_label` VARCHAR(80) NOT NULL DEFAULT 'Request',
   `assigned_identifier` VARCHAR(96) NULL,
+  `assigned_name` VARCHAR(100) NULL,
+  `assigned_role` VARCHAR(100) NULL,
   `status` VARCHAR(32) NOT NULL,
   `phase_id` VARCHAR(64) NULL,
   `target_number_id` VARCHAR(64) NULL,
@@ -268,4 +270,5 @@ INSERT IGNORE INTO `services_plus_schema_migrations` (`version`, `name`) VALUES
   (6, 'phase2_competition_duty_dispatch_deletion');
 INSERT IGNORE INTO `services_plus_schema_migrations` (`version`, `name`) VALUES
   (7, 'phase2_number_staffing_notifications_navigation_api'),
-  (8, 'simplify_dispatch_line_selection');
+  (8, 'simplify_dispatch_line_selection'),
+  (9, 'request_assignee_integration_contract');
