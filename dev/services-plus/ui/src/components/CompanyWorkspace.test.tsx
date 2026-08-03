@@ -26,6 +26,7 @@ const workspace: WorkspaceData = {
   conversations: [],
   requests: [],
   calls: [],
+  pagination: { conversations: { hasMore: false }, requests: { hasMore: false }, calls: { hasMore: false } },
   numberStates: [],
   requestSettings: {
     label: "Requests",
@@ -53,6 +54,19 @@ const employees: Employee[] = Array.from({ length: 10 }, (_, index) => ({
 }));
 
 describe("CompanyWorkspace", () => {
+  it("requests the next server page with the request cursor", async () => {
+    const onLoadMore = vi.fn().mockResolvedValue(true);
+    const pagedWorkspace: WorkspaceData = {
+      ...workspace,
+      requests: Array.from({ length: 8 }, (_, index) => ({ id: 100 - index, companyId: "downtown-cab", companyName: "Downtown Cab Co.", status: "completed" as const })),
+      pagination: { ...workspace.pagination, requests: { nextCursor: 93, hasMore: true } }
+    };
+    await act(async () => root.render(<CompanyWorkspace data={pagedWorkspace} employees={employees} selfSource={1} locale="en" busy={false} isLeader={false} canDelete={false} onLoadMore={onLoadMore} onOpenConversation={vi.fn()} onAcceptRequest={vi.fn()} onTransition={vi.fn()} onReturn={vi.fn()} onSaveSettings={vi.fn()} onDeleteRequest={vi.fn()} onDeleteConversation={vi.fn()} onCallEmployee={vi.fn()} onContactEmployee={vi.fn()} />));
+
+    await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="Next page"]')?.click());
+    expect(onLoadMore).toHaveBeenCalledWith("requests", 93);
+  });
+
   it("keeps the team in its own tab and paginates long rosters", () => {
     act(() => root.render(<CompanyWorkspace data={workspace} employees={employees} selfSource={1} locale="en" busy={false} isLeader={false} canDelete={false} onOpenConversation={vi.fn()} onAcceptRequest={vi.fn()} onTransition={vi.fn()} onReturn={vi.fn()} onSaveSettings={vi.fn()} onDeleteRequest={vi.fn()} onDeleteConversation={vi.fn()} onCallEmployee={vi.fn()} onContactEmployee={vi.fn()} />));
 

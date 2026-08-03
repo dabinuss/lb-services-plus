@@ -2,18 +2,6 @@ local APP_IDENTIFIER = ServicesPlus.Constants.AppIdentifier
 local activeRequestOfferId
 local requestActionPending = false
 
-local function sendLifecycle(eventType)
-    if not ServicesPlusClient.State.registered then return end
-    local success, errorMessage = exports["lb-phone"]:SendCustomAppMessage(APP_IDENTIFIER, {
-        type = eventType,
-        timestamp = os.time(),
-        payload = {}
-    })
-    if not success and Config.Debug then
-        print(("[services-plus] Lifecycle message failed: %s"):format(errorMessage or "unknown error"))
-    end
-end
-
 function ServicesPlusClient.RegisterApp()
     local state = ServicesPlusClient.State
     if state.registered or state.registering then return end
@@ -29,11 +17,7 @@ function ServicesPlusClient.RegisterApp()
         ui = "web/index.html",
         icon = Config.AppIcon,
         fixBlur = true,
-        onOpen = function()
-            sendLifecycle("app.opened")
-        end,
         onClose = function()
-            sendLifecycle("app.closed")
             TriggerServerEvent("services-plus:server:appClosed")
         end
     })

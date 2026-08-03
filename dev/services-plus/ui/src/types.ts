@@ -230,7 +230,9 @@ export interface MessageReactionUpdate { messageId: number; conversationId: numb
 export interface ConversationData { conversation: { id: number; companyId: string; numberId: string; externalNumber: string }; messages: InboxMessage[]; }
 export interface CompanyCall { id: number; callerNumber?: string; numberId: string; status: string; assignedIdentifier?: string; created_at: string; }
 export interface NumberState { numberId: string; label: string; enabled: boolean; callsEnabled: boolean; inboxEnabled: boolean; requestsEnabled: boolean; canSelectForDispatch: boolean; selectedForDispatch: boolean; }
-export interface CompanyWorkspace { companyId?: string; conversations: InboxConversation[]; requests: CitizenRequest[]; calls: CompanyCall[]; requestSettings: RequestSettings; numberStates?: NumberState[]; }
+export type WorkspaceSection = "conversations" | "requests" | "calls";
+export interface WorkspacePageState { nextCursor?: number; hasMore: boolean; }
+export interface CompanyWorkspace { companyId?: string; conversations: InboxConversation[]; requests: CitizenRequest[]; calls: CompanyCall[]; requestSettings: RequestSettings; numberStates?: NumberState[]; pagination: Record<WorkspaceSection, WorkspacePageState>; }
 export interface WorkOffer {
   kind: "call" | "request";
   id: number;

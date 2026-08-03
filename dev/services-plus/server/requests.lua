@@ -391,7 +391,7 @@ function Requests.Delete(source, requestId)
     if not ServicesPlus.Repository.DeleteRequest(requestId, employee.companyId, employee.identifier) then return false, "request_unavailable" end
     if request.assigned_identifier then ServicesPlus.Employees.ReleaseWorkByIdentifier(request.assigned_identifier, "request", requestId) end
     ServicesPlus.Repository.AddRequestEvent(requestId, employee.identifier, "deleted", {})
-    request = ServicesPlus.Repository.GetRequestById(requestId)
+    request = ServicesPlus.Repository.GetRequestByIdIncludingDeleted(requestId)
     pushCompany(employee.companyId, "request.updated", request, false)
     notifyCreator(request, "requestDeleted")
     return true, { id = requestId }

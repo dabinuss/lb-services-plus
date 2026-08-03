@@ -98,10 +98,7 @@ RegisterNUICallback("sendCurrentLocation", function(data, callback)
     local coords = GetEntityCoords(PlayerPedId())
     local payload = { companyId = data.companyId, numberId = data.numberId, conversationId = tonumber(data.conversationId), body = "", attachments = {}, coords = { x = coords.x, y = coords.y } }
     local action = data.citizen == true and "sendCitizenMessage" or "sendEmployeeMessage"
-    ServicesPlusClient.RequestServer(action, payload, callback)
-end)
-
-RegisterNUICallback("appClosed", function(_, callback)
-    TriggerServerEvent("services-plus:server:appClosed")
-    callback(ServicesPlus.Ok({ closed = true }))
+    ServicesPlusClient.RequestServer(action, payload, function(response)
+        callback(response)
+    end)
 end)

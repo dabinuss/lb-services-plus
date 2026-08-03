@@ -2,7 +2,7 @@
 
 Services+ is a separate LB Phone custom app resource providing a company directory, native multi-number calls, shared inboxes with LB Phone media and reactions, structured requests, and a server-authoritative employee portal. The portal keeps requests, inboxes, calls and the searchable active team in separate paginated workspace tabs. Red tab counters are reserved for unanswered requests, unread messages and calls not yet viewed during the current app session; neutral counters show zero or informational team totals.
 
-Version `0.4.0-rc1` includes the complete Phase 4 API and integration reference. Production promotion still requires the live-server evidence in the release checklist.
+Version `0.5.0-rc1` adds API v9 cursor pagination and hardened integration limits. Production promotion still requires the live-server evidence in the release checklist.
 
 ## Documentation
 
@@ -14,6 +14,7 @@ Version `0.4.0-rc1` includes the complete Phase 4 API and integration reference.
 - [Troubleshooting](docs/guides/TROUBLESHOOTING.md): operational diagnosis
 - [Integrations](docs/reference/INTEGRATIONS.md): optional-resource boundaries
 - [API reference](docs/api/API.md): complete exports, events, callbacks, entities and examples
+- [Generated contract inventory](docs/api/CONTRACT_INVENTORY.md): action, payload, export, event and push metadata generated from the runtime contract source
 - [Release checklist](docs/development/RELEASE_CHECKLIST.md): automated and live release gates
 - [Changelog](docs/CHANGELOG.md): versioned changes
 

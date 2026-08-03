@@ -10,24 +10,23 @@ const [docs, exportsFile, events, callbacks, config, requests, constants, manife
   read("server/requests.lua"), read("shared/constants.lua"), read("fxmanifest.lua"), read("README.md"), read("docs/CHANGELOG.md")
 ]);
 
-assert.match(constants, /ApiVersion = 8/);
-assert.match(manifest, /version "0\.4\.0-rc1"/);
-assert.match(docs, /API version: `8`/);
-assert.match(changelog, /increment the API version from 7 to 8/);
+assert.match(constants, /ApiVersion = 9/);
+assert.match(manifest, /version "0\.5\.0-rc1"/);
+assert.match(docs, /API version: `9`/);
+assert.match(changelog, /API version from 8 to 9/);
 
 const exportsList = [...exportsFile.matchAll(/exports\("([A-Za-z]+)"/g)].map((match) => match[1]);
 assert.equal(exportsList.length, 11);
 for (const name of exportsList) assert.ok(docs.includes(`| \`${name}\` |`), `API reference is missing export ${name}`);
 
-const allowedBlock = events.match(/local allowedActions = \{([\s\S]*?)\n\}/)?.[1] ?? "";
-const actions = [...allowedBlock.matchAll(/\b([A-Za-z]+)\s*=\s*true/g)].map((match) => match[1]);
+const actions = Object.keys(JSON.parse(await read("shared/api_contracts.json")).actions);
 assert.equal(actions.length, 37);
 for (const action of actions) {
   assert.ok(docs.includes(`\`${action} `) || docs.includes(`\`${action} {`) || docs.includes(`\`${action}\``), `API reference is missing action ${action}`);
   assert.match(config, new RegExp(`\\b${action}\\s*=\\s*\\{\\s*limit\\s*=`), `Action ${action} has no configured rate limit`);
 }
 
-for (const helper of ["openEmployeeContact", "sendCurrentLocation", "appClosed"]) {
+for (const helper of ["openEmployeeContact", "sendCurrentLocation"]) {
   assert.ok(callbacks.includes(`RegisterNUICallback("${helper}"`));
   assert.ok(docs.includes(`\`${helper}`), `API reference is missing local helper ${helper}`);
 }

@@ -5,6 +5,7 @@ This directory contains all technical documentation for the Services+ resource. 
 ## API
 
 - [Complete API reference](api/API.md): API versioning, response envelopes, entities, trusted exports, local events, NUI actions, push messages, permissions, lifecycles, and integration examples.
+- [Generated contract inventory](api/CONTRACT_INVENTORY.md): machine-derived action fields, exports, rate keys, local events, and push types.
 
 ## Guides
 

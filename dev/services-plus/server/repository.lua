@@ -391,7 +391,7 @@ function Repository.GetCompanyConversations(companyId, identifier, cursor, limit
         FROM `services_plus_inbox_conversations` c
         JOIN `services_plus_company_numbers` n ON n.`id` = c.`number_id`
         LEFT JOIN `services_plus_inbox_reads` r ON r.`conversation_id` = c.`id` AND r.`identifier` = ?
-        WHERE c.`company_id` = ? AND c.`deleted_at` IS NULL AND c.`id` < ? ORDER BY c.`last_message_at` DESC, c.`id` DESC LIMIT ?
+        WHERE c.`company_id` = ? AND c.`deleted_at` IS NULL AND n.`enabled` = 1 AND n.`inbox_enabled` = 1 AND n.`shared_inbox` = 1 AND c.`id` < ? ORDER BY c.`id` DESC LIMIT ?
     ]=], { identifier, companyId, cursor, limit }) or {}
 end
 
@@ -401,7 +401,7 @@ function Repository.GetCitizenConversations(externalNumber, cursor, limit)
         FROM `services_plus_inbox_conversations` c
         JOIN `services_plus_companies` co ON co.`id` = c.`company_id`
         JOIN `services_plus_company_numbers` n ON n.`id` = c.`number_id`
-        WHERE c.`external_number` = ? AND c.`deleted_at` IS NULL AND c.`id` < ? ORDER BY c.`last_message_at` DESC, c.`id` DESC LIMIT ?
+        WHERE c.`external_number` = ? AND c.`deleted_at` IS NULL AND c.`id` < ? ORDER BY c.`id` DESC LIMIT ?
     ]=], { externalNumber, cursor, limit }) or {}
 end
 
@@ -509,16 +509,24 @@ end
 function Repository.GetRequestByExternal(sourceName, externalId)
     if not sourceName or not externalId then return nil end
     local id = MySQL.scalar.await("SELECT `id` FROM `services_plus_requests` WHERE `external_source` = ? AND `external_id` = ?", { sourceName, externalId })
-    return id and Repository.GetRequestById(id) or nil
+    return id and Repository.GetRequestByIdIncludingDeleted(id) or nil
+end
+
+local function getRequestById(requestId, includeDeleted)
+    local row = MySQL.single.await([=[
+        SELECT r.*, c.`display_name` AS `companyName` FROM `services_plus_requests` r
+        JOIN `services_plus_companies` c ON c.`id` = r.`company_id` WHERE r.`id` = ? AND (? = 1 OR r.`deleted_at` IS NULL)
+    ]=], { requestId, includeDeleted and 1 or 0 })
+    if row then row.payload = decode(row.payload, {}) end
+    return row
 end
 
 function Repository.GetRequestById(requestId)
-    local row = MySQL.single.await([=[
-        SELECT r.*, c.`display_name` AS `companyName` FROM `services_plus_requests` r
-        JOIN `services_plus_companies` c ON c.`id` = r.`company_id` WHERE r.`id` = ?
-    ]=], { requestId })
-    if row then row.payload = decode(row.payload, {}) end
-    return row
+    return getRequestById(requestId, false)
+end
+
+function Repository.GetRequestByIdIncludingDeleted(requestId)
+    return getRequestById(requestId, true)
 end
 
 function Repository.GetCompanyRequests(companyId, cursor, limit, activeOnly)
@@ -535,9 +543,36 @@ function Repository.GetCompanyRequests(companyId, cursor, limit, activeOnly)
     return rows
 end
 
-function Repository.GetVisibleRequests(companyId, identifier, categoryId, competition, cursor, limit)
-    if not competition then return Repository.GetCompanyRequests(companyId, cursor, limit, false) end
-    local rows = MySQL.query.await([=[
+function Repository.GetVisibleRequests(companyId, identifier, categoryId, competition, cursor, limit, allowedNumberIds)
+    local numberPlaceholders, numberParams = {}, {}
+    for _, numberId in ipairs(allowedNumberIds or {}) do
+        numberPlaceholders[#numberPlaceholders + 1] = "?"
+        numberParams[#numberParams + 1] = numberId
+    end
+    local lineClause = "r.`target_number_id` IS NULL"
+    if #numberPlaceholders > 0 then lineClause = lineClause .. " OR r.`target_number_id` IN (" .. table.concat(numberPlaceholders, ",") .. ")" end
+
+    if not competition then
+        local params = { companyId, cursor, identifier }
+        for _, value in ipairs(numberParams) do params[#params + 1] = value end
+        params[#params + 1] = limit
+        local rows = MySQL.query.await(([=[
+            SELECT r.`id`, r.`company_id` AS `companyId`, r.`template_id` AS `templateId`, r.`request_label` AS `requestLabel`, r.`status`, r.`phase_id` AS `phaseId`,
+              r.`target_number_id` AS `targetNumberId`, r.`creator_number` AS `creatorNumber`, r.`payload`, r.`assigned_identifier` AS `assignedIdentifier`,
+              r.`assigned_name` AS `assignedName`, r.`assigned_role` AS `assignedRole`, r.`location_x` AS `locationX`, r.`location_y` AS `locationY`,
+              r.`external_source` AS `externalSource`, r.`external_id` AS `externalId`, r.`created_at`, r.`updated_at`
+            FROM `services_plus_requests` r
+            WHERE r.`company_id` = ? AND r.`deleted_at` IS NULL AND r.`id` < ? AND (r.`assigned_identifier` = ? OR (%s))
+            ORDER BY r.`id` DESC LIMIT ?
+        ]=]):format(lineClause), params) or {}
+        for _, row in ipairs(rows) do row.payload = decode(row.payload, {}) end
+        return rows
+    end
+
+    local params = { cursor, categoryId, companyId, identifier, companyId, identifier }
+    for _, value in ipairs(numberParams) do params[#params + 1] = value end
+    params[#params + 1] = limit
+    local rows = MySQL.query.await(([=[
         SELECT r.`id`, r.`company_id` AS `companyId`, c.`display_name` AS `companyName`, r.`template_id` AS `templateId`,
           r.`request_label` AS `requestLabel`, r.`status`, r.`phase_id` AS `phaseId`, r.`target_number_id` AS `targetNumberId`, r.`creator_number` AS `creatorNumber`, r.`payload`,
           r.`assigned_identifier` AS `assignedIdentifier`, r.`assigned_name` AS `assignedName`, r.`assigned_role` AS `assignedRole`,
@@ -547,8 +582,9 @@ function Repository.GetVisibleRequests(companyId, identifier, categoryId, compet
         JOIN `services_plus_companies` c ON c.`id` = r.`company_id`
         WHERE r.`deleted_at` IS NULL AND r.`id` < ? AND c.`category_id` = ?
           AND (r.`company_id` = ? OR r.`assigned_identifier` = ? OR r.`status` IN ('pending','returned'))
+          AND (r.`company_id` <> ? OR r.`assigned_identifier` = ? OR (%s))
         ORDER BY r.`id` DESC LIMIT ?
-    ]=], { cursor, categoryId, companyId, identifier, limit }) or {}
+    ]=]):format(lineClause), params) or {}
     for _, row in ipairs(rows) do row.payload = decode(row.payload, {}) end
     return rows
 end

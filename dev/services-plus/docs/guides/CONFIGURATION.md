@@ -15,6 +15,7 @@ All runtime configuration lives in `config.lua`. Database-managed companies and 
 | `Config.MaxCompanies` | Administrative company limit |
 | `Config.MaxQueueBroadcastEntries` | Maximum active entries included in one queue position pass |
 | `Config.AdminAce` | ACE permission used by the administration UI |
+| `Config.AllowedMediaDomains` | Exact hosts or `*.example.com` wildcard subdomains accepted for HTTPS message attachments |
 
 `Config.Framework = "auto"` detects Qbox, then QBCore, then ESX, and otherwise uses standalone mode. Set an explicit value on production servers to make startup failures visible.
 
@@ -28,7 +29,7 @@ All runtime configuration lives in `config.lua`. Database-managed companies and 
 
 ## Limits and Integrations
 
-`Config.RateLimits` contains every write or expensive network action. Do not remove entries when adding callbacks. `Config.ApiAllowedResources` is an exact allow-list for trusted server exports; never add untrusted or client-controlled names.
+`Config.RateLimits` contains every write or expensive network action, including direct phone-change validation and per-resource export budgets. Do not remove entries when adding callbacks. `Config.ApiAllowedResources` is an exact allow-list for trusted server exports; never add untrusted or client-controlled names. Set `Config.AllowedMediaDomains` to the actual upload hosts configured for LB Phone; attachments from every other host are rejected server-side.
 
 Optional integrations are disabled by default. Enable an adapter only after implementing its documented boundary in `integrations/server.lua`. Missing optional resources must not disable core Services+ workflows. See [integration boundaries](../reference/INTEGRATIONS.md) and the [API reference](../api/API.md).
 

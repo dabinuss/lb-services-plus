@@ -260,11 +260,34 @@ function Api.getCompanyWorkspace(source, payload)
     ServicesPlus.Employees.ValidateEmployment(source)
     local employee = ServicesPlus.Employees.Get(source)
     if not employee then return ServicesPlus.Error("not_on_duty", "Company duty is required.", false) end
-    local limit, cursor = pagination(payload, 50)
-    local inboxOk, conversations = ServicesPlus.Inboxes.GetCompanyList(source, cursor, limit)
-    if not inboxOk then conversations = {} end
+    payload = type(payload) == "table" and payload or {}
+    local limit = math.max(1, math.min(math.floor(tonumber(payload.limit) or 24), 50))
+    local requested = { conversations = true, requests = true, calls = true }
+    if type(payload.sections) == "table" then
+        requested = {}
+        for _, section in ipairs(payload.sections) do
+            if section == "conversations" or section == "requests" or section == "calls" then requested[section] = true end
+        end
+    end
+    local cursors = type(payload.cursors) == "table" and payload.cursors or {}
+    local function cursorFor(section)
+        return math.max(1, math.floor(tonumber(cursors[section]) or 9007199254740991))
+    end
+    local function page(rows)
+        local hasMore = #rows > limit
+        if hasMore then table.remove(rows) end
+        return rows, { nextCursor = rows[#rows] and rows[#rows].id or nil, hasMore = hasMore }
+    end
+
+    local conversations, conversationPage = {}, { hasMore = false }
+    if requested.conversations then
+        local inboxOk, rows = ServicesPlus.Inboxes.GetCompanyList(source, cursorFor("conversations"), limit + 1)
+        conversations, conversationPage = page(inboxOk and rows or {})
+    end
     local company = ServicesPlus.Companies.Get(employee.companyId)
-    local queriedRequests = ServicesPlus.Repository.GetVisibleRequests(employee.companyId, employee.identifier, company.categoryId, company.requestsEnabled and ServicesPlus.Companies.GetCategoryRequestCompetition(company.categoryId), cursor, limit)
+    local queriedRequests = requested.requests and ServicesPlus.Repository.GetVisibleRequests(employee.companyId, employee.identifier, company.categoryId, company.requestsEnabled and ServicesPlus.Companies.GetCategoryRequestCompetition(company.categoryId), cursorFor("requests"), limit + 1, ServicesPlus.Employees.GetActiveNumberIds(employee)) or {}
+    local rawRequestPage
+    queriedRequests, rawRequestPage = page(queriedRequests)
     local visibleRequests = {}
     for _, request in ipairs(queriedRequests) do
         if ServicesPlus.Requests.CanHandle(employee, request) or request.assignedIdentifier == employee.identifier then visibleRequests[#visibleRequests + 1] = request end
@@ -275,6 +298,8 @@ function Api.getCompanyWorkspace(source, payload)
         public.phases = owner and ServicesPlus.Requests.ResolveSettings(owner, type(payload) == "table" and payload.locale == "de" and "de" or "en").phases or {}
         visibleRequests[index] = public
     end
+    local calls, callPage = {}, { hasMore = false }
+    if requested.calls then calls, callPage = page(ServicesPlus.Repository.GetCompanyCalls(employee.companyId, cursorFor("calls"), limit + 1)) end
     local numberStates = {}
     for _, number in ipairs(company.numbers) do
         numberStates[#numberStates + 1] = {
@@ -292,9 +317,10 @@ function Api.getCompanyWorkspace(source, payload)
         companyId = employee.companyId,
         conversations = conversations,
         requests = visibleRequests,
-        calls = ServicesPlus.Repository.GetCompanyCalls(employee.companyId, cursor, limit),
+        calls = calls,
         requestSettings = ServicesPlus.Requests.ResolveSettings(company, type(payload) == "table" and payload.locale == "de" and "de" or "en"),
-        numberStates = numberStates
+        numberStates = numberStates,
+        pagination = { conversations = conversationPage, requests = rawRequestPage, calls = callPage }
     })
 end
 

@@ -2,13 +2,26 @@ ServicesPlus.Inboxes = ServicesPlus.Inboxes or {}
 
 local Inboxes = ServicesPlus.Inboxes
 
+local function mediaHostAllowed(url)
+    local host = url:match("^https://([^/%?#:]+)")
+    if not host then return false end
+    host = host:lower()
+    for _, configured in ipairs(Config.AllowedMediaDomains or {}) do
+        local allowed = tostring(configured):lower()
+        if host == allowed then return true end
+        if allowed:sub(1, 2) == "*." then
+            local suffix = allowed:sub(2)
+            if #host > #suffix and host:sub(-#suffix) == suffix then return true end
+        end
+    end
+    return false
+end
+
 local function canUseNumber(employee, numberId)
     local company = employee and ServicesPlus.Companies.Get(employee.companyId)
     if not company then return false end
     for _, number in ipairs(company.numbers) do
-        if number.id == numberId then
-            return number.enabled and number.inboxEnabled and number.sharedInbox
-        end
+        if number.id == numberId then return number.enabled and number.inboxEnabled and number.sharedInbox end
     end
     return false
 end
@@ -18,7 +31,7 @@ local function cleanAttachments(input)
     if type(input) ~= "table" or #input > 4 then return nil end
     local result = {}
     for _, url in ipairs(input) do
-        if type(url) ~= "string" or #url > 500 or not url:match("^https?://") then return nil end
+        if type(url) ~= "string" or #url > 500 or not mediaHostAllowed(url) then return nil end
         result[#result + 1] = url
     end
     return result
@@ -194,9 +207,14 @@ AddEventHandler("lb-phone:messages:messageSent", function(message)
     if not company or not number or not company.messagesEnabled or not number.enabled or not number.inboxEnabled or not number.sharedInbox then return end
     local attachments = message.attachments
     if type(attachments) == "string" then local ok, decoded = pcall(json.decode, attachments); attachments = ok and decoded or {} end
+    attachments = cleanAttachments(attachments or {})
+    if not attachments then
+        ServicesPlus.Logger.Warn("Rejected LB Phone message with disallowed attachment URL", { numberId = number.id })
+        return
+    end
     local senderSource = exports["lb-phone"]:GetSourceFromNumber(message.sender)
     local player = senderSource and ServicesPlus.Bridge.GetPlayer(senderSource) or nil
-    store(company, number, message.sender, message.sender, player and player.identifier or nil, "citizen", message.message or "", attachments or {}, nil, { channelId = message.channelId, messageId = message.messageId })
+    store(company, number, message.sender, message.sender, player and player.identifier or nil, "citizen", message.message or "", attachments, nil, { channelId = message.channelId, messageId = message.messageId })
 end)
 
 AddEventHandler("lb-phone:newCompanyMessage", function(message)

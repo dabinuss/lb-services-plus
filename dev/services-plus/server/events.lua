@@ -1,42 +1,4 @@
-local allowedActions = {
-    getInitialState = true,
-    enterDuty = true,
-    leaveDuty = true,
-    updateStatus = true,
-    toggleDispatch = true,
-    updateCompanyOperations = true,
-    updateNumberOperations = true,
-    toggleDispatchLine = true,
-    startCompanyCall = true,
-    getEmployeeContact = true,
-    registerIncomingCall = true,
-    acceptCall = true,
-    declineCall = true,
-    endCustomCall = true,
-    getRequestOptions = true,
-    getCompanyWorkspace = true,
-    acceptRequest = true,
-    declineRequest = true,
-    transitionRequest = true,
-    returnRequest = true,
-    cancelRequest = true,
-    updateRequestSettings = true,
-    sendCitizenMessage = true,
-    sendEmployeeMessage = true,
-    getCitizenInbox = true,
-    getConversationMessages = true,
-    reactToMessage = true,
-    createRequest = true,
-    getMyActivity = true,
-    getAdminState = true,
-    adminSaveCompany = true,
-    adminDeleteCompany = true,
-    adminUpdateSettings = true,
-    adminUpdateCategory = true,
-    deleteRequest = true,
-    deleteConversation = true,
-    deleteMessage = true
-}
+local allowedActions = ServicesPlus.Contracts.actions
 
 RegisterNetEvent("services-plus:server:request", function(requestId, action, payload)
     local requestSource = source
@@ -69,5 +31,10 @@ RegisterNetEvent("services-plus:server:appClosed", function()
 end)
 
 RegisterNetEvent("services-plus:server:phoneChanged", function()
-    ServicesPlus.Employees.ValidatePhone(source)
+    local requestSource = source
+    if not ServicesPlus.RateLimiter.Allow(requestSource, "phoneChanged") then
+        ServicesPlus.Logger.Warn("Rate-limited phone change validation", { source = requestSource })
+        return
+    end
+    ServicesPlus.Employees.ValidatePhone(requestSource)
 end)

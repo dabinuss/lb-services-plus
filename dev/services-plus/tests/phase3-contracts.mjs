@@ -13,8 +13,7 @@ const [manifest, callbacks, events, config, api, exportsFile, apiDocs, repositor
 
 const callbackBlock = callbacks.match(/local callbacks = \{([\s\S]*?)\n\}/)?.[1] ?? "";
 const callbackActions = [...callbackBlock.matchAll(/"([A-Za-z]+)"/g)].map((match) => match[1]);
-const allowedBlock = events.match(/local allowedActions = \{([\s\S]*?)\n\}/)?.[1] ?? "";
-const allowedActions = [...allowedBlock.matchAll(/\b([A-Za-z]+)\s*=\s*true/g)].map((match) => match[1]);
+const allowedActions = Object.keys(JSON.parse(await read("shared/api_contracts.json")).actions);
 
 assert.ok(callbackActions.length > 20, "Expected the complete NUI callback inventory");
 for (const action of allowedActions) {
@@ -25,7 +24,7 @@ for (const action of callbackActions) assert.ok(allowedActions.includes(action),
 
 assert.match(callbacks, /local answered = false[\s\S]*if answered then return[\s\S]*callback\(response\)/, "Generic callbacks must answer once");
 assert.match(app, /const run = async[\s\S]*try \{[\s\S]*catch \{[\s\S]*finally \{[\s\S]*setBusy\(false\)/, "UI actions must recover from rejected NUI calls");
-for (const special of ["acceptCall", "openEmployeeContact", "sendCurrentLocation", "appClosed"]) {
+for (const special of ["acceptCall", "openEmployeeContact", "sendCurrentLocation"]) {
   assert.match(callbacks, new RegExp(`RegisterNUICallback\\("${special}"[\\s\\S]*?callback\\(`), `Special callback may not answer: ${special}`);
 }
 assert.match(events, /pcall\(ServicesPlus\.Api\[action\]/);
@@ -37,9 +36,9 @@ for (const eventName of ["requestLifecycle", "requestCreated", "requestUpdated",
   assert.ok(apiDocs.includes(`services-plus:server:${eventName}`) || apiDocs.includes(`\`${eventName}\``), `Undocumented local event: ${eventName}`);
 }
 
-assert.match(manifest, /version "0\.4\.0-rc1"/);
+assert.match(manifest, /version "0\.5\.0-rc1"/);
 assert.doesNotMatch(manifest, /server\/prototypes\.lua/, "Development prototypes are loaded in production");
-assert.match(constants, /ApiVersion = 8/);
+assert.match(constants, /ApiVersion = 9/);
 assert.match(repository, /GetNumberQueue\(numberId, limit\)[\s\S]*LIMIT \?/);
 assert.match(calls, /GetNumberQueue\(numberId, Config\.MaxQueueBroadcastEntries\)/);
 assert.match(repository, /EndOpenCalls[\s\S]*UPDATE `services_plus_call_history` h[\s\S]*JOIN `services_plus_call_queue` q/);

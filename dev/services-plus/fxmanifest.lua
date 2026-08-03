@@ -3,7 +3,7 @@ game "gta5"
 
 author "Services+"
 description "Company communication and request workflows for LB Phone"
-version "0.4.0-rc1"
+version "0.5.0-rc1"
 
 lua54 "yes"
 
@@ -12,7 +12,8 @@ ui_page "web/index.html"
 files {
     "web/index.html",
     "web/assets/*",
-    "web/icon.svg"
+    "web/icon.svg",
+    "shared/api_contracts.json"
 }
 
 shared_scripts {
@@ -36,6 +37,7 @@ server_scripts {
     "server/logger.lua",
     "integrations/server.lua",
     "server/rate_limiter.lua",
+    "server/contracts.lua",
     "server/migrations.lua",
     "server/repository.lua",
     "server/companies.lua",

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.0-rc1
+
+- Add independent server cursors and `hasMore` state for company requests, calls, and conversations; the portal incrementally loads only the active list while retaining eight-item UI pages.
+- Rate-limit direct phone-change validation and trusted exports per invoking resource.
+- Restrict message attachments to configured HTTPS upload domains.
+- Make `GetRequest` exclude soft-deleted requests while preserving internal deletion lifecycle events.
+- Remove duplicate app-close signaling and delete the obsolete prototype module from the release resource.
+- Add central API contract metadata, generated contract inventory, and drift tests; increment API version from 8 to 9.
+
 ## 0.4.0-rc1
 
 - Complete Phase 4 with one authoritative API reference covering all trusted exports, local events, app actions, push messages, entities, permissions, lifecycle behavior, errors, rate limits, and integration boundaries.

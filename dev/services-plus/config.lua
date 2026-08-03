@@ -17,6 +17,15 @@ Config.ApiAllowedResources = {
     -- "your-mdt-resource"
 }
 
+-- Exact hosts and wildcard subdomains accepted for message attachments.
+-- Replace these defaults with the hosts used by your configured LB Phone upload provider.
+Config.AllowedMediaDomains = {
+    "cdn.discordapp.com",
+    "media.discordapp.net",
+    "i.imgur.com",
+    "*.fivemanage.com"
+}
+
 Config.RateLimits = {
     getInitialState = { limit = 12, windowMs = 60000 },
     enterDuty = { limit = 5, windowMs = 30000 },
@@ -30,6 +39,10 @@ Config.RateLimits = {
     externalRequestAction = { limit = 30, windowMs = 30000 },
     externalTransitionRequest = { limit = 20, windowMs = 30000 },
     externalSendCompanyMessage = { limit = 20, windowMs = 60000 },
+    externalRead = { limit = 120, windowMs = 60000 },
+    externalList = { limit = 30, windowMs = 60000 },
+    externalWrite = { limit = 60, windowMs = 60000 },
+    phoneChanged = { limit = 6, windowMs = 10000 },
     startCompanyCall = { limit = 8, windowMs = 30000 },
     getEmployeeContact = { limit = 10, windowMs = 30000 },
     registerIncomingCall = { limit = 20, windowMs = 30000 },

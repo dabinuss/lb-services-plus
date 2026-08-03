@@ -17,6 +17,7 @@ for (const module of ["server/calls.lua", "server/inboxes.lua", "server/requests
   assert.ok(manifest.includes(`"${module}"`), `Manifest does not load ${module}`);
 }
 
+const contractMetadata = JSON.parse(await read("shared/api_contracts.json"));
 const actions = [
   "registerIncomingCall", "acceptCall", "declineCall", "endCustomCall", "getRequestOptions", "getCompanyWorkspace",
   "acceptRequest", "declineRequest", "transitionRequest", "returnRequest", "cancelRequest", "updateRequestSettings",
@@ -25,7 +26,7 @@ const actions = [
   , "updateNumberOperations", "toggleDispatchLine"
 ];
 for (const action of actions) {
-  assert.ok(events.includes(`${action} = true`), `Server action is not allow-listed: ${action}`);
+  assert.ok(contractMetadata.actions[action], `Server action is not allow-listed: ${action}`);
   assert.ok(config.includes(`${action} = { limit =`), `Server action has no rate limit: ${action}`);
   assert.ok(callbacks.includes(`"${action}"`), `Client callback is missing: ${action}`);
 }

@@ -1,7 +1,7 @@
 # Services+ API Reference
 
-Resource version: `0.4.0-rc1`  
-API version: `8`  
+Resource version: `0.5.0-rc1`
+API version: `9`
 Status: release-candidate contract
 
 This is the authoritative reference for every supported Services+ integration surface. Internal Lua functions, database tables, and network events not explicitly listed here are implementation details and must not be invoked by another resource.
@@ -9,10 +9,10 @@ This is the authoritative reference for every supported Services+ integration su
 ## Compatibility and Versioning
 
 - Every response and payload is JSON-compatible.
-- API version 8 standardizes all local request lifecycle events on `RequestIntegration` instead of raw database rows.
+- API version 9 adds independent workspace cursors, enforces non-deleted `GetRequest` reads, and applies per-resource limits to trusted exports.
 - Additive fields may appear within the same API major version. Consumers must ignore unknown fields.
 - Removing or renaming a documented field, event, export, or semantic behavior requires an API version increment and changelog entry.
-- Deprecated contracts remain documented for at least one release cycle when technically possible. There are no deprecated contracts in API version 8.
+- Deprecated contracts remain documented for at least one release cycle when technically possible. There are no deprecated contracts in API version 9.
 - Resource exports are the only supported entry point for other server resources. Never trigger `services-plus:server:request` externally.
 
 ## Trust Model
@@ -56,7 +56,7 @@ Do not branch on human-readable `message`; use `error.code` and `retryable`.
 
 ## Entity Reference
 
-All entities below are API version 8. Optional means the field can be absent, not `null`.
+All entities below are API version 9. Optional means the field can be absent, not `null`.
 
 ### Company
 
@@ -95,25 +95,25 @@ All entities below are API version 8. Optional means the field can be absent, no
 
 ### Settings and Pagination
 
-`AppSettings` contains `directoryTitle`, `callsEnabled`, and `requestsEnabled`. Cursor lists accept integer `cursor >= 1` and `limit` clamped to `1..50`. Results are ordered by descending stable ID unless the contract states otherwise. Current list responses return arrays and do not expose a separate `hasMore`; continue with the last item ID until fewer than `limit` items are returned.
+`AppSettings` contains `directoryTitle`, `callsEnabled`, and `requestsEnabled`. Cursor lists accept integer cursors `>= 1` and limits clamped to `1..50`. Results are ordered by descending stable ID unless the contract states otherwise. `CompanyWorkspace` exposes separate `nextCursor` and `hasMore` values for conversations, requests, and calls. Trusted list exports continue with the last item ID until fewer than `limit` items are returned.
 
 ## Trusted Server Exports
 
-All exports were introduced by API version 7 and return API version 8 entities where applicable. Read exports are bounded or cache-backed. Write exports are rate-limited and server-authoritative.
+All exports were introduced by API version 7 and return API version 9 entities where applicable. Every trusted caller is additionally limited per invoking resource: cache and single-record reads use `externalRead`, database lists use `externalList`, and writes use `externalWrite`. Existing per-player write limits remain in force.
 
 | Export | Input | Success data | Access and validation | Rate limit | Side effects and concurrency | Errors |
 | --- | --- | --- | --- | --- | --- | --- |
-| `GetCompany` | `companyId: string` | Company | Allow-listed resource; existing company ID. | None; cache read | None. Restart-safe cache read. | `company_not_found`, common export errors |
-| `GetCompanyNumbers` | `companyId: string` | CompanyNumber[] | Same as `GetCompany`. | None; cache read | None. | `company_not_found`, common export errors |
-| `GetCompanyEmployees` | `companyId: string` | EmployeeIntegration[] | Existing company; only current duty employees returned. | None; runtime read | None; empty after server restart until duty restoration finishes. | `company_not_found`, common export errors |
-| `GetRequest` | `requestId: number` | RequestIntegration | Numeric existing, non-deleted request. | None; one DB read | None. | `request_not_found`, common export errors |
-| `GetCompanyRequests` | `companyId, { cursor?: number, limit?: number, activeOnly?: boolean }` | RequestIntegration[] | Existing company; cursor clamped; limit `1..50`. | None; bounded DB read | None. Use the last request ID as next cursor. | `company_not_found`, common export errors |
+| `GetCompany` | `companyId: string` | Company | Allow-listed resource; existing company ID. | 120/min per invoking resource | None. Restart-safe cache read. | `company_not_found`, common export errors |
+| `GetCompanyNumbers` | `companyId: string` | CompanyNumber[] | Same as `GetCompany`. | 120/min per invoking resource | None. | `company_not_found`, common export errors |
+| `GetCompanyEmployees` | `companyId: string` | EmployeeIntegration[] | Existing company; only current duty employees returned. | 120/min per invoking resource | None; empty after server restart until duty restoration finishes. | `company_not_found`, common export errors |
+| `GetRequest` | `requestId: number` | RequestIntegration | Numeric existing, non-deleted request. | 120/min per invoking resource | None. Soft-deleted requests return `request_not_found`. | `request_not_found`, common export errors |
+| `GetCompanyRequests` | `companyId, { cursor?: number, limit?: number, activeOnly?: boolean }` | RequestIntegration[] | Existing company; cursor clamped; limit `1..50`. | 30/min per invoking resource | None. Use the last request ID as next cursor. | `company_not_found`, common export errors |
 | `CreateRequest` | `source, { companyId, templateId, values, externalId, locale? }` | RequestIntegration | Allow-listed caller; online source with phone and identity; enabled company/template/fields; `externalId` length `1..96`; locale `en` or `de`. | 6/min per source | Persists request/event and emits creation events. `(invokingResource, externalId)` is unique and retries return the existing request. | `validation_failed`, `requests_disabled`, `template_disabled`, `location_unavailable`, `request_failed`, common errors |
 | `AcceptRequest` | `source, requestId` | RequestIntegration | Source is available, on duty, eligible for the request/category/number. | Shared external action: 30/30 sec | Atomic assignment; sets employee Busy; emits accepted lifecycle and pushes. Only one employee can win. | `employee_unavailable`, `already_accepted`, common errors |
 | `DeclineRequest` | `source, requestId` | RequestIntegration | Source is eligible and request is pending/returned. | Shared external action: 30/30 sec | Audits personal decline; does not close the request. | `request_unavailable`, common errors |
 | `ReturnRequest` | `source, requestId` | RequestIntegration | Source owns the active assignment. | Shared external action: 30/30 sec | Clears assignee, restores employee state, reoffers request, emits returned lifecycle. | `return_failed`, common errors |
 | `TransitionRequest` | `source, requestId, phaseId: string` | RequestIntegration | Source owns active assignment; phase is exactly the next configured fixed phase. | 20/30 sec | Atomic next-phase update; final phase completes and releases employee. | `forbidden`, `invalid_transition`, `transition_failed`, common errors |
-| `SendCompanyMessage` | `source, messagePayload` | Message event entity | Source is on duty and authorized for the conversation's enabled shared inbox; body <= 2000; <= 4 valid HTTP(S) attachments; valid coords. | 20/min | Sends through LB Phone, persists projection, emits message event/push; duplicate LB message IDs are idempotent. | `validation_failed`, `forbidden`, `message_failed`, common errors |
+| `SendCompanyMessage` | `source, messagePayload` | Message event entity | Source is on duty and authorized for the conversation's enabled shared inbox; body <= 2000; <= 4 HTTPS attachments on `Config.AllowedMediaDomains`; valid coords. | 20/min per player plus 60/min per invoking resource | Sends through LB Phone, persists projection, emits message event/push; duplicate LB message IDs are idempotent. | `validation_failed`, `forbidden`, `message_failed`, common errors |
 
 ### Export Examples
 
@@ -196,7 +196,7 @@ exports["services-plus"]:ReturnRequest(officerSource, requestId)
 
 ## Local Server Events
 
-These are same-context FiveM server events emitted with `TriggerEvent`; they are not network events. Any resource can technically register a listener, but they are supported only for trusted server integrations. API version 8 request events always use `RequestIntegration`.
+These are same-context FiveM server events emitted with `TriggerEvent`; they are not network events. Any resource can technically register a listener, but they are supported only for trusted server integrations. API version 9 request events always use `RequestIntegration`.
 
 | Event | Payload | Emitted after | Notes |
 | --- | --- | --- | --- |
@@ -284,7 +284,7 @@ Version for all action contracts: API 8. Errors marked below are contract-specif
 | `updateCompanyOperations { companyId, patch }` | Company | Leader of same company; boolean request/message flags and distribution enum. | 8/min | Persists operations and pushes company delta. `forbidden`, `validation_failed`. |
 | `updateNumberOperations { numbers }` | Company | Same-company leader; <= 10 existing number IDs and complete boolean/distribution patch. | 8/min | Persists channel flags, resyncs numbers and offers. `number_not_found`, `number_update_failed`. |
 | `toggleDispatchLine { numberId, enabled }` | EmployeePublic | Active dispatcher; existing enabled number. | 20/min | Changes current duty-session line selection. `dispatch_required`, `number_not_found`. |
-| `getCompanyWorkspace { cursor?, limit?, locale? }` | CompanyWorkspace | On-duty employee; locale `de` or fallback `en`; pagination `1..50`. | 15/min | Bounded inbox/request/call reads; request visibility rechecked. `not_on_duty`. |
+| `getCompanyWorkspace { sections?, cursors?, limit?, locale? }` | CompanyWorkspace | On-duty employee; `sections` contains any of `conversations`, `requests`, `calls`; each matching cursor is independent; pagination `1..50`. | 15/min | Returns requested arrays plus `pagination.{section}.{nextCursor,hasMore}`. Omitted sections are empty. Request and line visibility are enforced in SQL and server logic. `not_on_duty`. |
 
 ### Calls and Contacts
 
@@ -315,7 +315,7 @@ Version for all action contracts: API 8. Errors marked below are contract-specif
 
 | Action and input | Success data | Permission and validation | Limit | Effects / errors |
 | --- | --- | --- | --- | --- |
-| `sendCitizenMessage { companyId, numberId?, body, attachments?, coords? }` | Message event | Equipped phone; enabled public shared inbox; body <= 2000, <= 4 HTTP(S) attachments, coords within world bounds. | 12/min | Sends via LB Phone, persists and pushes. `inbox_disabled`, `message_failed`. |
+| `sendCitizenMessage { companyId, numberId?, body, attachments?, coords? }` | Message event | Equipped phone; enabled public shared inbox; body <= 2000, <= 4 HTTPS attachments on `Config.AllowedMediaDomains`, coords within world bounds. | 12/min | Sends via LB Phone, persists and pushes. `inbox_disabled`, `message_failed`. |
 | `sendEmployeeMessage { conversationId, body, attachments?, coords? }` | Message event | On duty and authorized for enabled shared inbox; same content limits. | 20/min | Replies as company number and persists. `forbidden`, `message_failed`. |
 | `getCitizenInbox { cursor?, limit? }` | Conversation[] | Equipped phone number owns conversations. | 15/min | Bounded read. `phone_required`. |
 | `getConversationMessages { conversationId, citizen, cursor?, limit? }` | `{ conversation, messages }` | Citizen number owns conversation or employee has same-company number access. | 20/min | Bounded read; employee read cursor updated. `forbidden`. |
@@ -336,7 +336,6 @@ Version for all action contracts: API 8. Errors marked below are contract-specif
 | `acceptCall` | Completes native LB Phone handoff after server acceptance. | Uses `acceptCall`; on native failure calls `endCustomCall` and answers with `native_call_unavailable`. |
 | `openEmployeeContact { targetSource }` | Opens LB Phone contact modal. | Uses `getEmployeeContact`; client invokes `SetContactModal`. |
 | `sendCurrentLocation { citizen, ...target }` | Reads player coordinates client-side for a message. | Converts to validated `sendCitizenMessage` or `sendEmployeeMessage`. |
-| `appClosed {}` | Releases initial-state subscriber state. | Emits internal `services-plus:server:appClosed`; always returns `{ closed: true }`. Duty remains active. |
 
 ## Custom App Push Messages
 
