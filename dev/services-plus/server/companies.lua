@@ -185,9 +185,9 @@ function Companies.SaveAdmin(company)
     return true, Companies.ToPublic(cache[company.id])
 end
 
-function Companies.DeleteAdmin(companyId)
+function Companies.DeleteAdmin(companyId, actorIdentifier)
     if not cache[companyId] then return false, "company_not_found" end
-    local affected = ServicesPlus.Repository.DeleteCompany(companyId)
+    local affected = ServicesPlus.Repository.DeleteCompany(companyId, actorIdentifier)
     if affected ~= 1 then return false, "company_delete_failed" end
     cache[companyId] = nil
     version = version + 1

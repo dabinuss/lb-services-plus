@@ -27,9 +27,12 @@ CREATE TABLE IF NOT EXISTS `services_plus_companies` (
   `messages_enabled` TINYINT(1) NOT NULL DEFAULT 1,
   `dispatch_mode` ENUM('ring_all','random','dispatch_only') NOT NULL DEFAULT 'ring_all',
   `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `deleted_at` TIMESTAMP NULL,
+  `deleted_by` VARCHAR(96) NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_services_plus_companies_job` (`job`),
-  KEY `idx_services_plus_companies_category` (`category_id`)
+  KEY `idx_services_plus_companies_category` (`category_id`),
+  KEY `idx_services_plus_companies_deleted` (`deleted_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `services_plus_company_numbers` (
@@ -44,9 +47,11 @@ CREATE TABLE IF NOT EXISTS `services_plus_company_numbers` (
   `inbox_enabled` TINYINT(1) NOT NULL DEFAULT 1,
   `requests_enabled` TINYINT(1) NOT NULL DEFAULT 1,
   `public_visible` TINYINT(1) NOT NULL DEFAULT 1,
+  `deleted_at` TIMESTAMP NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_services_plus_number` (`number`),
   KEY `idx_services_plus_numbers_company` (`company_id`),
+  KEY `idx_services_plus_numbers_deleted` (`company_id`, `deleted_at`),
   CONSTRAINT `fk_services_plus_numbers_company` FOREIGN KEY (`company_id`) REFERENCES `services_plus_companies` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -273,4 +278,5 @@ INSERT IGNORE INTO `services_plus_schema_migrations` (`version`, `name`) VALUES
   (7, 'phase2_number_staffing_notifications_navigation_api'),
   (8, 'simplify_dispatch_line_selection'),
   (9, 'request_assignee_integration_contract'),
-  (10, 'inbox_cursor_index');
+  (10, 'inbox_cursor_index'),
+  (11, 'soft_delete_companies_and_numbers');

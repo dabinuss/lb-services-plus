@@ -276,32 +276,36 @@ function Requests.CanHandle(employee, request)
         and ServicesPlus.Companies.GetCategoryRequestCompetition(requestCompany.categoryId)
 end
 
-function Requests.Create(source, companyId, templateId, values, locale, external)
+function Requests.Create(source, companyId, templateId, values, locale, external, clientRequestId)
     local player = ServicesPlus.Bridge.GetPlayer(source)
-    local company = ServicesPlus.Companies.Get(companyId)
-    if not player or not company or not company.requestsEnabled then return false, "requests_disabled" end
-    local resolved = Requests.ResolveSettings(company, locale)
-    local enabled = false
-    for _, id in ipairs(resolved.templateIds) do if id == templateId then enabled = true break end end
-    local template
-    for _, candidate in ipairs(resolved.templates) do if candidate.id == templateId then template = candidate break end end
-    if not enabled or not template then return false, "template_disabled" end
-    local clean = validateValues(template, values)
-    if not clean then return false, "validation_failed" end
-    local phoneNumber = exports["lb-phone"]:GetEquippedPhoneNumber(source)
-    local locationX, locationY
-    if company.categoryId == "taxi_transport" or resolved.navigationOnAccept ~= "disabled" then locationX, locationY = requestPosition(source) end
-    if company.categoryId == "taxi_transport" and (not locationX or not locationY) then return false, "location_unavailable" end
-    local requestId = ServicesPlus.Repository.CreateStructuredRequest({ identifier = player.identifier, phoneNumber = phoneNumber, companyId = companyId,
-        templateId = templateId, requestLabel = resolved.label, values = clean, targetNumberId = resolved.numberId, locationX = locationX, locationY = locationY,
-        externalSource = external and external.source or nil, externalId = external and external.id or nil })
-    if not requestId then return false, "request_failed" end
-    ServicesPlus.Repository.AddRequestEvent(requestId, player.identifier, "created", {})
-    local request = ServicesPlus.Repository.GetRequestById(requestId)
-    pushCompany(companyId, "request.offer", request, true)
-    TriggerEvent("services-plus:server:requestCreated", Requests.ToIntegration(request))
-    emitLifecycle("created", request)
-    return true, Requests.ToPublic(request)
+    if not player then return false, "requests_disabled" end
+    local scopeKey = clientRequestId and ("createRequest:" .. player.identifier .. ":" .. clientRequestId) or nil
+    return ServicesPlus.Idempotency.Resolve(scopeKey, function()
+        local company = ServicesPlus.Companies.Get(companyId)
+        if not company or not company.requestsEnabled then return false, "requests_disabled" end
+        local resolved = Requests.ResolveSettings(company, locale)
+        local enabled = false
+        for _, id in ipairs(resolved.templateIds) do if id == templateId then enabled = true break end end
+        local template
+        for _, candidate in ipairs(resolved.templates) do if candidate.id == templateId then template = candidate break end end
+        if not enabled or not template then return false, "template_disabled" end
+        local clean = validateValues(template, values)
+        if not clean then return false, "validation_failed" end
+        local phoneNumber = exports["lb-phone"]:GetEquippedPhoneNumber(source)
+        local locationX, locationY
+        if company.categoryId == "taxi_transport" or resolved.navigationOnAccept ~= "disabled" then locationX, locationY = requestPosition(source) end
+        if company.categoryId == "taxi_transport" and (not locationX or not locationY) then return false, "location_unavailable" end
+        local requestId = ServicesPlus.Repository.CreateStructuredRequest({ identifier = player.identifier, phoneNumber = phoneNumber, companyId = companyId,
+            templateId = templateId, requestLabel = resolved.label, values = clean, targetNumberId = resolved.numberId, locationX = locationX, locationY = locationY,
+            externalSource = external and external.source or nil, externalId = external and external.id or nil })
+        if not requestId then return false, "request_failed" end
+        ServicesPlus.Repository.AddRequestEvent(requestId, player.identifier, "created", {})
+        local request = ServicesPlus.Repository.GetRequestById(requestId)
+        pushCompany(companyId, "request.offer", request, true)
+        TriggerEvent("services-plus:server:requestCreated", Requests.ToIntegration(request))
+        emitLifecycle("created", request)
+        return true, Requests.ToPublic(request)
+    end)
 end
 
 function Requests.Accept(source, requestId)

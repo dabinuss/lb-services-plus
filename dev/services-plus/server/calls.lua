@@ -77,6 +77,16 @@ function Calls.RegisterIncoming(source, payload)
     return true, { id = entry.id, state = state, offered = offered, callToken = token, position = position }
 end
 
+local function revertAcceptance(row, excludeIdentifier)
+    local offered = json.decode(row.offered_identifiers or "[]") or {}
+    local remaining = {}
+    for _, identifier in ipairs(offered) do if identifier ~= excludeIdentifier then remaining[#remaining + 1] = identifier end end
+    local nextStatus = #remaining > 0 and "offered" or "queued"
+    ServicesPlus.Repository.RevertCallAcceptance(row.id, nextStatus, remaining)
+    Calls.BroadcastQueue(row.number_id)
+    Calls.ReofferCompany(row.company_id)
+end
+
 function Calls.Accept(source, queueId)
     local employee = ServicesPlus.Employees.Get(source)
     if not employee or employee.status ~= "available" then return false, "employee_unavailable" end
@@ -89,7 +99,10 @@ function Calls.Accept(source, queueId)
     local offered = json.decode(row.offered_identifiers or "[]") or {}
     local allowed = false; for _, identifier in ipairs(offered) do if identifier == employee.identifier then allowed = true break end end
     if not allowed or not ServicesPlus.Repository.AcceptCallQueue(queueId, employee.identifier) then return false, "already_accepted" end
-    if not ServicesPlus.Employees.AssignWork(source, "call", queueId) then ServicesPlus.Repository.EndCallQueue(queueId, "assignment_failed"); return false, "employee_unavailable" end
+    if not ServicesPlus.Employees.AssignWork(source, "call", queueId) then
+        revertAcceptance(row, employee.identifier)
+        return false, "employee_unavailable"
+    end
     for target in pairs((runtimeOffers[row.call_token] and runtimeOffers[row.call_token].sources) or {}) do
         push(target, target == source and "call.accepted.local" or "call.offer.removed", { id = queueId, callToken = row.call_token })
     end
@@ -122,10 +135,24 @@ function Calls.EndToken(token, result)
     Calls.BroadcastQueue(row.number_id)
 end
 
-function Calls.EndFromClient(source, token)
-    local offer = runtimeOffers[tostring(token)]
+function Calls.EndFromClient(source, token, reoffer)
+    local key = tostring(token)
+    local offer = runtimeOffers[key]
     if not offer or not offer.sources[source] then return false end
-    Calls.EndToken(token, "ended")
+    local row = ServicesPlus.Repository.GetCallQueueByToken(key)
+    if not row then return false end
+    local employee = ServicesPlus.Employees.Get(source)
+    local isCaller = offer.callerSource == source
+    local isAssigned = row.assigned_identifier and employee and employee.identifier == row.assigned_identifier
+    if not isCaller and not isAssigned then return false end
+    -- A failed native LB Phone handoff releases the assigned employee and re-offers
+    -- the call instead of ending it globally, so other employees still get a chance.
+    if reoffer and isAssigned and not isCaller and row.status == "accepted" then
+        ServicesPlus.Employees.ReleaseWorkByIdentifier(employee.identifier, "call", row.id)
+        revertAcceptance(row, employee.identifier)
+        return true
+    end
+    Calls.EndToken(key, "ended")
     return true
 end
 

@@ -71,7 +71,7 @@ RegisterNUICallback("acceptCall", function(data, callback)
     ServicesPlusClient.RequestServer("acceptCall", type(data) == "table" and data or {}, function(response)
         if not response.success then callback(response) return end
         if not ServicesPlusClient.Integrations.AcceptIncomingCall(response.data.callToken) then
-            ServicesPlusClient.RequestServer("endCustomCall", { callToken = response.data.callToken }, function() end)
+            ServicesPlusClient.RequestServer("endCustomCall", { callToken = response.data.callToken, reoffer = true }, function() end)
             callback(ServicesPlus.Error("native_call_unavailable", "The native call is no longer available.", false))
             return
         end
@@ -95,10 +95,16 @@ end)
 
 RegisterNUICallback("sendCurrentLocation", function(data, callback)
     data = type(data) == "table" and data or {}
-    local coords = GetEntityCoords(PlayerPedId())
-    local payload = { companyId = data.companyId, numberId = data.numberId, conversationId = tonumber(data.conversationId), body = "", attachments = {}, coords = { x = coords.x, y = coords.y } }
-    local action = data.citizen == true and "sendCitizenMessage" or "sendEmployeeMessage"
-    ServicesPlusClient.RequestServer(action, payload, function(response)
+    local citizen = data.citizen == true
+    -- The server reads the player's real position itself; the client only requests it.
+    local payload = { body = "", attachments = {}, includeCurrentLocation = true }
+    if citizen then
+        payload.companyId = data.companyId
+        payload.numberId = data.numberId
+    else
+        payload.conversationId = tonumber(data.conversationId)
+    end
+    ServicesPlusClient.RequestServer(citizen and "sendCitizenMessage" or "sendEmployeeMessage", payload, function(response)
         callback(response)
     end)
 end)

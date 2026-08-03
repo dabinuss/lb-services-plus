@@ -2,7 +2,7 @@
 
 Services+ is a separate LB Phone custom app resource providing a company directory, native multi-number calls, shared inboxes with LB Phone media and reactions, structured requests, and a server-authoritative employee portal. The portal keeps requests, inboxes, calls and the searchable active team in separate paginated workspace tabs. Red tab counters are reserved for unanswered requests, unread messages and calls not yet viewed during the current app session; neutral counters show zero or informational team totals.
 
-Version `0.6.0-rc1` adds API v10 stable workspace pagination, server-derived counters, filtered inboxes, payload schemas, and aggregated rate-limit telemetry. Production promotion still requires the live-server evidence in the release checklist.
+Version `0.7.0-rc1` adds API v11 payload hardening (undeclared fields and oversized payloads are rejected), server-resolved message locations, request/message idempotency keys, authorization fixes for ending company calls and reoffering failed call acceptances, and soft-deleted companies/numbers that keep history readable. Production promotion still requires the live-server evidence in the release checklist.
 
 ## Documentation
 
@@ -100,7 +100,7 @@ Schema changes are versioned in `sql/migrations/`. Before applying any productio
 
 Rollback requires restoring the pre-migration backup. Do not drop Services+ tables on a production database without a verified backup.
 
-Existing installations must apply migrations through `sql/migrations/010_inbox_cursor_index.sql` before restarting the resource. Migration 004 adds call queues, per-number conversations/messages/read state, and Phase 2 request lifecycle columns. Migration 005 adds persistent per-user message reactions. Migration 006 adds audited soft deletion for requests, shared-inbox conversations and individual messages. Migration 007 adds granular number operations, request target numbers, navigation coordinates and idempotent external references. Migration 008 removes obsolete staffing modes, employee allow-lists and persistent line subscriptions. Migration 009 adds persistent assignee name and role snapshots for portal and integration responses. Migration 010 adds the filtered activity index used by stable inbox pagination. Active requests are safely returned and active calls are ended after a resource restart.
+Existing installations must apply migrations through `sql/migrations/011_soft_delete_companies_and_numbers.sql` before restarting the resource. Migration 004 adds call queues, per-number conversations/messages/read state, and Phase 2 request lifecycle columns. Migration 005 adds persistent per-user message reactions. Migration 006 adds audited soft deletion for requests, shared-inbox conversations and individual messages. Migration 007 adds granular number operations, request target numbers, navigation coordinates and idempotent external references. Migration 008 removes obsolete staffing modes, employee allow-lists and persistent line subscriptions. Migration 009 adds persistent assignee name and role snapshots for portal and integration responses. Migration 010 adds the filtered activity index used by stable inbox pagination. Migration 011 adds soft deletion (`deleted_at`/`deleted_by`) for companies and company numbers so history stays readable after deletion. Active requests are safely returned and active calls are ended after a resource restart.
 
 ## Development Checks
 

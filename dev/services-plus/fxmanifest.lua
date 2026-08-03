@@ -3,7 +3,7 @@ game "gta5"
 
 author "Services+"
 description "Company communication and request workflows for LB Phone"
-version "0.6.0-rc1"
+version "0.7.0-rc1"
 
 lua54 "yes"
 
@@ -37,6 +37,7 @@ server_scripts {
     "server/logger.lua",
     "integrations/server.lua",
     "server/rate_limiter.lua",
+    "server/idempotency.lua",
     "server/contracts.lua",
     "server/migrations.lua",
     "server/repository.lua",

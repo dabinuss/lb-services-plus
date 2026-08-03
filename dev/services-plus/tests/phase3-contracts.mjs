@@ -36,9 +36,9 @@ for (const eventName of ["requestLifecycle", "requestCreated", "requestUpdated",
   assert.ok(apiDocs.includes(`services-plus:server:${eventName}`) || apiDocs.includes(`\`${eventName}\``), `Undocumented local event: ${eventName}`);
 }
 
-assert.match(manifest, /version "0\.6\.0-rc1"/);
+assert.match(manifest, /version "0\.7\.0-rc1"/);
 assert.doesNotMatch(manifest, /server\/prototypes\.lua/, "Development prototypes are loaded in production");
-assert.match(constants, /ApiVersion = 10/);
+assert.match(constants, /ApiVersion = 11/);
 assert.match(repository, /GetNumberQueue\(numberId, limit\)[\s\S]*LIMIT \?/);
 assert.match(calls, /GetNumberQueue\(numberId, Config\.MaxQueueBroadcastEntries\)/);
 assert.match(repository, /EndOpenCalls[\s\S]*UPDATE `services_plus_call_history` h[\s\S]*JOIN `services_plus_call_queue` q/);

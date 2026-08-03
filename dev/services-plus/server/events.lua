@@ -16,6 +16,11 @@ RegisterNetEvent("services-plus:server:request", function(requestId, action, pay
         TriggerClientEvent("services-plus:client:response", requestSource, requestId, ServicesPlus.Error("rate_limited", "Too many requests. Please wait.", true))
         return
     end
+    local encodeOk, encoded = pcall(json.encode, payload)
+    if not encodeOk or #encoded > Config.MaxActionPayloadBytes then
+        TriggerClientEvent("services-plus:client:response", requestSource, requestId, ServicesPlus.Error("invalid_payload", "The request payload is too large.", false))
+        return
+    end
     local validPayload, validationError = ServicesPlus.Contracts.ValidateActionPayload(action, payload)
     if not validPayload then
         TriggerClientEvent("services-plus:client:response", requestSource, requestId, ServicesPlus.Error("invalid_payload", validationError or "Invalid payload.", false))

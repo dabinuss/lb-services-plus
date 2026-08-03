@@ -37,11 +37,17 @@ local function cleanAttachments(input)
     return result
 end
 
-local function cleanCoords(input)
-    if input == nil then return nil end
-    if type(input) ~= "table" then return false end
-    local x, y = tonumber(input.x), tonumber(input.y)
-    if not x or not y or math.abs(x) > 10000 or math.abs(y) > 10000 then return false end
+-- The server derives the location itself instead of trusting client-supplied
+-- coordinates; the client may only request that its current position is attached.
+local function resolveCoords(source, requested)
+    if requested ~= true then return nil end
+    local ok, coords = pcall(function()
+        local ped = GetPlayerPed(source)
+        return ped and ped ~= 0 and GetEntityCoords(ped) or nil
+    end)
+    if not ok or not coords then return nil end
+    local x, y = tonumber(coords.x), tonumber(coords.y)
+    if not x or not y then return nil end
     return { x = x, y = y }
 end
 
@@ -81,22 +87,27 @@ end
 function Inboxes.SendCitizen(source, payload)
     local company = type(payload) == "table" and ServicesPlus.Companies.Get(payload.companyId) or nil
     if not company or not company.messagesEnabled or type(payload.body) ~= "string" or #payload.body > 2000 then return false, "validation_failed" end
-    local number = company.numbers[1]
-    if type(payload.numberId) == "string" then for _, candidate in ipairs(company.numbers) do if candidate.id == payload.numberId then number = candidate break end end end
-    if not number or not number.enabled or not number.publicVisible or not number.inboxEnabled or not number.sharedInbox then return false, "inbox_disabled" end
-    local attachments = cleanAttachments(payload.attachments); local coords = cleanCoords(payload.coords)
-    if not attachments or coords == false or (#payload.body < 1 and #attachments == 0 and not coords) then return false, "validation_failed" end
     local player = ServicesPlus.Bridge.GetPlayer(source); if not player then return false, "player_unavailable" end
-    local senderNumber = exports["lb-phone"]:GetEquippedPhoneNumber(source); if not senderNumber then return false, "phone_required" end
-    local result
-    if coords and payload.body == "" and #attachments == 0 then
-        exports["lb-phone"]:SendCoords(senderNumber, number.number, vector2(coords.x, coords.y))
-    else
-        result = exports["lb-phone"]:SendMessage(senderNumber, number.number, payload.body, attachments)
-        if not result then return false, "message_failed" end
-    end
-    local stored = store(company, number, senderNumber, senderNumber, player.identifier, "citizen", payload.body, attachments, coords, result)
-    return stored ~= nil, stored or "message_failed"
+    local clientRequestId = type(payload.clientRequestId) == "string" and payload.clientRequestId:sub(1, 128) or nil
+    local scopeKey = clientRequestId and ("sendCitizenMessage:" .. player.identifier .. ":" .. clientRequestId) or nil
+    return ServicesPlus.Idempotency.Resolve(scopeKey, function()
+        local number = company.numbers[1]
+        if type(payload.numberId) == "string" then for _, candidate in ipairs(company.numbers) do if candidate.id == payload.numberId then number = candidate break end end end
+        if not number or not number.enabled or not number.publicVisible or not number.inboxEnabled or not number.sharedInbox then return false, "inbox_disabled" end
+        local attachments = cleanAttachments(payload.attachments)
+        local coords = resolveCoords(source, payload.includeCurrentLocation)
+        if not attachments or (#payload.body < 1 and #attachments == 0 and not coords) then return false, "validation_failed" end
+        local senderNumber = exports["lb-phone"]:GetEquippedPhoneNumber(source); if not senderNumber then return false, "phone_required" end
+        local result
+        if coords and payload.body == "" and #attachments == 0 then
+            exports["lb-phone"]:SendCoords(senderNumber, number.number, vector2(coords.x, coords.y))
+        else
+            result = exports["lb-phone"]:SendMessage(senderNumber, number.number, payload.body, attachments)
+            if not result then return false, "message_failed" end
+        end
+        local stored = store(company, number, senderNumber, senderNumber, player.identifier, "citizen", payload.body, attachments, coords, result)
+        return stored ~= nil, stored or "message_failed"
+    end)
 end
 
 function Inboxes.SendEmployee(source, payload)
@@ -104,18 +115,23 @@ function Inboxes.SendEmployee(source, payload)
     if not employee or type(payload) ~= "table" or type(payload.conversationId) ~= "number" or type(payload.body) ~= "string" or #payload.body > 2000 then return false, "validation_failed" end
     local conversation = ServicesPlus.Repository.GetConversation(employee.companyId, payload.conversationId)
     if not conversation or conversation.shared_inbox ~= 1 or not canUseNumber(employee, conversation.number_id) then return false, "forbidden" end
-    local attachments = cleanAttachments(payload.attachments); local coords = cleanCoords(payload.coords)
-    if not attachments or coords == false or (#payload.body < 1 and #attachments == 0 and not coords) then return false, "validation_failed" end
-    local result
-    if coords and payload.body == "" and #attachments == 0 then
-        exports["lb-phone"]:SendCoords(conversation.company_number, conversation.external_number, vector2(coords.x, coords.y))
-    else
-        result = exports["lb-phone"]:SendMessage(conversation.company_number, conversation.external_number, payload.body, attachments, nil, conversation.channel_id)
-        if not result then return false, "message_failed" end
-    end
-    local company, number = ServicesPlus.Companies.FindByNumber(conversation.company_number)
-    local stored = store(company, number, conversation.external_number, conversation.company_number, employee.identifier, "employee", payload.body, attachments, coords, result)
-    return stored ~= nil, stored or "message_failed"
+    local clientRequestId = type(payload.clientRequestId) == "string" and payload.clientRequestId:sub(1, 128) or nil
+    local scopeKey = clientRequestId and ("sendEmployeeMessage:" .. employee.identifier .. ":" .. clientRequestId) or nil
+    return ServicesPlus.Idempotency.Resolve(scopeKey, function()
+        local attachments = cleanAttachments(payload.attachments)
+        local coords = resolveCoords(source, payload.includeCurrentLocation)
+        if not attachments or (#payload.body < 1 and #attachments == 0 and not coords) then return false, "validation_failed" end
+        local result
+        if coords and payload.body == "" and #attachments == 0 then
+            exports["lb-phone"]:SendCoords(conversation.company_number, conversation.external_number, vector2(coords.x, coords.y))
+        else
+            result = exports["lb-phone"]:SendMessage(conversation.company_number, conversation.external_number, payload.body, attachments, nil, conversation.channel_id)
+            if not result then return false, "message_failed" end
+        end
+        local company, number = ServicesPlus.Companies.FindByNumber(conversation.company_number)
+        local stored = store(company, number, conversation.external_number, conversation.company_number, employee.identifier, "employee", payload.body, attachments, coords, result)
+        return stored ~= nil, stored or "message_failed"
+    end)
 end
 
 function Inboxes.GetCompanyList(source, cursor, limit, numberId)

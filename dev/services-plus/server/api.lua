@@ -209,7 +209,8 @@ function Api.createRequest(source, payload)
     local templateId = type(payload.templateId) == "string" and payload.templateId or "general"
     local values = type(payload.values) == "table" and payload.values or { description = payload.details, location = payload.location }
     local locale = payload.locale == "de" and "de" or "en"
-    local success, result = ServicesPlus.Requests.Create(source, company.id, templateId, values, locale)
+    local clientRequestId = type(payload.clientRequestId) == "string" and payload.clientRequestId:sub(1, 128) or nil
+    local success, result = ServicesPlus.Requests.Create(source, company.id, templateId, values, locale, nil, clientRequestId)
     if not success then return ServicesPlus.Error(result, "The request could not be created.", result == "request_failed") end
     return ServicesPlus.Ok(result)
 end
@@ -252,7 +253,8 @@ end
 
 function Api.endCustomCall(source, payload)
     local token = type(payload) == "table" and tostring(payload.callToken or "") or ""
-    if #token < 1 or #token > 96 or not ServicesPlus.Calls.EndFromClient(source, token) then return ServicesPlus.Error("invalid_call", "The call could not be ended.", false) end
+    local reoffer = type(payload) == "table" and payload.reoffer == true
+    if #token < 1 or #token > 96 or not ServicesPlus.Calls.EndFromClient(source, token, reoffer) then return ServicesPlus.Error("invalid_call", "The call could not be ended.", false) end
     return ServicesPlus.Ok({ ended = true })
 end
 
@@ -521,6 +523,14 @@ function Api.adminSaveCompany(source, payload)
     if not ServicesPlus.Companies.Get(company.id) and ServicesPlus.Companies.Count() >= Config.MaxCompanies then
         return ServicesPlus.Error("company_limit_reached", "The configured company limit has been reached.", false)
     end
+    if ServicesPlus.Repository.JobInUse(company.job, company.id) then
+        return ServicesPlus.Error("job_in_use", "The linked job is already used by another company.", false)
+    end
+    for _, number in ipairs(company.numbers) do
+        if ServicesPlus.Repository.NumberInUse(number.number, number.id or "") then
+            return ServicesPlus.Error("number_in_use", "One of the phone numbers is already used by another company.", false)
+        end
+    end
     local success, result = ServicesPlus.Companies.SaveAdmin(company)
     if not success then return ServicesPlus.Error(result, "The company could not be saved.", true) end
     ServicesPlus.Employees.RevalidateCompany(company.id)
@@ -536,7 +546,8 @@ function Api.adminDeleteCompany(source, payload)
     local adminError = requireAdmin(source)
     if adminError then return adminError end
     if type(payload) ~= "table" or type(payload.companyId) ~= "string" then return ServicesPlus.Error("invalid_payload", "Invalid company identifier.", false) end
-    local success, result = ServicesPlus.Companies.DeleteAdmin(payload.companyId)
+    local player = ServicesPlus.Bridge.GetPlayer(source)
+    local success, result = ServicesPlus.Companies.DeleteAdmin(payload.companyId, player and player.identifier or nil)
     if not success then return ServicesPlus.Error(result, "The company could not be deleted.", true) end
     ServicesPlus.Employees.RemoveCompany(payload.companyId)
     for target in pairs(subscribers) do TriggerClientEvent("services-plus:client:push", target, { type = "company.deleted", timestamp = os.time(), payload = { id = payload.companyId } }) end

@@ -1,6 +1,6 @@
 # Release Candidate Validation
 
-Version: `0.6.0-rc1`
+Version: `0.7.0-rc1`
 
 ## Automated Gates
 
@@ -15,7 +15,7 @@ Version: `0.6.0-rc1`
 - [x] API exports, events, app actions, push types, examples, and documentation links match source inventory
 - [x] Generated API inventory matches `shared/api_contracts.json`
 
-Local validation completed on 2026-08-03: 17 UI tests on Node 22, TypeScript type checking, linting, production build, Lua parsing, generated API metadata checks, pagination model checks, and all four phase contract suites. Live FiveM validation remains required. Node `20.16.0` can run the build with a warning but is below the current Vite minimum; use Node `20.19+` or `22.12+` for release validation.
+Local validation re-run on 2026-08-03 for the 0.7.0-rc1 change set: 17 UI tests, TypeScript type checking, linting, production build, Lua static checks, generated API metadata checks, pagination model checks, and all four phase contract suites passed on Node `22.23.2` with a clean `npm ci`. TypeScript, linting, the production build, and every contract/phase suite also passed independently on Node `20.16.0`. The Vitest component/logic suite requires Node's `require(esm)` support (Node `20.19+` or `22.12+`) because jsdom's transitive dependencies are now ESM-only, so it cannot start on Node `20.16.0`; use `20.19+`/`22.12+` for that suite. Live FiveM validation remains required.
 
 Record command results in the release commit or deployment ticket. A checked item must correspond to the exact files being deployed.
 
@@ -54,4 +54,4 @@ Capture the server artifact, client count, company count, test dataset size, and
 
 ## Release Decision
 
-Do not promote this release candidate to a production release until all applicable live gates have evidence, no critical or high-severity issue remains, and database restore has been rehearsed. The generated API inventory and automated documentation review must be complete for API version 10.
+Do not promote this release candidate to a production release until all applicable live gates have evidence, no critical or high-severity issue remains, and database restore has been rehearsed. The generated API inventory and automated documentation review must be complete for API version 11.

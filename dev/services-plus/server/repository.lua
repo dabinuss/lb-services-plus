@@ -69,6 +69,7 @@ function Repository.LoadCompanies()
         SELECT `id`, `job`, `display_name`, `logo`, `background_image`, `category_id`, `description`, `location`,
                `opening_hours`, `keywords`, `requests_enabled`, `messages_enabled`, `dispatch_mode`
         FROM `services_plus_companies`
+        WHERE `deleted_at` IS NULL
         ORDER BY `display_name`, `id`
         LIMIT ?
     ]=], { Config.MaxCompanies }) or {}
@@ -76,6 +77,7 @@ function Repository.LoadCompanies()
         SELECT `id`, `company_id`, `label`, `number`, `distribution`, `shared_inbox`, `enabled`, `calls_enabled`,
                `inbox_enabled`, `requests_enabled`, `public_visible`
         FROM `services_plus_company_numbers`
+        WHERE `deleted_at` IS NULL
         ORDER BY `company_id`, `label`, `id`
     ]=]) or {}
     local byId = {}
@@ -181,7 +183,8 @@ function Repository.SaveCompany(company)
                 ON DUPLICATE KEY UPDATE `job` = VALUES(`job`), `display_name` = VALUES(`display_name`),
                     `logo` = VALUES(`logo`), `background_image` = VALUES(`background_image`), `category_id` = VALUES(`category_id`), `description` = VALUES(`description`),
                     `location` = VALUES(`location`), `opening_hours` = VALUES(`opening_hours`), `keywords` = VALUES(`keywords`),
-                    `requests_enabled` = VALUES(`requests_enabled`), `messages_enabled` = VALUES(`messages_enabled`), `dispatch_mode` = VALUES(`dispatch_mode`)
+                    `requests_enabled` = VALUES(`requests_enabled`), `messages_enabled` = VALUES(`messages_enabled`), `dispatch_mode` = VALUES(`dispatch_mode`),
+                    `deleted_at` = NULL, `deleted_by` = NULL
             ]=],
             values = { company.id, company.job, company.displayName, company.logo, company.backgroundImage, company.categoryId, company.description,
                 company.location, company.openingHours, json.encode(company.keywords), company.requestsEnabled and 1 or 0,
@@ -205,7 +208,7 @@ function Repository.SaveCompany(company)
         local deleteValues = { company.id }
         for _, id in ipairs(ids) do deleteValues[#deleteValues + 1] = id end
         queries[#queries + 1] = {
-            query = ("DELETE FROM `services_plus_company_numbers` WHERE `company_id` = ? AND `id` NOT IN (%s)"):format(table.concat((function() local placeholders = {}; for _ = 1, #ids do placeholders[#placeholders + 1] = "?" end; return placeholders end)(), ",")),
+            query = ("UPDATE `services_plus_company_numbers` SET `deleted_at` = CURRENT_TIMESTAMP WHERE `company_id` = ? AND `deleted_at` IS NULL AND `id` NOT IN (%s)"):format(table.concat((function() local placeholders = {}; for _ = 1, #ids do placeholders[#placeholders + 1] = "?" end; return placeholders end)(), ",")),
             values = deleteValues
         }
         queries[#queries + 1] = {
@@ -216,19 +219,29 @@ function Repository.SaveCompany(company)
                 ON DUPLICATE KEY UPDATE `company_id` = VALUES(`company_id`), `label` = VALUES(`label`), `number` = VALUES(`number`),
                   `distribution` = VALUES(`distribution`), `shared_inbox` = VALUES(`shared_inbox`), `enabled` = VALUES(`enabled`),
                   `calls_enabled` = VALUES(`calls_enabled`), `inbox_enabled` = VALUES(`inbox_enabled`), `requests_enabled` = VALUES(`requests_enabled`),
-                  `public_visible` = VALUES(`public_visible`)
+                  `public_visible` = VALUES(`public_visible`), `deleted_at` = NULL
             ]=]):format(table.concat(rows, ",")),
             values = values
         }
     else
-        queries[#queries + 1] = { query = "DELETE FROM `services_plus_company_numbers` WHERE `company_id` = ?", values = { company.id } }
+        queries[#queries + 1] = { query = "UPDATE `services_plus_company_numbers` SET `deleted_at` = CURRENT_TIMESTAMP WHERE `company_id` = ? AND `deleted_at` IS NULL", values = { company.id } }
     end
 
     return MySQL.transaction.await(queries)
 end
 
-function Repository.DeleteCompany(companyId)
-    return MySQL.update.await("DELETE FROM `services_plus_companies` WHERE `id` = ?", { companyId })
+-- Soft-deleted companies and numbers keep their unique job/number values reserved
+-- (see migration 011), so a new or revived record must not silently collide with one.
+function Repository.JobInUse(job, excludeCompanyId)
+    return MySQL.scalar.await("SELECT `id` FROM `services_plus_companies` WHERE `job` = ? AND `id` <> ? LIMIT 1", { job, excludeCompanyId or "" }) ~= nil
+end
+
+function Repository.NumberInUse(number, excludeNumberId)
+    return MySQL.scalar.await("SELECT `id` FROM `services_plus_company_numbers` WHERE `number` = ? AND `id` <> ? LIMIT 1", { number, excludeNumberId or "" }) ~= nil
+end
+
+function Repository.DeleteCompany(companyId, actorIdentifier)
+    return MySQL.update.await("UPDATE `services_plus_companies` SET `deleted_at` = CURRENT_TIMESTAMP, `deleted_by` = ? WHERE `id` = ? AND `deleted_at` IS NULL", { actorIdentifier, companyId })
 end
 
 function Repository.LoadSettings()
@@ -340,6 +353,14 @@ function Repository.AcceptCallQueue(id, identifier)
         SET `status` = 'accepted', `assigned_identifier` = ?, `accepted_at` = CURRENT_TIMESTAMP
         WHERE `id` = ? AND `status` IN ('queued','offered') AND `assigned_identifier` IS NULL
     ]=], { identifier, id }) == 1
+end
+
+function Repository.RevertCallAcceptance(id, status, identifiers)
+    return MySQL.update.await([=[
+        UPDATE `services_plus_call_queue`
+        SET `status` = ?, `assigned_identifier` = NULL, `accepted_at` = NULL, `offered_identifiers` = ?
+        WHERE `id` = ? AND `status` = 'accepted'
+    ]=], { status, json.encode(identifiers or {}), id }) == 1
 end
 
 function Repository.EndCallQueue(id, result)

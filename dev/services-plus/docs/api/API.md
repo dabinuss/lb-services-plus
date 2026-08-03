@@ -1,7 +1,7 @@
 # Services+ API Reference
 
-Resource version: `0.6.0-rc1`
-API version: `10`
+Resource version: `0.7.0-rc1`
+API version: `11`
 Status: release-candidate contract
 
 This is the authoritative reference for every supported Services+ integration surface. Internal Lua functions, database tables, and network events not explicitly listed here are implementation details and must not be invoked by another resource.
@@ -9,10 +9,11 @@ This is the authoritative reference for every supported Services+ integration su
 ## Compatibility and Versioning
 
 - Every response and payload is JSON-compatible.
-- API version 10 adds composite inbox cursors, server-side workspace summaries and inbox filtering, and schema-driven NUI payload validation.
+- API version 11 rejects any action payload field that is not declared in its schema, caps every action payload at `Config.MaxActionPayloadBytes` (20000 bytes), replaces client-supplied message `coords` with a server-resolved `includeCurrentLocation` flag, adds an optional `clientRequestId` idempotency key to `createRequest`/`sendCitizenMessage`/`sendEmployeeMessage`, and adds an optional `reoffer` flag to `endCustomCall`.
+- API version 10 added composite inbox cursors, server-side workspace summaries and inbox filtering, and schema-driven NUI payload validation.
 - Additive fields may appear within the same API major version. Consumers must ignore unknown fields.
 - Removing or renaming a documented field, event, export, or semantic behavior requires an API version increment and changelog entry.
-- Deprecated contracts remain documented for at least one release cycle when technically possible. There are no deprecated contracts in API version 10.
+- Deprecated contracts remain documented for at least one release cycle when technically possible. There are no deprecated contracts in API version 11.
 - Resource exports are the only supported entry point for other server resources. Never trigger `services-plus:server:request` externally.
 
 ## Trust Model
@@ -45,7 +46,7 @@ Common errors:
 | `service_unavailable` | Yes | Services+ has not completed startup or dependency validation. |
 | `internal_error` | Yes | A protected handler failed; details are logged server-side. |
 | `rate_limited` | Yes | The per-source, per-action limit was exceeded. |
-| `invalid_request`, `invalid_payload`, `validation_failed` | No | Shape, type, enum, length, or identifier validation failed. |
+| `invalid_request`, `invalid_payload`, `validation_failed` | No | Shape, type, enum, length, or identifier validation failed, an undeclared payload field was present, or the encoded payload exceeded `Config.MaxActionPayloadBytes`. |
 | `phone_required`, `phone_unavailable` | No | An equipped or target LB Phone could not be resolved. |
 | `forbidden`, `integration_forbidden` | No | Role, ownership, company, inbox, assignment, or resource authorization failed. |
 | `not_on_duty`, `employee_unavailable`, `company_unavailable`, `number_unavailable` | No | Required runtime state is absent. |
@@ -56,7 +57,7 @@ Do not branch on human-readable `message`; use `error.code` and `retryable`.
 
 ## Entity Reference
 
-All entities below are API version 10. Optional means the field can be absent, not `null`.
+All entities below are API version 11. Optional means the field can be absent, not `null`.
 
 ### Company
 
@@ -215,7 +216,7 @@ Listen and correlate external dispatch state:
 
 ```lua
 AddEventHandler("services-plus:server:requestLifecycle", function(update)
-    if update.version ~= 10 then return end
+    if update.version ~= 11 then return end
     local request = update.request
     local external = request.externalReference
     local externalId = external and external.id or nil
@@ -295,14 +296,14 @@ Version for all action contracts: API 8. Errors marked below are contract-specif
 | `registerIncomingCall { callToken, number }` | `{ id, state, offered, callToken, position }` | On-duty employee belongs to resolved company; token length `1..96`. | 20/30 sec | Idempotently attaches employee/native offer. `invalid_call`, `forbidden`. |
 | `acceptCall { id }` | `{ id, callToken }` | Available eligible offered employee. | 8/30 sec | Atomic assignment and Busy state; client native handoff may add `native_call_unavailable`. `already_accepted`. |
 | `declineCall { id }` | `{ id }` | Employee was offered current call. | 12/30 sec | Records runtime decline and may requeue. `call_unavailable`, `forbidden`. |
-| `endCustomCall { callToken }` | `{ ended: true }` | Client source participated in token; token length `1..96`. | 12/30 sec | Ends queue and releases work. `invalid_call`. |
+| `endCustomCall { callToken, reoffer? }` | `{ ended: true }` | Caller or the currently assigned employee for the token; token length `1..96`. | 12/30 sec | Ends the call. When `reoffer` is set by the assigned employee (native handoff failure) the call is instead returned to `queued`/`offered` and re-offered to other eligible employees instead of ending. `invalid_call`. |
 
 ### Requests
 
 | Action and input | Success data | Permission and validation | Limit | Effects / errors |
 | --- | --- | --- | --- | --- |
 | `getRequestOptions { companyId, locale }` | RequestSettings | Equipped phone; enabled company with specialized templates. | 15/min | Bounded configuration read and equipped-number default. `requests_disabled`. |
-| `createRequest { companyId, templateId, values, locale }` | RequestPublic | Equipped phone; enabled target/template; server validates every configured field and location. | 4/min | Persists and offers request. `template_disabled`, `location_unavailable`, `request_failed`. |
+| `createRequest { companyId, templateId, values, locale?, clientRequestId? }` | RequestPublic | Equipped phone; enabled target/template; server validates every configured field and location. | 4/min | Persists and offers request. When `clientRequestId` repeats within 20 seconds for the same player, the original result is replayed instead of creating a duplicate request. `template_disabled`, `location_unavailable`, `request_failed`. |
 | `acceptRequest { id }` | RequestCompany | Available eligible employee. | 8/30 sec | Atomic assignment, Busy state, optional waypoint, lifecycle events. `already_accepted`. |
 | `declineRequest { id }` | `{ id }` | Eligible employee; pending/returned request. | 12/30 sec | Audits personal decline. `request_unavailable`. |
 | `transitionRequest { id, phaseId }` | RequestCompany | Assigned employee; exactly next fixed phase. | 15/30 sec | Updates or completes request. `invalid_transition`, `transition_failed`. |
@@ -315,8 +316,8 @@ Version for all action contracts: API 8. Errors marked below are contract-specif
 
 | Action and input | Success data | Permission and validation | Limit | Effects / errors |
 | --- | --- | --- | --- | --- |
-| `sendCitizenMessage { companyId, numberId?, body, attachments?, coords? }` | Message event | Equipped phone; enabled public shared inbox; body <= 2000, <= 4 HTTPS attachments on `Config.AllowedMediaDomains`, coords within world bounds. | 12/min | Sends via LB Phone, persists and pushes. `inbox_disabled`, `message_failed`. |
-| `sendEmployeeMessage { conversationId, body, attachments?, coords? }` | Message event | On duty and authorized for enabled shared inbox; same content limits. | 20/min | Replies as company number and persists. `forbidden`, `message_failed`. |
+| `sendCitizenMessage { companyId, numberId?, body, attachments?, includeCurrentLocation?, clientRequestId? }` | Message event | Equipped phone; enabled public shared inbox; body <= 2000, <= 4 HTTPS attachments on `Config.AllowedMediaDomains`. | 12/min | Sends via LB Phone, persists and pushes. `includeCurrentLocation` makes the server read the sender's own position with `GetEntityCoords`; the client cannot supply arbitrary coordinates. `clientRequestId` deduplicates retries for 20 seconds. `inbox_disabled`, `message_failed`. |
+| `sendEmployeeMessage { conversationId, body, attachments?, includeCurrentLocation?, clientRequestId? }` | Message event | On duty and authorized for enabled shared inbox; same content limits. | 20/min | Replies as company number and persists. Same server-resolved location and retry deduplication as `sendCitizenMessage`. `forbidden`, `message_failed`. |
 | `getCitizenInbox { cursor?, limit? }` | Conversation[] | Equipped phone number owns conversations. | 15/min | Bounded read. `phone_required`. |
 | `getConversationMessages { conversationId, citizen, cursor?, limit? }` | `{ conversation, messages }` | Citizen number owns conversation or employee has same-company number access. | 20/min | Bounded read; employee read cursor updated. `forbidden`. |
 | `reactToMessage { messageId, emoji, citizen }` | `{ messageId, conversationId, reactions }` | Authorized participant; emoji from fixed ten-item allow-list. | 30/min | Toggle per-actor reaction and push update. `message_unavailable`, `forbidden`. |
@@ -325,7 +326,7 @@ Version for all action contracts: API 8. Errors marked below are contract-specif
 | `getMyActivity { limit? }` | `{ calls, requests }` | Equipped phone and framework identity; limit `1..50`. | 12/min | Owned bounded history read. `player_unavailable`. |
 | `getAdminState {}` | AdminState | Equipped phone and ACE/framework administrator. | 8/min | Protected configuration read. `forbidden`. |
 | `adminSaveCompany { company }` | Company | Administrator; IDs/slugs, lengths, URLs, known category/enums, <= 20 keywords, <= 10 unique numbers. | 10/min | Upsert, cache reload, employee/call revalidation, company push. `company_limit_reached`, `validation_failed`. |
-| `adminDeleteCompany { companyId }` | `{ id }` | Administrator; existing company. | 5/min | Deletes company cascade, invalidates duty, pushes deletion. `company_not_found`. |
+| `adminDeleteCompany { companyId }` | `{ id }` | Administrator; existing company. | 5/min | Soft-deletes the company (`deleted_at`/`deleted_by`), soft-deletes its numbers, invalidates duty, pushes deletion. The `id` and every number are reserved and excluded from active reads but are not physically removed, so call/request/conversation history stays readable. Saving a company with the same `id` or a number reusing the same phone number revives the soft-deleted row. `company_not_found`. |
 | `adminUpdateSettings { settings }` | AppSettings | Administrator; title `2..80`, boolean global flags. | 8/min | Persists and pushes settings. `settings_update_failed`. |
 | `adminUpdateCategory { categoryId, requestCompetition }` | Category | Administrator; known category and boolean. | 12/min | Persists competition, refreshes offers, pushes category. `category_update_failed`. |
 
@@ -335,7 +336,7 @@ Version for all action contracts: API 8. Errors marked below are contract-specif
 | --- | --- | --- |
 | `acceptCall` | Completes native LB Phone handoff after server acceptance. | Uses `acceptCall`; on native failure calls `endCustomCall` and answers with `native_call_unavailable`. |
 | `openEmployeeContact { targetSource }` | Opens LB Phone contact modal. | Uses `getEmployeeContact`; client invokes `SetContactModal`. |
-| `sendCurrentLocation { citizen, ...target }` | Reads player coordinates client-side for a message. | Converts to validated `sendCitizenMessage` or `sendEmployeeMessage`. |
+| `sendCurrentLocation { citizen, ...target }` | Requests that the current player position is attached to a message. | Converts to `sendCitizenMessage`/`sendEmployeeMessage` with `includeCurrentLocation: true`; the server reads the actual position, the client sends no coordinates. |
 
 ## Custom App Push Messages
 

@@ -21,6 +21,14 @@ local function validate(schema, value, path)
                 if not ok then return false, reason end
             end
         end
+        -- A declared property list is treated as the complete allowed key set unless the
+        -- schema explicitly opts into free-form data, so unknown fields cannot smuggle
+        -- extra content past validation.
+        if schema.properties and schema.additionalProperties ~= true then
+            for field in pairs(value) do
+                if schema.properties[field] == nil then return false, path .. "." .. field .. " is not allowed" end
+            end
+        end
     elseif expected == "array" then
         if type(value) ~= "table" then return false, path .. " must be an array" end
         if schema.maxItems and #value > schema.maxItems then return false, path .. " has too many items" end

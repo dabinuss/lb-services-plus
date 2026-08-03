@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.7.0-rc1
+
+- Fix client-authoritative call termination: only the caller or the currently assigned employee may end a company call token; a bystander who was previously offered the call can no longer end it for everyone.
+- Roll back and re-offer a call to other eligible employees instead of ending it outright when server-side assignment or the native LB Phone handoff fails; add an `endCustomCall` `reoffer` flag for the native-handoff-failure path.
+- Stop physically deleting companies and company numbers; `adminDeleteCompany` and number removal now soft-delete (`deleted_at`/`deleted_by`) so call, request and conversation history stays readable, and add migration 011 with the required schema and indexes.
+- Read message locations from the sender's real server-side position instead of trusting client-supplied coordinates; replace the `coords` input field on `sendCitizenMessage`/`sendEmployeeMessage` with an `includeCurrentLocation` flag.
+- Add an optional `clientRequestId` idempotency key to `createRequest`, `sendCitizenMessage` and `sendEmployeeMessage` so a retried NUI call or a double click cannot create a duplicate request or message.
+- Reject action payloads containing fields not declared in their schema and cap every action payload at `Config.MaxActionPayloadBytes`; increment API version from 10 to 11.
+- Add the missing `@testing-library/dom` dev dependency and regenerate the UI lockfile so a clean `npm ci` succeeds.
+
 ## 0.6.0-rc1
 
 - Add stable composite conversation cursors, independent section loading, server-side inbox filters, and authoritative workspace badge summaries.

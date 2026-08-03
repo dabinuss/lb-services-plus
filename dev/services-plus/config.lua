@@ -9,6 +9,7 @@ Config.AppDefaultInstalled = true
 Config.AppIcon = "https://cfx-nui-services-plus/web/icon.svg"
 Config.RegistrationDelayMs = 750
 Config.ServerCallbackTimeoutMs = 10000
+Config.MaxActionPayloadBytes = 20000
 Config.MaxCompanies = 100
 Config.MaxQueueBroadcastEntries = 100
 Config.RequireEquippedPhone = true

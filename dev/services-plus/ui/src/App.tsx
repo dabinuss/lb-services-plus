@@ -15,6 +15,13 @@ import { t, type Locale } from "./lib/i18n";
 import { appendUnique, WorkspaceRequestGate } from "./lib/workspace";
 import type { AdminState, AppMessage, AppSettings, Category, CitizenRequest, Company, CompanyNumber, CompanyOperationsPatch, CompanyPatch, CompanyWorkspace, CurrentUser, Employee, EmployeeStatus, InboxConversation, InboxMessage, InitialState, MessageReaction, MessageReactionUpdate, MyActivity, NumberOperationsPatch, RequestSettings, WorkOffer, WorkspaceCursor, WorkspaceSection } from "./types";
 
+// Groups identical resubmissions of the same content within a short window under one
+// key, so a double click or a retry after a lost response cannot create a duplicate
+// request or message. A genuinely new submission a few seconds later gets a new key.
+function idempotencyKey(parts: unknown[]): string {
+  return `${Math.floor(Date.now() / 15000)}:${JSON.stringify(parts)}`;
+}
+
 type View = "directory" | "activity" | "portal" | "admin";
 export default function App() {
   const [state, setState] = useState<InitialState | null>(null); const [view, setView] = useState<View>("directory");
@@ -182,7 +189,7 @@ export default function App() {
     if (!requestCompany) return false;
     setBusy(true);
     try {
-      const response = await fetchNui<CitizenRequest>("createRequest", { companyId: requestCompany.id, templateId, values, locale });
+      const response = await fetchNui<CitizenRequest>("createRequest", { companyId: requestCompany.id, templateId, values, locale, clientRequestId: idempotencyKey([requestCompany.id, templateId, values]) });
       if (!response.success) return false;
       setActivity((current) => ({ calls: current?.calls ?? [], conversations: current?.conversations ?? [], requests: [response.data, ...(current?.requests ?? [])] }));
       notify(t(locale, "requestCreated"));
@@ -194,8 +201,8 @@ export default function App() {
       setBusy(false);
     }
   };
-  const sendCitizenMessage = async (numberId: string, body: string, attachments: string[]) => { if (!messageCompany) return false; const success = await run<InboxMessage>("sendCitizenMessage", { companyId: messageCompany.id, numberId, body, attachments }, () => notify(t(locale, "messageSent"))); if (success) { setMessageCompany(null); await openActivity(); } return success; };
-  const sendConversationMessage = async (conversationId: number, body: string, attachments: string[]) => { const citizen = conversation?.citizen !== false; let sent: InboxMessage | null = null; await run<InboxMessage>(citizen ? "sendCitizenMessage" : "sendEmployeeMessage", citizen ? { companyId: conversation?.item.companyId, numberId: conversation?.item.numberId, body, attachments } : { conversationId, body, attachments }, (result) => { sent = { ...result, id: result.id || Date.now(), senderType: citizen ? "citizen" : "employee", attachments: result.attachments || attachments }; }); return sent; };
+  const sendCitizenMessage = async (numberId: string, body: string, attachments: string[]) => { if (!messageCompany) return false; const success = await run<InboxMessage>("sendCitizenMessage", { companyId: messageCompany.id, numberId, body, attachments, clientRequestId: idempotencyKey([messageCompany.id, numberId, body, attachments]) }, () => notify(t(locale, "messageSent"))); if (success) { setMessageCompany(null); await openActivity(); } return success; };
+  const sendConversationMessage = async (conversationId: number, body: string, attachments: string[]) => { const citizen = conversation?.citizen !== false; let sent: InboxMessage | null = null; await run<InboxMessage>(citizen ? "sendCitizenMessage" : "sendEmployeeMessage", citizen ? { companyId: conversation?.item.companyId, numberId: conversation?.item.numberId, body, attachments, clientRequestId: idempotencyKey([conversation?.item.companyId, conversation?.item.numberId, body, attachments]) } : { conversationId, body, attachments, clientRequestId: idempotencyKey([conversationId, body, attachments]) }, (result) => { sent = { ...result, id: result.id || Date.now(), senderType: citizen ? "citizen" : "employee", attachments: result.attachments || attachments }; }); return sent; };
   const sendConversationLocation = async () => { if (!conversation) return null; let sent: InboxMessage | null = null; await run<InboxMessage>("sendCurrentLocation", { citizen: conversation.citizen, conversationId: conversation.item.id, companyId: conversation.item.companyId, numberId: conversation.item.numberId }, (result) => { sent = { ...result, id: result.id || Date.now(), senderType: conversation.citizen ? "citizen" : "employee", attachments: result.attachments || [] }; notify(t(locale, "locationSent")); }); return sent; };
   const reactToMessage = async (messageId: number, emoji: string) => { if (!conversation) return null; let reactions: MessageReaction[] | null = null; await run<MessageReactionUpdate>("reactToMessage", { messageId, emoji, citizen: conversation.citizen }, (result) => { reactions = result.reactions; }); return reactions; };
   const acceptOffer = async () => { if (!offer) return; const action = offer.kind === "call" ? "acceptCall" : "acceptRequest"; const success = await run<unknown>(action, { id: offer.id }, () => undefined); if (success) { setOffer(null); await loadWorkspace(); } };
