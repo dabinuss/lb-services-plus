@@ -16,46 +16,54 @@ export async function fetchNui<T>(event: string, data: unknown = {}): Promise<Ap
   if (event === "getInitialState") return { success: true, data: structuredClone(browserState) as T };
   const employment = browserState.currentUser.employment;
   if (event === "enterDuty" && employment) {
-    const employee: Employee = { source: browserState.currentUser.source, name: browserState.currentUser.name, role: "Operations Manager", companyId: employment.companyId, status: "available", dispatchEnabled: true, dispatchForced: false, isLeader: employment.isLeader, activeCall: false, activeRequest: false, activeNumberIds: ["taxi-main"], version: 2 };
+    const activeNumberIds = browserWorkspace.numberStates?.filter((number) => number.enabled).map((number) => number.numberId) || [];
+    const employee: Employee = { source: browserState.currentUser.source, name: browserState.currentUser.name, role: "Operations Manager", companyId: employment.companyId, status: "available", dispatchEnabled: true, dispatchForced: false, isLeader: employment.isLeader, activeCall: false, activeRequest: false, activeNumberIds, version: 2 };
     const colleagues: Employee[] = [
       { source: 24, name: "Avery Brooks", role: "Senior Driver", companyId: employment.companyId, status: "available", dispatchEnabled: true, dispatchForced: false, isLeader: false, activeCall: false, activeRequest: false, version: 2 },
       { source: 31, name: "Mika Hart", role: "Dispatcher", companyId: employment.companyId, status: "on_break", dispatchEnabled: true, dispatchForced: false, isLeader: false, activeCall: false, activeRequest: false, version: 2 }
     ];
     employment.onDuty = true; employment.employee = employee; employment.activeEmployees = [employee, ...colleagues];
-    browserState.companies = browserState.companies.map((company) => company.id === employment.companyId ? { ...company, available: true, employeeCount: 3 } : company);
+    browserWorkspace.numberStates?.forEach((number) => { number.canSelectForDispatch = number.enabled; number.selectedForDispatch = number.enabled; });
+    browserState.companies = browserState.companies.map((company) => company.id === employment.companyId ? { ...company, available: true, employeeCount: 3, numbers: company.numbers.map((number) => ({ ...number, available: number.enabled })) } : company);
+    persistBrowserConfiguration();
     return { success: true, data: { currentUser: structuredClone(browserState.currentUser), companies: structuredClone(browserState.companies) } as T };
   }
   if (event === "leaveDuty" && employment) {
     employment.onDuty = false; employment.employee = null; employment.activeEmployees = [];
+    browserState.companies = browserState.companies.map((company) => company.id === employment.companyId ? { ...company, available: false, employeeCount: 0, numbers: company.numbers.map((number) => ({ ...number, available: false })) } : company);
+    persistBrowserConfiguration();
     return { success: true, data: { currentUser: structuredClone(browserState.currentUser), companies: structuredClone(browserState.companies) } as T };
   }
   if ((event === "updateStatus" || event === "toggleDispatch") && employment?.employee) {
     const payload = data as { status?: Employee["status"]; enabled?: boolean };
     if (event === "updateStatus" && payload.status) employment.employee.status = payload.status;
     if (event === "toggleDispatch" && typeof payload.enabled === "boolean") {
-      employment.employee.dispatchEnabled = payload.enabled;
-      browserWorkspace.numberSubscriptions?.forEach((number) => {
-        number.canSubscribe = number.authorized && (payload.enabled || number.staffingMode === "self_select" || number.staffingMode === "restricted");
-        if (payload.enabled && number.enabled && number.authorized) number.subscribed = true;
+      const dispatchEnabled = payload.enabled;
+      employment.employee.dispatchEnabled = dispatchEnabled;
+      browserWorkspace.numberStates?.forEach((number) => {
+        number.canSelectForDispatch = dispatchEnabled;
+        if (dispatchEnabled && number.enabled) number.selectedForDispatch = true;
       });
-      if (payload.enabled) employment.employee.activeNumberIds = browserWorkspace.numberSubscriptions?.filter((number) => number.enabled && number.authorized).map((number) => number.numberId) || [];
+      if (dispatchEnabled) employment.employee.activeNumberIds = browserWorkspace.numberStates?.filter((number) => number.enabled).map((number) => number.numberId) || [];
     }
     employment.activeEmployees = employment.activeEmployees.map((employee) => employee.source === employment.employee?.source ? employment.employee : employee).filter(Boolean) as Employee[];
+    persistBrowserConfiguration();
     return { success: true, data: structuredClone(employment.employee) as T };
   }
-  if (event === "toggleNumberSubscription" && employment?.employee) {
+  if (event === "toggleDispatchLine" && employment?.employee) {
     const payload = data as { numberId: string; enabled: boolean };
     employment.employee.activeNumberIds = payload.enabled ? [...new Set([...(employment.employee.activeNumberIds || []), payload.numberId])] : (employment.employee.activeNumberIds || []).filter((id) => id !== payload.numberId);
-    const subscription = browserWorkspace.numberSubscriptions?.find((item) => item.numberId === payload.numberId); if (subscription) subscription.subscribed = payload.enabled;
+    const numberState = browserWorkspace.numberStates?.find((item) => item.numberId === payload.numberId); if (numberState) numberState.selectedForDispatch = payload.enabled;
+    persistBrowserConfiguration();
     return { success: true, data: structuredClone(employment.employee) as T };
   }
   if (event === "updateNumberOperations") {
     const numbers = (data as { numbers: Array<{ id: string } & Partial<Company["numbers"][number]>> }).numbers;
     const company = browserState.companies.find((item) => item.id === employment?.companyId);
     if (company) company.numbers = company.numbers.map((number) => ({ ...number, ...(numbers.find((item) => item.id === number.id) || {}) }));
-    browserWorkspace.numberSubscriptions?.forEach((subscription) => {
-      const update = numbers.find((number) => number.id === subscription.numberId);
-      if (update) Object.assign(subscription, update);
+    browserWorkspace.numberStates?.forEach((numberState) => {
+      const update = numbers.find((number) => number.id === numberState.numberId);
+      if (update) Object.assign(numberState, update);
     });
     return { success: true, data: structuredClone(company) as T };
   }
@@ -92,12 +100,6 @@ export async function fetchNui<T>(event: string, data: unknown = {}): Promise<Ap
     if (request) { if (event === "acceptRequest") { request.status = "active"; request.phaseId = "accepted"; if (employment?.employee) { employment.employee.status = "busy"; employment.employee.activeRequest = true; employment.employee.activeRequestId = request.id; } } if (event === "transitionRequest" && payload.phaseId) { request.phaseId = payload.phaseId; if (payload.phaseId === "completed") request.status = "completed"; } if (event === "returnRequest") { request.status = "returned"; request.phaseId = undefined; if (employment?.employee) { employment.employee.status = "available"; employment.employee.activeRequest = false; employment.employee.activeRequestId = undefined; } } return { success: true, data: structuredClone(request) as T }; }
   }
   if (event === "cancelRequest") { const request = browserActivity.requests.find((item) => item.id === (data as { id: number }).id) || browserWorkspace.requests.find((item) => item.id === (data as { id: number }).id); if (request) { request.status = "cancelled"; return { success: true, data: structuredClone(request) as T }; } }
-  if (event === "updateNumberEligibility") {
-    const payload = data as { numberId: string; targetSource: number; enabled: boolean };
-    const eligibility = browserWorkspace.numberEligibility?.find((number) => number.numberId === payload.numberId)?.people.find((person) => person.source === payload.targetSource);
-    if (eligibility) eligibility.eligible = payload.enabled;
-    return { success: true, data: structuredClone(data) as T };
-  }
   if (event === "updateRequestSettings") { browserWorkspace.requestSettings = { ...browserWorkspace.requestSettings, ...(data as { settings: RequestSettings }).settings }; return { success: true, data: structuredClone(browserWorkspace.requestSettings) as T }; }
   if (event === "getCitizenInbox") return { success: true, data: structuredClone(browserCitizenConversations) as T };
   if (event === "sendCitizenMessage" || event === "sendEmployeeMessage") {
@@ -124,20 +126,33 @@ export async function fetchNui<T>(event: string, data: unknown = {}): Promise<Ap
   if (event === "adminSaveCompany") {
     const input = (data as { company: CompanyPatch }).company;
     const category = browserState.categories.find((item) => item.id === input.categoryId);
-    const company: Company = { ...input, categoryName: category?.name ?? input.categoryId, available: false, employeeCount: 0, primaryNumber: input.numbers[0]?.number, numbers: input.numbers.map((number, index) => ({ ...number, id: number.id || `${input.id}-${index + 1}` })), version: Date.now() };
-    const index = browserState.companies.findIndex((item) => item.id === company.id);
+    const index = browserState.companies.findIndex((item) => item.id === input.id);
+    const current = index >= 0 ? browserState.companies[index] : undefined;
+    const available = current?.available ?? false;
+    const numbers = input.numbers.map((number, numberIndex) => {
+      const id = number.id || `${input.id}-${numberIndex + 1}`;
+      const existing = current?.numbers.find((item) => item.id === id);
+      return { ...number, id, available: existing?.available ?? (available && number.enabled) };
+    });
+    const company: Company = { ...input, categoryName: category?.name ?? input.categoryId, available, employeeCount: current?.employeeCount ?? 0, primaryNumber: numbers.find((number) => number.enabled)?.number, numbers, version: Date.now() };
     if (index >= 0) browserState.companies[index] = company; else browserState.companies.push(company);
+    jobs[company.id] = input.job;
     if (company.id === browserWorkspace.companyId) {
-      browserWorkspace.numberSubscriptions?.forEach((subscription) => {
-        const number = company.numbers.find((item) => item.id === subscription.numberId);
-        if (number) Object.assign(subscription, number);
+      const dispatchEnabled = employment?.employee?.dispatchEnabled === true;
+      browserWorkspace.numberStates = company.numbers.map((number) => {
+        const currentState = browserWorkspace.numberStates?.find((item) => item.numberId === number.id);
+        return { numberId: number.id, label: number.label, enabled: number.enabled, callsEnabled: number.callsEnabled, inboxEnabled: number.inboxEnabled, requestsEnabled: number.requestsEnabled, canSelectForDispatch: dispatchEnabled && number.enabled, selectedForDispatch: currentState?.selectedForDispatch ?? (dispatchEnabled && number.enabled) };
       });
+      browserWorkspace.requestSettings.requestNumbers = company.numbers.filter((number) => number.enabled && number.requestsEnabled).map((number) => ({ id: number.id, label: number.label }));
     }
+    persistBrowserConfiguration();
     return { success: true, data: structuredClone(company) as T };
   }
   if (event === "adminDeleteCompany") {
     const companyId = (data as { companyId: string }).companyId;
     browserState.companies = browserState.companies.filter((company) => company.id !== companyId);
+    delete jobs[companyId];
+    persistBrowserConfiguration();
     return { success: true, data: { id: companyId } as T };
   }
   if (event === "adminUpdateCategory") {
@@ -145,6 +160,7 @@ export async function fetchNui<T>(event: string, data: unknown = {}): Promise<Ap
     const category = browserState.categories.find((item) => item.id === payload.categoryId);
     if (!category) return { success: false, error: { code: "category_not_found", message: "Category not found.", retryable: false } };
     category.requestCompetition = payload.requestCompetition;
+    persistBrowserConfiguration();
     return { success: true, data: structuredClone(category) as T };
   }
   if (event === "deleteRequest") {
@@ -158,27 +174,67 @@ export async function fetchNui<T>(event: string, data: unknown = {}): Promise<Ap
   }
   if (event === "adminUpdateSettings") {
     browserState.settings = (data as { settings: InitialState["settings"] }).settings;
+    persistBrowserConfiguration();
     return { success: true, data: structuredClone(browserState.settings) as T };
   }
   return { success: false, error: { code: "browser_mock", message: "This action requires FiveM.", retryable: false } };
 }
 
+interface BrowserConfiguration {
+  settings: InitialState["settings"];
+  companies: Company[];
+  categories: InitialState["categories"];
+  currentUser?: InitialState["currentUser"];
+  jobs: Record<string, string>;
+}
+
+const browserStorageKey = "services-plus-browser-configuration-v1";
+function loadBrowserConfiguration(): BrowserConfiguration | null {
+  try {
+    const value = window.localStorage.getItem(browserStorageKey);
+    if (!value) return null;
+    const parsed = JSON.parse(value) as BrowserConfiguration;
+    return Array.isArray(parsed.companies) && Array.isArray(parsed.categories) && parsed.settings ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+const persistedBrowserConfiguration = loadBrowserConfiguration();
 const browserState = structuredClone(browserFixture);
+if (persistedBrowserConfiguration) {
+  browserState.settings = persistedBrowserConfiguration.settings;
+  browserState.categories = persistedBrowserConfiguration.categories;
+  browserState.companies = persistedBrowserConfiguration.companies;
+  if (persistedBrowserConfiguration.currentUser) browserState.currentUser = persistedBrowserConfiguration.currentUser;
+}
 const browserActivity: MyActivity = { calls: [
   { id: 103, companyId: "downtown-cab", displayName: "Downtown Cab Co.", number: "5550100", result: "completed", created_at: "2026-08-01T19:42:00Z" },
   { id: 102, companyId: "pillbox", displayName: "Pillbox Medical Center", number: "912", result: "answered", created_at: "2026-07-30T08:15:00Z" },
   { id: 101, companyId: "bennys", displayName: "Benny's Motorworks", number: "5550200", result: "missed", created_at: "2026-07-27T16:03:00Z" }
 ], requests: [] };
-const requestSettings: RequestSettings = { label: "Ride Request", createLabel: "Request a ride", templateIds: ["immediate_pickup", "general"], phaseIds: ["accepted", "on_the_way", "picked_up", "ride_active", "completed"], navigationOnAccept: "automatic", defaultPhone: "5550199", requestNumbers: [{ id: "taxi-main", label: "Dispatch" }], templates: [
+const requestSettings: RequestSettings = { label: "Ride Request", createLabel: "Request a ride", templateIds: ["immediate_pickup"], phaseIds: ["accepted", "on_the_way", "picked_up", "ride_active", "completed"], navigationOnAccept: "automatic", defaultPhone: "5550199", requestNumbers: [{ id: "taxi-main", label: "Dispatch" }], templates: [
   { id: "immediate_pickup", kind: "specialized", name: "Pickup", fields: [{ id: "location", type: "location", label: "Pickup location", required: true, maxLength: 150 }, { id: "people", type: "people", label: "Passengers", required: true, minimum: 1, maximum: 20 }, { id: "phone", type: "phone", label: "Phone number", required: false, maxLength: 32 }] },
-  { id: "general", kind: "general", name: "General request", fields: [{ id: "subject", type: "text", label: "Subject", required: true, maxLength: 120 }, { id: "description", type: "description", label: "Description", required: true, maxLength: 1000 }, { id: "phone", type: "phone", label: "Phone number", required: false, maxLength: 32 }] },
 ], phases: [{ id: "accepted", name: "Accepted" }, { id: "on_the_way", name: "On the way" }, { id: "picked_up", name: "Passenger picked up" }, { id: "ride_active", name: "Ride active" }, { id: "completed", name: "Completed" }], numberId: "taxi-main" };
 const browserCitizenConversations: InboxConversation[] = [{ id: 501, companyId: "downtown-cab", companyName: "Downtown Cab Co.", logo: "./icon.svg", numberId: "taxi-main", numberLabel: "Dispatch", lastMessage: "Your driver is on the way.", lastMessageAt: "2026-08-02T18:35:00Z", unreadCount: 0 }];
 const browserMessages: InboxMessage[] = [{ id: 1, senderNumber: "5550199", senderType: "citizen", body: "Can I get a pickup at Legion Square?", attachments: [], reactions: [{ emoji: "👍", count: 2, mine: false }], createdAt: "2026-08-02T18:30:00Z" }, { id: 2, senderNumber: "5550100", senderType: "employee", body: "Your driver is on the way.", attachments: [], createdAt: "2026-08-02T18:35:00Z" }];
-const browserWorkspace: CompanyWorkspace = { companyId: "downtown-cab", requestSettings, numberEligibility: [{ numberId: "taxi-main", label: "Dispatch", people: [{ source: 12, name: "Jordan Reed", eligible: true }, { source: 24, name: "Avery Brooks", eligible: true }, { source: 31, name: "Mika Hart", eligible: true }] }], numberSubscriptions: [{ numberId: "taxi-main", label: "Dispatch", enabled: true, callsEnabled: true, inboxEnabled: true, requestsEnabled: true, staffingMode: "self_select", authorized: true, canSubscribe: true, subscribed: true }], requests: [{ id: 701, companyId: "downtown-cab", companyName: "Downtown Cab Co.", templateId: "immediate_pickup", requestLabel: "Ride Request", status: "pending", payload: { location: "Legion Square", people: 2 }, createdAt: "2026-08-02T19:10:00Z" }], conversations: [{ id: 501, numberId: "taxi-main", numberLabel: "Dispatch", externalNumber: "5550199", lastMessage: "Can I get a pickup at Legion Square?", lastMessageAt: "2026-08-02T18:30:00Z", unreadCount: 2 }], calls: [{ id: 301, callerNumber: "5550188", numberId: "taxi-main", status: "completed", created_at: "2026-08-02T17:20:00Z" }] };
-const jobs: Record<string, string> = { pillbox: "ambulance", "downtown-cab": "taxi", bennys: "mechanic" };
+const browserWorkspace: CompanyWorkspace = { companyId: "downtown-cab", requestSettings, numberStates: [{ numberId: "taxi-main", label: "Dispatch", enabled: true, callsEnabled: true, inboxEnabled: true, requestsEnabled: true, canSelectForDispatch: true, selectedForDispatch: true }], requests: [{ id: 701, companyId: "downtown-cab", companyName: "Downtown Cab Co.", templateId: "immediate_pickup", requestLabel: "Ride Request", status: "pending", payload: { location: "Legion Square", people: 2 }, createdAt: "2026-08-02T19:10:00Z" }], conversations: [{ id: 501, numberId: "taxi-main", numberLabel: "Dispatch", externalNumber: "5550199", lastMessage: "Can I get a pickup at Legion Square?", lastMessageAt: "2026-08-02T18:30:00Z", unreadCount: 2 }], calls: [{ id: 301, callerNumber: "5550188", numberId: "taxi-main", status: "completed", created_at: "2026-08-02T17:20:00Z" }] };
+const browserWorkspaceCompany = browserState.companies.find((company) => company.id === browserWorkspace.companyId);
+if (browserWorkspaceCompany) {
+  const employee = browserState.currentUser.employment?.employee;
+  browserWorkspace.numberStates = browserWorkspaceCompany.numbers.map((number) => ({ numberId: number.id, label: number.label, enabled: number.enabled, callsEnabled: number.callsEnabled, inboxEnabled: number.inboxEnabled, requestsEnabled: number.requestsEnabled, canSelectForDispatch: employee?.dispatchEnabled === true && number.enabled, selectedForDispatch: employee?.activeNumberIds?.includes(number.id) === true }));
+  browserWorkspace.requestSettings.requestNumbers = browserWorkspaceCompany.numbers.filter((number) => number.enabled && number.requestsEnabled).map((number) => ({ id: number.id, label: number.label }));
+}
+const jobs: Record<string, string> = { pillbox: "ambulance", "downtown-cab": "taxi", bennys: "mechanic", ...persistedBrowserConfiguration?.jobs };
+function persistBrowserConfiguration() {
+  try {
+    window.localStorage.setItem(browserStorageKey, JSON.stringify({ settings: browserState.settings, companies: browserState.companies, categories: browserState.categories, currentUser: browserState.currentUser, jobs } satisfies BrowserConfiguration));
+  } catch {
+    // Browser preview persistence is optional when storage is unavailable.
+  }
+}
 function makeAdminState(): AdminState {
-  return { framework: "browser", categories: structuredClone(browserState.categories), settings: structuredClone(browserState.settings), companies: browserState.companies.map((company) => ({ ...structuredClone(company), job: jobs[company.id] ?? company.id } as AdminCompany)), numberEligibility: Object.fromEntries(browserState.companies.map((company) => [company.id, company.id === browserWorkspace.companyId ? structuredClone(browserWorkspace.numberEligibility || []) : []])) };
+  return { framework: "browser", categories: structuredClone(browserState.categories), settings: structuredClone(browserState.settings), companies: browserState.companies.map((company) => ({ ...structuredClone(company), job: jobs[company.id] ?? company.id } as AdminCompany)) };
 }
 
 export function getInitialState() {

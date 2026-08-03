@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.2.11-phase2
+
+- Remove administrative line-staffing modes and per-number employee allow-lists.
+- Let active dispatchers select individual enabled numbers for the current duty session, with all lines selected when dispatch starts.
+- Keep enabled shared inboxes available to on-duty company employees independently of dispatch line selection.
+- Add migration 008 to remove obsolete staffing, eligibility and persistent subscription storage.
+
+## 0.2.10-phase2
+
+- Remove general request templates; general contact now belongs exclusively to company messages.
+- Expose requests only for categories with specialized structured templates.
+- Hide citizen request actions and disable admin/leader request toggles when a category has no specialized request definition.
+- Reject request-option loading for categories without specialized templates instead of returning an empty or generic workflow.
+
 ## 0.2.9-phase2
 
 - Show category-specific request templates before the general request option.

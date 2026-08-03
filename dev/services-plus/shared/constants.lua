@@ -3,7 +3,7 @@ ServicesPlus = ServicesPlus or {}
 ServicesPlus.Constants = {
     ResourceName = "services-plus",
     AppIdentifier = "services-plus",
-    ApiVersion = 3,
+    ApiVersion = 4,
     MessageReactions = {
         ["👍"] = true, ["❤️"] = true, ["😂"] = true, ["😮"] = true, ["😢"] = true,
         ["🚗"] = true, ["💵"] = true, ["🚨"] = true, ["🔧"] = true, ["🍔"] = true
@@ -23,12 +23,6 @@ ServicesPlus.Constants = {
     DistributionModes = {
         ring_all = true,
         random = true,
-        dispatch_only = true
-    },
-    StaffingModes = {
-        all = true,
-        self_select = true,
-        restricted = true,
         dispatch_only = true
     },
     NavigationModes = {

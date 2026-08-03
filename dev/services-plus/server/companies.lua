@@ -62,6 +62,7 @@ function Companies.GetCategoryList(locale)
             name = category.name[locale] or category.name.en,
             names = category.name,
             keywords = copyArray(category.keywords),
+            hasRequestTemplates = #(ServicesPlus.RequestDefinitions.categoryTemplates[id] or {}) > 0,
             requestCompetition = categorySettings[id] and categorySettings[id].requestCompetition == true or false
         }
     end
@@ -116,9 +117,7 @@ function Companies.ToPublic(company)
             inboxEnabled = number.inboxEnabled,
             requestsEnabled = number.requestsEnabled,
             publicVisible = number.publicVisible,
-            staffingMode = number.staffingMode,
-            available = ServicesPlus.Employees and ServicesPlus.Employees.NumberHasCoverage(company.id, number, true) or false,
-            restricted = number.staffingMode == "restricted" or #(number.eligibleIdentifiers or {}) > 0
+            available = ServicesPlus.Employees and ServicesPlus.Employees.NumberHasCoverage(company.id, number, true) or false
         }
     end
     return {
@@ -135,29 +134,13 @@ function Companies.ToPublic(company)
         available = employeeCount > 0,
         employeeCount = employeeCount,
         requestsEnabled = company.requestsEnabled,
+        hasRequestTemplates = #(ServicesPlus.RequestDefinitions.categoryTemplates[company.categoryId] or {}) > 0,
         messagesEnabled = company.messagesEnabled,
         dispatchMode = company.dispatchMode,
         primaryNumber = (function() for _, number in ipairs(numbers) do if number.enabled and number.callsEnabled and number.publicVisible then return number.number end end end)(),
         numbers = numbers,
         version = version
     }
-end
-
-function Companies.SetNumberEligibility(companyId, numberId, identifier, enabled)
-    local company = cache[companyId]
-    if not company then return false end
-    for _, number in ipairs(company.numbers) do
-        if number.id == numberId then
-            ServicesPlus.Repository.SetNumberEmployee(numberId, identifier, enabled)
-            if not enabled then ServicesPlus.Repository.SetNumberSubscription(numberId, identifier, false) end
-            local nextValues = {}; local found = false
-            for _, value in ipairs(number.eligibleIdentifiers or {}) do if value == identifier then found = true elseif value ~= identifier then nextValues[#nextValues + 1] = value end end
-            if enabled then nextValues[#nextValues + 1] = identifier end
-            number.eligibleIdentifiers = nextValues
-            return true
-        end
-    end
-    return false
 end
 
 function Companies.UpdateNumberOperations(companyId, updates)
@@ -177,7 +160,6 @@ function Companies.UpdateNumberOperations(companyId, updates)
         number.inboxEnabled = update.inboxEnabled
         number.requestsEnabled = update.requestsEnabled
         number.publicVisible = update.publicVisible
-        number.staffingMode = update.staffingMode
         number.distribution = update.distribution
     end
     version = version + 1

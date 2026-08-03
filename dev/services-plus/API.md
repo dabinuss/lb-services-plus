@@ -11,8 +11,8 @@ Server events are request/response based and return through `services-plus:clien
 | `updateStatus` | NUI to client to server | `{ status: "available" | "on_break" | "occupied" }` | On-duty employee | 15/30 sec | Updates employee status; `occupied` suppresses call and request offers |
 | `toggleDispatch` | NUI to client to server | `{ enabled }` | On-duty employee | 10/30 sec | Updates dispatch preference |
 | `updateCompanyOperations` | NUI to client to server | `{ companyId, patch }` | Company leader | 8/min | Persists request/message toggles and dispatch mode |
-| `updateNumberOperations` | NUI to client to server | `{ numbers }` | Company leader | 8/min | Persists operational flags and staffing mode without changing number identity |
-| `toggleNumberSubscription` | NUI to client to server | `{ numberId, enabled }` | Authorized on-duty employee | 20/min | Selects or releases a self-selectable company line |
+| `updateNumberOperations` | NUI to client to server | `{ numbers }` | Company leader | 8/min | Persists operational flags and distribution without changing number identity |
+| `toggleDispatchLine` | NUI to client to server | `{ numberId, enabled }` | Active dispatcher | 20/min | Selects or releases a number for the current dispatch session |
 | `startCompanyCall` | NUI to client to server | `{ companyId, numberId? }` | Phone user | 8/30 sec | Records an owned call attempt and returns an authorized number |
 | `getEmployeeContact` | NUI to client to server | `{ targetSource }` | Active colleague | 10/30 sec | Resolves an equipped number after same-company validation |
 | `createRequest` | NUI to client to server | `{ companyId, templateId, values, locale }` | Phone user | 4/min | Creates an owned pending request and captures server-side navigation coordinates when configured |
@@ -23,12 +23,11 @@ Server events are request/response based and return through `services-plus:clien
 | `adminUpdateSettings` | NUI to client to server | `{ settings }` | Server administrator | 8/min | Persists global Services+ switches |
 | `adminUpdateCategory` | NUI to client to server | `{ categoryId, requestCompetition }` | Server administrator | 12/min | Persists category-wide cross-company request competition |
 | `getRequestOptions` | NUI to client to server | `{ companyId, locale }` | Phone user | 15/min | Resolves category and company request configuration |
-| `registerIncomingCall` | Client to server | `{ callToken, number }` | Eligible on-duty employee | 20/30 sec | Registers a custom-number offer in the queue |
-| `acceptCall` | NUI to client to server | `{ id, callToken }` | Currently eligible employee | 8/30 sec | Atomically assigns call and sets Busy |
+| `registerIncomingCall` | Client to server | `{ callToken, number }` | Offered on-duty employee | 20/30 sec | Registers a custom-number offer in the queue |
+| `acceptCall` | NUI to client to server | `{ id, callToken }` | Currently offered employee | 8/30 sec | Atomically assigns call and sets Busy |
 | `declineCall` | NUI to client to server | `{ id }` | Offered employee | 12/30 sec | Removes employee from the current offer |
 | `endCustomCall` | Client to server | `{ callToken }` | Registered call recipient | 12/30 sec | Ends queue ownership and restores status |
-| `getCompanyWorkspace` | NUI to client to server | `{ cursor?, limit? }` | On-duty employee | 15/min | Loads authorized inboxes, requests and call history |
-| `updateNumberEligibility` | NUI to client to server | `{ numberId, targetSource, enabled }` | Company leader | 20/min | Persists number-level employee access |
+| `getCompanyWorkspace` | NUI to client to server | `{ cursor?, limit? }` | On-duty employee | 15/min | Loads enabled inboxes, requests and call history |
 | `acceptRequest` | NUI to client to server | `{ id }` | Available on-duty employee | 8/30 sec | Atomically assigns request and sets Busy |
 | `declineRequest` | NUI to client to server | `{ id }` | On-duty employee | 12/30 sec | Records personal decline |
 | `transitionRequest` | NUI to client to server | `{ id, phaseId }` | Assigned employee | 15/30 sec | Performs next allowed request transition |
@@ -37,7 +36,7 @@ Server events are request/response based and return through `services-plus:clien
 | `deleteRequest` | NUI to client to server | `{ id }` | Active dispatch of owning company | 10/min | Soft-deletes and audits a company request |
 | `updateRequestSettings` | NUI to client to server | `{ settings }` | Company leader | 6/min | Persists controlled labels/templates/fields/phases, target number and navigation mode |
 | `sendCitizenMessage` | NUI to client to server | Message payload | Phone user | 12/min | Sends via LB Phone and stores in target number inbox |
-| `sendEmployeeMessage` | NUI to client to server | Conversation message payload | Number-eligible employee | 20/min | Replies through the company number |
+| `sendEmployeeMessage` | NUI to client to server | Conversation message payload | On-duty company employee with enabled inbox | 20/min | Replies through the company number |
 | `getCitizenInbox` | NUI to client to server | `{ cursor?, limit? }` | Phone user | 15/min | Loads caller-owned company conversations |
 | `getConversationMessages` | NUI to client to server | `{ conversationId, citizen, cursor?, limit? }` | Conversation participant | 20/min | Loads a validated conversation page and updates read state |
 | `reactToMessage` | NUI to client to server | `{ messageId, emoji, citizen }` | Conversation participant | 30/min | Toggles one allow-listed reaction for the current participant |

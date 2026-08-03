@@ -23,29 +23,13 @@ local function nextSequence()
     return sequence
 end
 
-local function numberAuthorized(employee, number)
-    if number.staffingMode == "restricted" and #(number.eligibleIdentifiers or {}) == 0 then return false end
-    if #(number.eligibleIdentifiers or {}) == 0 then return true end
-    for _, identifier in ipairs(number.eligibleIdentifiers) do
-        if identifier == employee.identifier then return true end
-    end
-    return false
-end
-
-
-function Employees.IsNumberAuthorized(employee, number)
-    return employee ~= nil and number ~= nil and numberAuthorized(employee, number)
-end
-
 function Employees.CanUseNumber(employee, number)
-    if not employee or not number or not number.enabled or not numberAuthorized(employee, number) then return false end
+    if not employee or not number or not number.enabled then return false end
+    if number.distribution == "dispatch_only" and not employee.dispatchEnabled then return false end
     if employee.dispatchEnabled then
         return not employee.dispatchNumberSelections or employee.dispatchNumberSelections[number.id] ~= false
     end
-    local mode = number.staffingMode or "all"
-    if mode == "all" then return true end
-    if mode == "dispatch_only" then return false end
-    return employee.numberSubscriptions and employee.numberSubscriptions[number.id] == true
+    return true
 end
 
 function Employees.GetActiveNumberIds(employee)
@@ -183,7 +167,6 @@ function Employees.EnterDuty(source)
         dispatchForced = false,
         isLeader = ServicesPlus.Bridge.IsLeader(player, company) or (settings and settings.explicit_leader == 1),
         explicitLeader = settings and settings.explicit_leader == 1 or false,
-        numberSubscriptions = ServicesPlus.Repository.GetNumberSubscriptions(player.identifier, company.id),
         activeCall = nil,
         activeRequest = nil,
         version = nextSequence()
@@ -249,22 +232,16 @@ function Employees.ToggleDispatch(source, enabled)
     return true, publicEmployee(employee)
 end
 
-function Employees.ToggleNumberSubscription(source, numberId, enabled)
+function Employees.ToggleDispatchLine(source, numberId, enabled)
     local employee = dutyBySource[source]
     local company = employee and ServicesPlus.Companies.Get(employee.companyId) or nil
     if not employee or not company or type(enabled) ~= "boolean" then return false, "not_on_duty" end
     local number
     for _, candidate in ipairs(company.numbers) do if candidate.id == numberId then number = candidate break end end
     if not number or not number.enabled then return false, "number_unavailable" end
-    if not numberAuthorized(employee, number) then return false, "forbidden" end
-    if employee.dispatchEnabled then
-        employee.dispatchNumberSelections = employee.dispatchNumberSelections or {}
-        employee.dispatchNumberSelections[number.id] = enabled
-    else
-        if number.staffingMode ~= "self_select" and number.staffingMode ~= "restricted" then return false, "number_unavailable" end
-        if not ServicesPlus.Repository.SetNumberSubscription(number.id, employee.identifier, enabled) then return false, "subscription_failed" end
-        employee.numberSubscriptions[number.id] = enabled or nil
-    end
+    if not employee.dispatchEnabled then return false, "dispatch_required" end
+    employee.dispatchNumberSelections = employee.dispatchNumberSelections or {}
+    employee.dispatchNumberSelections[number.id] = enabled
     employee.version = nextSequence()
     sendToCompany(employee.companyId, "employee.updated", publicEmployee(employee))
     if ServicesPlus.Calls then ServicesPlus.Calls.RevalidateEmployee(source) end

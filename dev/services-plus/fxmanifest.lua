@@ -3,7 +3,7 @@ game "gta5"
 
 author "Services+"
 description "Company communication and request workflows for LB Phone"
-version "0.2.9-phase2"
+version "0.2.11-phase2"
 
 lua54 "yes"
 

@@ -39,10 +39,10 @@ function Repository.SeedConfiguredCompanies()
         for _, value in ipairs(values) do companyValues[#companyValues + 1] = value end
 
         for _, number in ipairs(company.numbers or {}) do
-            numberRows[#numberRows + 1] = "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            numberRows[#numberRows + 1] = "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
             local row = { number.id, company.id, number.label, number.number, number.distribution, number.sharedInbox ~= false and 1 or 0,
                 number.enabled ~= false and 1 or 0, number.callsEnabled ~= false and 1 or 0, number.inboxEnabled ~= false and 1 or 0,
-                number.requestsEnabled ~= false and 1 or 0, number.publicVisible ~= false and 1 or 0, number.staffingMode or "all" }
+                number.requestsEnabled ~= false and 1 or 0, number.publicVisible ~= false and 1 or 0 }
             for _, value in ipairs(row) do numberValues[#numberValues + 1] = value end
         end
     end
@@ -57,7 +57,7 @@ function Repository.SeedConfiguredCompanies()
     if #numberRows > 0 then
         MySQL.query.await(([=[
             INSERT INTO `services_plus_company_numbers`
-                (`id`, `company_id`, `label`, `number`, `distribution`, `shared_inbox`, `enabled`, `calls_enabled`, `inbox_enabled`, `requests_enabled`, `public_visible`, `staffing_mode`)
+                (`id`, `company_id`, `label`, `number`, `distribution`, `shared_inbox`, `enabled`, `calls_enabled`, `inbox_enabled`, `requests_enabled`, `public_visible`)
             VALUES %s
             ON DUPLICATE KEY UPDATE `company_id` = VALUES(`company_id`)
         ]=]):format(table.concat(numberRows, ",")), numberValues)
@@ -74,12 +74,10 @@ function Repository.LoadCompanies()
     ]=], { Config.MaxCompanies }) or {}
     local numbers = MySQL.query.await([=[
         SELECT `id`, `company_id`, `label`, `number`, `distribution`, `shared_inbox`, `enabled`, `calls_enabled`,
-               `inbox_enabled`, `requests_enabled`, `public_visible`, `staffing_mode`
+               `inbox_enabled`, `requests_enabled`, `public_visible`
         FROM `services_plus_company_numbers`
         ORDER BY `company_id`, `label`, `id`
     ]=]) or {}
-    local assignments = MySQL.query.await("SELECT `number_id`, `identifier` FROM `services_plus_number_employees`") or {}
-
     local byId = {}
     for _, row in ipairs(companies) do
         local company = {
@@ -100,7 +98,6 @@ function Repository.LoadCompanies()
         }
         byId[company.id] = company
     end
-    local numberById = {}
     for _, row in ipairs(numbers) do
         local company = byId[row.company_id]
         if company then
@@ -114,17 +111,10 @@ function Repository.LoadCompanies()
                 callsEnabled = row.calls_enabled == 1,
                 inboxEnabled = row.inbox_enabled == 1,
                 requestsEnabled = row.requests_enabled == 1,
-                publicVisible = row.public_visible == 1,
-                staffingMode = row.staffing_mode or "all",
-                eligibleIdentifiers = {}
+                publicVisible = row.public_visible == 1
             }
             company.numbers[#company.numbers + 1] = number
-            numberById[number.id] = number
         end
-    end
-    for _, assignment in ipairs(assignments) do
-        local number = numberById[assignment.number_id]
-        if number then number.eligibleIdentifiers[#number.eligibleIdentifiers + 1] = assignment.identifier end
     end
     return byId
 end
@@ -145,47 +135,17 @@ function Repository.SaveDispatchPreference(identifier, companyId, enabled)
     ]=], { identifier, companyId, enabled and 1 or 0 })
 end
 
-function Repository.SetNumberEmployee(numberId, identifier, enabled)
-    if enabled then
-        MySQL.insert.await("INSERT IGNORE INTO `services_plus_number_employees` (`number_id`, `identifier`) VALUES (?, ?)", { numberId, identifier })
-    else
-        MySQL.update.await("DELETE FROM `services_plus_number_employees` WHERE `number_id` = ? AND `identifier` = ?", { numberId, identifier })
-    end
-    return true
-end
-
-function Repository.GetNumberSubscriptions(identifier, companyId)
-    local rows = MySQL.query.await([=[
-        SELECT s.`number_id` FROM `services_plus_number_subscriptions` s
-        JOIN `services_plus_company_numbers` n ON n.`id` = s.`number_id`
-        WHERE s.`identifier` = ? AND n.`company_id` = ?
-    ]=], { identifier, companyId }) or {}
-    local result = {}
-    for _, row in ipairs(rows) do result[row.number_id] = true end
-    return result
-end
-
-function Repository.SetNumberSubscription(numberId, identifier, enabled)
-    if enabled then
-        return MySQL.update.await([=[
-            INSERT INTO `services_plus_number_subscriptions` (`number_id`, `identifier`) VALUES (?, ?)
-            ON DUPLICATE KEY UPDATE `updated_at` = CURRENT_TIMESTAMP
-        ]=], { numberId, identifier }) ~= nil
-    end
-    return MySQL.update.await("DELETE FROM `services_plus_number_subscriptions` WHERE `number_id` = ? AND `identifier` = ?", { numberId, identifier }) ~= nil
-end
-
 function Repository.UpdateNumberOperations(companyId, numbers)
     local queries = {}
     for _, number in ipairs(numbers or {}) do
         queries[#queries + 1] = {
             query = [=[
                 UPDATE `services_plus_company_numbers`
-                SET `enabled` = ?, `calls_enabled` = ?, `inbox_enabled` = ?, `requests_enabled` = ?, `public_visible` = ?, `staffing_mode` = ?, `distribution` = ?
+                SET `enabled` = ?, `calls_enabled` = ?, `inbox_enabled` = ?, `requests_enabled` = ?, `public_visible` = ?, `distribution` = ?
                 WHERE `id` = ? AND `company_id` = ?
             ]=],
             values = { number.enabled and 1 or 0, number.callsEnabled and 1 or 0, number.inboxEnabled and 1 or 0,
-                number.requestsEnabled and 1 or 0, number.publicVisible and 1 or 0, number.staffingMode, number.distribution, number.id, companyId }
+                number.requestsEnabled and 1 or 0, number.publicVisible and 1 or 0, number.distribution, number.id, companyId }
         }
     end
     return #queries == 0 or MySQL.transaction.await(queries)
@@ -234,12 +194,12 @@ function Repository.SaveCompany(company)
         local values = {}
         local ids = {}
         for index, number in ipairs(company.numbers) do
-            rows[#rows + 1] = "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            rows[#rows + 1] = "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
             local numberId = number.id or ("%s-%d"):format(company.id, index)
             ids[#ids + 1] = numberId
             local row = { numberId, company.id, number.label, number.number, number.distribution, number.sharedInbox and 1 or 0,
                 number.enabled and 1 or 0, number.callsEnabled and 1 or 0, number.inboxEnabled and 1 or 0,
-                number.requestsEnabled and 1 or 0, number.publicVisible and 1 or 0, number.staffingMode }
+                number.requestsEnabled and 1 or 0, number.publicVisible and 1 or 0 }
             for _, value in ipairs(row) do values[#values + 1] = value end
         end
         local deleteValues = { company.id }
@@ -251,12 +211,12 @@ function Repository.SaveCompany(company)
         queries[#queries + 1] = {
             query = ([=[
                 INSERT INTO `services_plus_company_numbers`
-                    (`id`, `company_id`, `label`, `number`, `distribution`, `shared_inbox`, `enabled`, `calls_enabled`, `inbox_enabled`, `requests_enabled`, `public_visible`, `staffing_mode`)
+                    (`id`, `company_id`, `label`, `number`, `distribution`, `shared_inbox`, `enabled`, `calls_enabled`, `inbox_enabled`, `requests_enabled`, `public_visible`)
                 VALUES %s
                 ON DUPLICATE KEY UPDATE `company_id` = VALUES(`company_id`), `label` = VALUES(`label`), `number` = VALUES(`number`),
                   `distribution` = VALUES(`distribution`), `shared_inbox` = VALUES(`shared_inbox`), `enabled` = VALUES(`enabled`),
                   `calls_enabled` = VALUES(`calls_enabled`), `inbox_enabled` = VALUES(`inbox_enabled`), `requests_enabled` = VALUES(`requests_enabled`),
-                  `public_visible` = VALUES(`public_visible`), `staffing_mode` = VALUES(`staffing_mode`)
+                  `public_visible` = VALUES(`public_visible`)
             ]=]):format(table.concat(rows, ",")),
             values = values
         }

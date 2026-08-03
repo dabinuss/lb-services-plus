@@ -95,6 +95,8 @@ function Api.updateCompanyOperations(source, payload)
         or not ServicesPlus.Constants.DistributionModes[patch.dispatchMode] then
         return ServicesPlus.Error("validation_failed", "Invalid operational settings.", false)
     end
+    local company = ServicesPlus.Companies.Get(payload.companyId)
+    if #(ServicesPlus.RequestDefinitions.categoryTemplates[company.categoryId] or {}) == 0 then patch.requestsEnabled = false end
 
     local success, result = ServicesPlus.Companies.UpdateOperations(payload.companyId, patch)
     if not success then return ServicesPlus.Error(result, "The company could not be updated.", true) end
@@ -118,13 +120,14 @@ function Api.updateNumberOperations(source, payload)
         return ServicesPlus.Error("forbidden", "Leader access is required.", false)
     end
     local clean = {}
+    local requestsAvailable = #(ServicesPlus.RequestDefinitions.categoryTemplates[company.categoryId] or {}) > 0
     for _, number in ipairs(updates) do
         if type(number) ~= "table" or type(number.id) ~= "string" or type(number.enabled) ~= "boolean"
             or type(number.callsEnabled) ~= "boolean" or type(number.inboxEnabled) ~= "boolean" or type(number.requestsEnabled) ~= "boolean"
-            or type(number.publicVisible) ~= "boolean" or not ServicesPlus.Constants.StaffingModes[number.staffingMode]
-            or not ServicesPlus.Constants.DistributionModes[number.distribution] then
+            or type(number.publicVisible) ~= "boolean" or not ServicesPlus.Constants.DistributionModes[number.distribution] then
             return ServicesPlus.Error("validation_failed", "Invalid number operations.", false)
         end
+        if not requestsAvailable then number.requestsEnabled = false end
         clean[#clean + 1] = number
     end
     local success, result = ServicesPlus.Companies.UpdateNumberOperations(company.id, clean)
@@ -137,12 +140,12 @@ function Api.updateNumberOperations(source, payload)
     return ServicesPlus.Ok(result)
 end
 
-function Api.toggleNumberSubscription(source, payload)
+function Api.toggleDispatchLine(source, payload)
     ServicesPlus.Employees.ValidateEmployment(source)
     local numberId = type(payload) == "table" and payload.numberId or nil
     local enabled = type(payload) == "table" and payload.enabled or nil
     if type(numberId) ~= "string" or type(enabled) ~= "boolean" then return ServicesPlus.Error("invalid_payload", "Invalid line subscription.", false) end
-    local success, result = ServicesPlus.Employees.ToggleNumberSubscription(source, numberId, enabled)
+    local success, result = ServicesPlus.Employees.ToggleDispatchLine(source, numberId, enabled)
     return success and ServicesPlus.Ok(result) or ServicesPlus.Error(result, "The line subscription could not be changed.", false)
 end
 
@@ -222,6 +225,7 @@ function Api.getRequestOptions(source, payload)
     local company = type(payload) == "table" and ServicesPlus.Companies.Get(payload.companyId) or nil
     if not company or not company.requestsEnabled then return ServicesPlus.Error("requests_disabled", "Requests are not enabled for this company.", false) end
     local settings = ServicesPlus.Requests.ResolveSettings(company, payload.locale == "de" and "de" or "en")
+    if #settings.templates == 0 then return ServicesPlus.Error("requests_disabled", "No specialized requests are configured for this category.", false) end
     local phoneNumber = ServicesPlus.Bridge.GetEquippedPhoneNumber(source)
     settings.defaultPhone = phoneNumber and tostring(phoneNumber) or ""
     return ServicesPlus.Ok(settings)
@@ -269,30 +273,17 @@ function Api.getCompanyWorkspace(source, payload)
         local owner = ServicesPlus.Companies.Get(request.companyId or request.company_id)
         request.phases = owner and ServicesPlus.Requests.ResolveSettings(owner, type(payload) == "table" and payload.locale == "de" and "de" or "en").phases or {}
     end
-    local numberEligibility = {}
-    local numberSubscriptions = {}
+    local numberStates = {}
     for _, number in ipairs(company.numbers) do
-        local authorized = ServicesPlus.Employees.IsNumberAuthorized(employee, number)
-        local restricted = number.staffingMode == "restricted" or #(number.eligibleIdentifiers or {}) > 0
-        local people = {}
-        for _, member in ipairs(ServicesPlus.Employees.GetPublicForCompany(company.id)) do
-            local internal = ServicesPlus.Employees.Get(member.source)
-            local eligible = not restricted
-            if restricted and internal then for _, identifier in ipairs(number.eligibleIdentifiers) do if identifier == internal.identifier then eligible = true break end end end
-            people[#people + 1] = { source = member.source, name = member.name, eligible = eligible }
-        end
-        numberEligibility[#numberEligibility + 1] = { numberId = number.id, label = number.label, people = people }
-        numberSubscriptions[#numberSubscriptions + 1] = {
+        numberStates[#numberStates + 1] = {
             numberId = number.id,
             label = number.label,
             enabled = number.enabled,
             callsEnabled = number.callsEnabled,
             inboxEnabled = number.inboxEnabled and number.sharedInbox,
             requestsEnabled = number.requestsEnabled,
-            staffingMode = number.staffingMode,
-            authorized = authorized,
-            canSubscribe = authorized and (employee.dispatchEnabled or number.staffingMode == "self_select" or number.staffingMode == "restricted"),
-            subscribed = ServicesPlus.Employees.CanUseNumber(employee, number)
+            canSelectForDispatch = employee.dispatchEnabled,
+            selectedForDispatch = employee.dispatchEnabled and ServicesPlus.Employees.CanUseNumber(employee, number)
         }
     end
     return ServicesPlus.Ok({
@@ -301,43 +292,8 @@ function Api.getCompanyWorkspace(source, payload)
         requests = visibleRequests,
         calls = ServicesPlus.Repository.GetCompanyCalls(employee.companyId, cursor, limit),
         requestSettings = ServicesPlus.Requests.ResolveSettings(company, type(payload) == "table" and payload.locale == "de" and "de" or "en"),
-        numberEligibility = numberEligibility,
-        numberSubscriptions = numberSubscriptions
+        numberStates = numberStates
     })
-end
-
-function Api.updateNumberEligibility(source, payload)
-    local leader = ServicesPlus.Employees.Get(source)
-    local targetSource = type(payload) == "table" and tonumber(payload.targetSource) or nil
-    local enabled = type(payload) == "table" and payload.enabled or nil
-    local numberId = type(payload) == "table" and payload.numberId or nil
-    local companyId = type(payload) == "table" and payload.companyId or nil
-    local target = targetSource and ServicesPlus.Employees.Get(targetSource) or nil
-    local isAdmin = ServicesPlus.Bridge.IsServerAdmin(source)
-    local company = isAdmin and type(companyId) == "string" and ServicesPlus.Companies.Get(companyId)
-        or leader and ServicesPlus.Companies.Get(leader.companyId) or nil
-    if not company or not target or target.companyId ~= company.id or type(numberId) ~= "string" or type(enabled) ~= "boolean"
-        or (not isAdmin and (not leader or not leader.isLeader)) then
-        return ServicesPlus.Error("forbidden", "Leader or administrator access and an active company employee are required.", false)
-    end
-    local selected
-    for _, number in ipairs(company.numbers) do if number.id == numberId then selected = number break end end
-    if not selected then return ServicesPlus.Error("number_unavailable", "The company number was not found.", false) end
-    if not enabled and #(selected.eligibleIdentifiers or {}) == 0 then
-        for _, member in ipairs(ServicesPlus.Employees.GetPublicForCompany(company.id)) do
-            local internal = ServicesPlus.Employees.Get(member.source)
-            if internal and internal.identifier ~= target.identifier then ServicesPlus.Companies.SetNumberEligibility(company.id, selected.id, internal.identifier, true) end
-        end
-    else
-        ServicesPlus.Companies.SetNumberEligibility(company.id, selected.id, target.identifier, enabled)
-    end
-    if not enabled and (selected.staffingMode == "self_select" or selected.staffingMode == "restricted") then
-        ServicesPlus.Employees.ToggleNumberSubscription(targetSource, selected.id, false)
-    end
-    ServicesPlus.Calls.RevalidateEmployee(targetSource)
-    ServicesPlus.Employees.SyncPhoneNumbers(targetSource)
-    Api.BroadcastCompany(company.id)
-    return ServicesPlus.Ok({ numberId = selected.id, targetSource = targetSource, enabled = enabled })
 end
 
 function Api.acceptRequest(source, payload)
@@ -465,13 +421,14 @@ local function validateAdminCompany(input)
     local numbers = {}
     for _, number in ipairs(input.numbers) do
         if type(number) ~= "table" or not validateString(number.label, 1, 80) or not validateString(number.number, 1, 32)
-            or not ServicesPlus.Constants.DistributionModes[number.distribution] or not ServicesPlus.Constants.StaffingModes[number.staffingMode]
+            or not ServicesPlus.Constants.DistributionModes[number.distribution]
             or type(number.sharedInbox) ~= "boolean" or type(number.enabled) ~= "boolean" or type(number.callsEnabled) ~= "boolean"
             or type(number.inboxEnabled) ~= "boolean" or type(number.requestsEnabled) ~= "boolean" or type(number.publicVisible) ~= "boolean" then return nil end
         if number.id ~= nil and (not validateString(number.id, 2, 64) or not number.id:match("^[a-z0-9][a-z0-9_-]+$")) then return nil end
+        local requestsAvailable = #(ServicesPlus.RequestDefinitions.categoryTemplates[input.categoryId] or {}) > 0
         numbers[#numbers + 1] = { id = number.id, label = number.label, number = number.number, distribution = number.distribution, sharedInbox = number.sharedInbox,
-            enabled = number.enabled, callsEnabled = number.callsEnabled, inboxEnabled = number.inboxEnabled, requestsEnabled = number.requestsEnabled,
-            publicVisible = number.publicVisible, staffingMode = number.staffingMode }
+            enabled = number.enabled, callsEnabled = number.callsEnabled, inboxEnabled = number.inboxEnabled, requestsEnabled = requestsAvailable and number.requestsEnabled or false,
+            publicVisible = number.publicVisible }
     end
     local keywords = {}
     for _, keyword in ipairs(input.keywords) do
@@ -480,28 +437,13 @@ local function validateAdminCompany(input)
     end
     return { id = input.id, job = input.job, displayName = input.displayName, logo = input.logo or "", backgroundImage = input.backgroundImage or "", categoryId = input.categoryId,
         description = input.description or "", location = input.location or "", openingHours = input.openingHours or "", keywords = keywords,
-        requestsEnabled = input.requestsEnabled, messagesEnabled = input.messagesEnabled, dispatchMode = input.dispatchMode, numbers = numbers }
+        requestsEnabled = #(ServicesPlus.RequestDefinitions.categoryTemplates[input.categoryId] or {}) > 0 and input.requestsEnabled or false, messagesEnabled = input.messagesEnabled, dispatchMode = input.dispatchMode, numbers = numbers }
 end
 
 function Api.getAdminState(source)
     local adminError = requireAdmin(source)
     if adminError then return adminError end
-    local companies = ServicesPlus.Companies.GetAdminList()
-    local numberEligibility = {}
-    for _, company in ipairs(companies) do
-        local internalCompany = ServicesPlus.Companies.Get(company.id)
-        local entries = {}
-        for _, number in ipairs(internalCompany and internalCompany.numbers or {}) do
-            local people = {}
-            for _, member in ipairs(ServicesPlus.Employees.GetPublicForCompany(company.id)) do
-                local employee = ServicesPlus.Employees.Get(member.source)
-                people[#people + 1] = { source = member.source, name = member.name, eligible = ServicesPlus.Employees.IsNumberAuthorized(employee, number) }
-            end
-            entries[#entries + 1] = { numberId = number.id, label = number.label, people = people }
-        end
-        numberEligibility[company.id] = entries
-    end
-    return ServicesPlus.Ok({ companies = companies, numberEligibility = numberEligibility, settings = ServicesPlus.Companies.GetSettings(), categories = ServicesPlus.Companies.GetCategoryList(Config.Locale), framework = ServicesPlus.Bridge.GetName() })
+    return ServicesPlus.Ok({ companies = ServicesPlus.Companies.GetAdminList(), settings = ServicesPlus.Companies.GetSettings(), categories = ServicesPlus.Companies.GetCategoryList(Config.Locale), framework = ServicesPlus.Bridge.GetName() })
 end
 
 function Api.adminSaveCompany(source, payload)

@@ -8,7 +8,6 @@ local function canUseNumber(employee, numberId)
     for _, number in ipairs(company.numbers) do
         if number.id == numberId then
             return number.enabled and number.inboxEnabled and number.sharedInbox
-                and ServicesPlus.Employees.IsNumberAuthorized(employee, number)
         end
     end
     return false

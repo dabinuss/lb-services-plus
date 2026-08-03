@@ -178,7 +178,7 @@ Examples:
 Each number only has three individual settings:
 
 1. Distribution mode
-2. Eligible employees
+2. Enabled citizen and company channels
 3. Dedicated shared inbox
 
 ### 4.1 Distribution Modes
@@ -210,23 +210,18 @@ The call is only offered to eligible employees who currently enabled the dispatc
 
 If only one employee is on duty, the single-employee rule overrides the normal distribution behavior.
 
-### 4.2 Eligible Employees
+### 4.2 Dispatch Line Selection
 
-The company leader configures eligible employees per number.
+There is no administrative staffing mode and no per-number employee allow-list.
 
-Available options:
+When an employee activates dispatch:
 
-- All employees
-- Selected employees
+- Every enabled company number is selected for that dispatch session by default
+- The dispatcher can deselect or reselect individual numbers
+- The selection is session-scoped and resets when dispatch or duty ends
+- Numbers using `Dispatch Only` are offered only to dispatchers who selected that number
 
-The employee selector includes:
-
-- Search field
-- Multi-select
-- Employee names
-- Simple add and remove actions
-
-All eligibility checks are enforced server-side.
+Normal on-duty employees remain available for enabled numbers using `Ring All` or `Random Employee`. Number selection does not control shared inbox visibility.
 
 ### 4.3 Dedicated Shared Inbox
 
@@ -359,7 +354,7 @@ The leader can:
 - Edit company data
 - Manage phone numbers
 - Select distribution modes
-- Configure eligible employees
+- Configure per-number channels
 - Enable or disable requests
 - Select request templates
 - Configure active request phases
@@ -377,7 +372,7 @@ Dispatch employees:
 - Can accept calls
 - Can accept requests
 - Can view queues
-- Can access shared inboxes when eligible
+- Can access enabled shared inboxes
 
 ### 6.3 Employee
 
@@ -386,9 +381,9 @@ Every normal employee can:
 - Go on duty
 - Change personal status
 - Enable or disable dispatch
-- Accept eligible calls
-- Accept eligible requests
-- Reply to eligible shared inboxes
+- Accept offered calls
+- Accept offered requests
+- Reply to enabled shared inboxes
 - Process active requests
 
 ---
@@ -748,7 +743,7 @@ Employees can:
 - Enable or disable dispatch
 - View incoming requests
 - Process active requests
-- Open eligible shared inboxes
+- Open enabled shared inboxes
 - View call queues
 - View call history
 - View request history
@@ -891,7 +886,7 @@ Leaders or authorized server administrators can:
 - Link framework jobs
 - Add native phone numbers
 - Select distribution modes
-- Configure eligible employees
+- Configure per-number channels
 - Enable requests
 - Select templates
 - Override request labels
@@ -1122,7 +1117,7 @@ Server cache:
 - Companies
 - Categories
 - Phone numbers
-- Employee eligibility
+- Session-scoped dispatch line selections
 - Request templates
 - Request field definitions
 - Request phases
@@ -1182,7 +1177,7 @@ Examples:
 
 - Is the player part of the company?
 - Is the player on duty?
-- Is the player eligible for the phone number?
+- Is the number enabled and selected when dispatch selection applies?
 - Is the player allowed to change this setting?
 - Is the request still available?
 - Was the call already accepted?
@@ -1463,7 +1458,7 @@ Deliver the complete communication and request workflow.
 ## Call Implementation
 
 - Multiple native numbers per company
-- Eligible employee selection
+- Session-scoped dispatch line selection
 - Three distribution modes
 - Call acceptance locking
 - Automatic Busy status

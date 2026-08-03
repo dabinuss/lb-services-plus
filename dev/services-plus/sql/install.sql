@@ -44,7 +44,6 @@ CREATE TABLE IF NOT EXISTS `services_plus_company_numbers` (
   `inbox_enabled` TINYINT(1) NOT NULL DEFAULT 1,
   `requests_enabled` TINYINT(1) NOT NULL DEFAULT 1,
   `public_visible` TINYINT(1) NOT NULL DEFAULT 1,
-  `staffing_mode` ENUM('all','self_select','restricted','dispatch_only') NOT NULL DEFAULT 'all',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_services_plus_number` (`number`),
   KEY `idx_services_plus_numbers_company` (`company_id`),
@@ -60,22 +59,6 @@ CREATE TABLE IF NOT EXISTS `services_plus_employee_settings` (
   PRIMARY KEY (`identifier`, `company_id`),
   KEY `idx_services_plus_employee_company` (`company_id`),
   CONSTRAINT `fk_services_plus_employee_company` FOREIGN KEY (`company_id`) REFERENCES `services_plus_companies` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE IF NOT EXISTS `services_plus_number_employees` (
-  `number_id` VARCHAR(64) NOT NULL,
-  `identifier` VARCHAR(96) NOT NULL,
-  PRIMARY KEY (`number_id`, `identifier`),
-  CONSTRAINT `fk_services_plus_number_employee_number` FOREIGN KEY (`number_id`) REFERENCES `services_plus_company_numbers` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE IF NOT EXISTS `services_plus_number_subscriptions` (
-  `number_id` VARCHAR(64) NOT NULL,
-  `identifier` VARCHAR(96) NOT NULL,
-  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`number_id`, `identifier`),
-  KEY `idx_services_plus_number_subscriptions_identifier` (`identifier`, `number_id`),
-  CONSTRAINT `fk_services_plus_number_subscription_number` FOREIGN KEY (`number_id`) REFERENCES `services_plus_company_numbers` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `services_plus_categories` (
@@ -284,4 +267,5 @@ INSERT IGNORE INTO `services_plus_schema_migrations` (`version`, `name`) VALUES
   (5, 'phase2_media_reactions'),
   (6, 'phase2_competition_duty_dispatch_deletion');
 INSERT IGNORE INTO `services_plus_schema_migrations` (`version`, `name`) VALUES
-  (7, 'phase2_number_staffing_notifications_navigation_api');
+  (7, 'phase2_number_staffing_notifications_navigation_api'),
+  (8, 'simplify_dispatch_line_selection');

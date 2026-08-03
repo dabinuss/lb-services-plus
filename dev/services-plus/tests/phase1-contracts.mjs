@@ -31,7 +31,7 @@ for (const event of serverEvents.matchAll(/(?:RegisterNetEvent|TriggerClientEven
 }
 
 for (const table of [
-  "settings", "companies", "categories", "company_numbers", "number_employees", "employee_settings",
+  "settings", "companies", "categories", "company_numbers", "employee_settings",
   "request_templates", "request_template_fields", "company_request_settings", "request_phases",
   "requests", "request_events", "call_history", "request_history", "message_assignments"
 ]) {

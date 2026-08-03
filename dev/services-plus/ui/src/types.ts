@@ -21,9 +21,7 @@ export interface CompanyNumber {
   inboxEnabled: boolean;
   requestsEnabled: boolean;
   publicVisible: boolean;
-  staffingMode: "all" | "self_select" | "restricted" | "dispatch_only";
   available?: boolean;
-  restricted?: boolean;
 }
 
 export interface Company {
@@ -40,6 +38,7 @@ export interface Company {
   available: boolean;
   employeeCount: number;
   requestsEnabled: boolean;
+  hasRequestTemplates?: boolean;
   messagesEnabled: boolean;
   dispatchMode: "ring_all" | "random" | "dispatch_only";
   primaryNumber?: string;
@@ -53,6 +52,7 @@ export interface Category {
   name: string;
   names: { en: string; de: string };
   keywords: string[];
+  hasRequestTemplates?: boolean;
   requestCompetition: boolean;
 }
 
@@ -118,7 +118,7 @@ export interface CompanyOperationsPatch {
   dispatchMode: "ring_all" | "random" | "dispatch_only";
 }
 
-export type NumberOperationsPatch = Pick<CompanyNumber, "id" | "enabled" | "callsEnabled" | "inboxEnabled" | "requestsEnabled" | "publicVisible" | "staffingMode" | "distribution">;
+export type NumberOperationsPatch = Pick<CompanyNumber, "id" | "enabled" | "callsEnabled" | "inboxEnabled" | "requestsEnabled" | "publicVisible" | "distribution">;
 
 export interface AdminCompany extends Company {
   job: string;
@@ -138,7 +138,7 @@ export interface CompanyPatch {
   messagesEnabled: boolean;
   dispatchMode: "ring_all" | "random" | "dispatch_only";
   keywords: string[];
-  numbers: Array<Omit<CompanyNumber, "id" | "available" | "restricted"> & { id?: string }>;
+  numbers: Array<Omit<CompanyNumber, "id" | "available"> & { id?: string }>;
 }
 
 export interface CitizenRequest {
@@ -231,9 +231,8 @@ export interface MessageReactionUpdate { messageId: number; conversationId: numb
 
 export interface ConversationData { conversation: { id: number; companyId: string; numberId: string; externalNumber: string }; messages: InboxMessage[]; }
 export interface CompanyCall { id: number; callerNumber?: string; numberId: string; status: string; assignedIdentifier?: string; created_at: string; }
-export interface NumberEligibility { numberId: string; label: string; people: Array<{ source: number; name: string; eligible: boolean }>; }
-export interface NumberSubscription { numberId: string; label: string; enabled: boolean; callsEnabled: boolean; inboxEnabled: boolean; requestsEnabled: boolean; staffingMode: CompanyNumber["staffingMode"]; authorized: boolean; canSubscribe: boolean; subscribed: boolean; }
-export interface CompanyWorkspace { companyId?: string; conversations: InboxConversation[]; requests: CitizenRequest[]; calls: CompanyCall[]; requestSettings: RequestSettings; numberEligibility?: NumberEligibility[]; numberSubscriptions?: NumberSubscription[]; }
+export interface NumberState { numberId: string; label: string; enabled: boolean; callsEnabled: boolean; inboxEnabled: boolean; requestsEnabled: boolean; canSelectForDispatch: boolean; selectedForDispatch: boolean; }
+export interface CompanyWorkspace { companyId?: string; conversations: InboxConversation[]; requests: CitizenRequest[]; calls: CompanyCall[]; requestSettings: RequestSettings; numberStates?: NumberState[]; }
 export interface WorkOffer {
   kind: "call" | "request";
   id: number;
@@ -252,7 +251,6 @@ export interface MyActivity { calls: CitizenCall[]; requests: CitizenRequest[]; 
 
 export interface AdminState {
   companies: AdminCompany[];
-  numberEligibility: Record<string, NumberEligibility[]>;
   categories: Category[];
   settings: AppSettings;
   framework: string;

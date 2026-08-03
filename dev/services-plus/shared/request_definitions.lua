@@ -1,6 +1,5 @@
 ServicesPlus.RequestDefinitions = {
     fields = {
-        subject = { type = "text", label = { en = "Subject", de = "Betreff" }, maxLength = 120 },
         description = { type = "description", label = { en = "Description", de = "Beschreibung" }, maxLength = 1000 },
         location = { type = "location", label = { en = "Location", de = "Standort" }, maxLength = 150 },
         phone = { type = "phone", label = { en = "Phone number", de = "Telefonnummer" }, maxLength = 32 },
@@ -21,9 +20,7 @@ ServicesPlus.RequestDefinitions = {
             { value = "immediate", label = { en = "Immediate", de = "Sofort" } }
         } }
     },
-    generalTemplates = { "general" },
     templates = {
-        general = { kind = "general", name = { en = "General request", de = "Allgemeine Anfrage" }, fields = { { id = "subject", required = true }, { id = "description", required = true }, { id = "phone", required = false } } },
         immediate_pickup = { kind = "specialized", categoryId = "taxi_transport", name = { en = "Pickup", de = "Abholung" }, fields = { { id = "location", required = true }, { id = "people", required = true }, { id = "phone", required = false } } },
         roadside_assistance = { kind = "specialized", categoryId = "vehicle_services", name = { en = "Roadside or towing assistance", de = "Pannen- oder Abschlepphilfe" }, fields = { { id = "location", required = true }, { id = "description", required = true }, { id = "vehicle_plate", required = false }, { id = "phone", required = false } } },
         delivery = { kind = "specialized", categoryId = "restaurants_food", name = { en = "Delivery", de = "Lieferung" }, fields = { { id = "description", required = true }, { id = "location", required = true }, { id = "phone", required = false } } },

@@ -14,13 +14,11 @@ local function localeName(value, locale)
 end
 
 local function defaultTemplateIds(company)
-    local result = copy(definitions.categoryTemplates[company.categoryId] or {})
-    for _, id in ipairs(definitions.generalTemplates) do result[#result + 1] = id end
-    return result
+    return copy(definitions.categoryTemplates[company.categoryId] or {})
 end
 
 local function templateAllowed(company, template)
-    return template and (template.kind == "general" or template.categoryId == company.categoryId)
+    return template and template.kind == "specialized" and template.categoryId == company.categoryId
 end
 
 local function resolvedTemplateIds(company, storedIds)
@@ -94,15 +92,6 @@ function Requests.ResolveSettings(company, locale)
             end
             templates[#templates + 1] = { id = templateId, kind = template.kind or "specialized", name = localeName(template.name, locale), fields = fields }
         end
-    end
-    if #templates == 0 then
-        local fallback = definitions.templates.general
-        local fields = {}
-        for _, configured in ipairs(fallback.fields) do
-            local field = definitions.fields[configured.id]
-            fields[#fields + 1] = { id = configured.id, type = field.type, label = localeName(field.label, locale), required = configured.required == true, maxLength = field.maxLength, options = {} }
-        end
-        templates[1] = { id = "general", kind = "general", name = localeName(fallback.name, locale), fields = fields }
     end
     local requestNumbers = {}
     for _, number in ipairs(company.numbers or {}) do
