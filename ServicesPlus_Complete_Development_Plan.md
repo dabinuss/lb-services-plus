@@ -1339,7 +1339,7 @@ An external police dispatch can therefore display a Services+ request on its own
 
 ---
 
-## 15. Development Plan – Maximum Three Phases
+## 15. Development Plan – Four Phases
 
 # Phase 1 – Foundation and Core Company System
 
@@ -1599,11 +1599,11 @@ Phase 2 is complete when:
 
 ---
 
-# Phase 3 – Stabilization, Bug Search and Release
+# Phase 3 – Stabilization, Bug Search and Release Candidate
 
 ## Goal
 
-Prepare Services+ for real server operation and release.
+Prepare Services+ for real server operation and produce a technically validated release candidate.
 
 ## Systematic Bug Search
 
@@ -1773,7 +1773,7 @@ Before release, verify:
 
 ## Completion Criteria
 
-Services+ is release-ready when:
+The Phase 3 release candidate is technically complete when:
 
 - No known critical or high-severity bugs remain
 - Core workflows survive resource and server restarts
@@ -1785,10 +1785,114 @@ Services+ is release-ready when:
 - No unnecessary permanent network traffic exists
 - All server events are validated
 - All NUI callbacks are guaranteed to answer
-- Event and API documentation is complete
+- The complete API surface is frozen and inventoried for Phase 4
 - Database migrations, rollback and backups are documented
 - Installation and configuration documentation is complete
 - All code and technical documentation are written in English
+
+---
+
+# Phase 4 – Complete API and Integration Documentation
+
+## Goal
+
+Provide one authoritative, comprehensive Markdown reference that explains every Services+ interface offered to other resources, the phone frontend and integration developers. The documentation is a release requirement and must remain synchronized with the implemented contracts.
+
+## Required Deliverable
+
+The resource must ship a complete English-language `API.md` in the Services+ resource root.
+
+`README.md` and `INTEGRATIONS.md` must link to `API.md` instead of duplicating or contradicting its contracts. `CHANGELOG.md` must identify API additions, breaking changes, deprecations and API version changes.
+
+## Required API Inventory
+
+`API.md` must document every implemented interface category:
+
+- Trusted server exports offered to allow-listed resources
+- Local server lifecycle and integration events emitted by Services+
+- Client-to-server and NUI callback contracts used by the Services+ app
+- Custom app push-message types sent through LB Phone
+- Optional adapter hooks and supported integration boundaries
+- Shared response envelopes, public entities and integration-only entities
+- API version, compatibility expectations and deprecation policy
+
+Internal implementation functions that are not supported integration surfaces must be clearly marked as internal and must not be presented as callable APIs.
+
+## Required Contract Details
+
+Every documented export, event, callback and push message must include:
+
+- Stable name and direction
+- Purpose and intended consumer
+- Required resource or runtime context
+- Input payload with field names, types, optional fields and limits
+- Success response payload
+- Error response codes and retryability
+- Permission and role requirements
+- Rate limit
+- Server-side validation performed
+- Database or gameplay side effects
+- Events or push updates emitted as a result
+- Restart, idempotency and concurrency behavior where relevant
+- API version in which the contract was introduced or changed
+
+## Integration Examples
+
+The documentation must provide tested Lua examples for:
+
+- Reading companies, phone numbers and on-duty employees
+- Reading and paginating company requests
+- Creating an idempotent external request
+- Accepting, declining, transitioning and returning a request
+- Listening to `services-plus:server:requestLifecycle`
+- Correlating a Services+ request ID with an external MDT or dispatch record
+- Handling success and error envelopes without trusting client data
+- Configuring `Config.ApiAllowedResources`
+
+The MDT example must explain that Services+ stores one primary request assignee while patrol units, multiple officers, vehicles, radio state and live locations remain owned by the external system.
+
+## Diagrams and Reference Tables
+
+`API.md` must contain:
+
+- A request lifecycle/state-transition diagram
+- A call lifecycle summary
+- A message and shared-inbox flow summary
+- A permissions matrix for citizen, employee, dispatch, leader, administrator and trusted resource access
+- An event audience matrix
+- A versioned entity reference for company, employee, request, assignee, conversation, message and error payloads
+
+Diagrams must be represented in Markdown-compatible text or Mermaid so the documentation remains usable without proprietary tooling.
+
+## Documentation Verification
+
+Before Phase 4 is complete:
+
+- Compare the export list in `server/exports.lua` with `API.md`
+- Compare server event emissions with the documented event table
+- Compare NUI callback allow-lists and rate-limit configuration with the callback table
+- Verify all example names, payloads and response fields against the current source
+- Execute or contract-test the supplied integration examples where practical
+- Search for undocumented public exports, events and push-message types
+- Confirm that no example bypasses server authorization or invokes internal network events
+- Confirm that sensitive integration-only fields are not documented as citizen-facing data
+- Verify all links from `README.md` and `INTEGRATIONS.md`
+
+## Completion Criteria
+
+Phase 4 is complete when:
+
+- `API.md` documents every supported API and integration surface in full
+- Every contract includes permissions, validation, rate limits, side effects and errors
+- Copy-ready Lua examples cover the supported integration workflows
+- API entities and lifecycle behavior are documented unambiguously
+- External MDT and dispatch ownership boundaries are explicit
+- Automated contract checks detect missing documented exports and events
+- `README.md`, `INTEGRATIONS.md`, `CHANGELOG.md` and `API.md` agree
+- No supported public interface remains undocumented
+- All technical documentation is written in English
+
+Services+ is release-ready only after the Phase 4 documentation review and contract verification have passed.
 
 ---
 
