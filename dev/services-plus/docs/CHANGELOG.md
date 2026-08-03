@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.0-rc1
+
+- Complete Phase 4 with one authoritative API reference covering all trusted exports, local events, app actions, push messages, entities, permissions, lifecycle behavior, errors, rate limits, and integration boundaries.
+- Add tested Lua examples for reads, pagination, idempotent request creation, lifecycle actions, event consumption, and external MDT correlation.
+- Standardize specific local request events on the sanitized `RequestIntegration` entity and increment the API version from 7 to 8.
+- Move every resource Markdown document except the root `README.md` into an organized `docs/` hierarchy and add a documentation index.
+- Add automated documentation inventory and link verification for the Phase 4 contract.
+
 ## 0.3.0-rc1
 
 - Add Phase 3 installation, configuration, compatibility, database, troubleshooting and release-validation documentation.

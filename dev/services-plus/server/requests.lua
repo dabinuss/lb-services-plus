@@ -168,8 +168,9 @@ local function notifyCreator(request, eventType)
             TriggerClientEvent("services-plus:client:push", target, { type = "request.citizen.updated", timestamp = os.time(), payload = Requests.ToPublic(request) })
         end
     end
-    TriggerEvent(("services-plus:server:%s"):format(eventType), request)
-    TriggerEvent("services-plus:server:requestUpdated", request)
+    local integration = Requests.ToIntegration(request)
+    TriggerEvent(("services-plus:server:%s"):format(eventType), integration)
+    TriggerEvent("services-plus:server:requestUpdated", integration)
     emitLifecycle(lifecycleNames[eventType] or eventType, request)
 end
 
@@ -298,7 +299,7 @@ function Requests.Create(source, companyId, templateId, values, locale, external
     ServicesPlus.Repository.AddRequestEvent(requestId, player.identifier, "created", {})
     local request = ServicesPlus.Repository.GetRequestById(requestId)
     pushCompany(companyId, "request.offer", request, true)
-    TriggerEvent("services-plus:server:requestCreated", request)
+    TriggerEvent("services-plus:server:requestCreated", Requests.ToIntegration(request))
     emitLifecycle("created", request)
     return true, Requests.ToPublic(request)
 end

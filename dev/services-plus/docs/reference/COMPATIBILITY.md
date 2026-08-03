@@ -14,14 +14,13 @@ Services+ is an independent resource. It uses supported exports and events and d
 | Standalone | License-based configured identity | Adapter static checks | Required when enabled |
 | Dispatch/billing/inventory/notification/map | Optional adapter boundary only | Missing-resource fallback contract | Test each enabled adapter |
 
-The release candidate does not claim compatibility with an untested fork solely because it shares a framework name. Confirm the exact server versions in `RELEASE_CHECKLIST.md`.
+The release candidate does not claim compatibility with an untested fork solely because it shares a framework name. Confirm the exact server versions in the [release checklist](../development/RELEASE_CHECKLIST.md).
 
 ## Ownership Boundaries
 
 - LB Phone owns phone audio, native calls, messages, contacts, media selection, and phone presentation.
 - Frameworks own player identity, jobs, grades, and administrator roles.
 - Services+ owns company configuration, duty state, call/request coordination, shared-inbox projections, and workflow metadata.
-- External MDT/dispatch systems own patrols, multiple officers, vehicles, radio state, and live tracking. They correlate through the request ID and `API.md` contracts.
+- External MDT/dispatch systems own patrols, multiple officers, vehicles, radio state, and live tracking. They correlate through the request ID and the [API contracts](../api/API.md).
 
 Resource start and stop handling is event-driven. Required dependency failures stop initialization with a console error. Missing optional integrations log a warning and leave the core resource available.
-

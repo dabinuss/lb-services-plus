@@ -1,6 +1,6 @@
 # LB Phone Technical Integration
 
-The integration contracts were checked against the official LB Phone and FiveM documentation before implementation and again for Phase 2.
+The integration contracts were checked against the official LB Phone and FiveM documentation before implementation and reviewed again for the Phase 4 API inventory.
 
 ## Results
 

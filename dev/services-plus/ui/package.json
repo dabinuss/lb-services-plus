@@ -9,7 +9,7 @@
     "typecheck": "tsc -b --pretty false",
     "lint": "eslint . --max-warnings 0",
     "test": "vitest run",
-    "test:contracts": "node ../tests/phase1-contracts.mjs && node ../tests/phase2-contracts.mjs && node ../tests/phase3-contracts.mjs"
+    "test:contracts": "node ../tests/phase1-contracts.mjs && node ../tests/phase2-contracts.mjs && node ../tests/phase3-contracts.mjs && node ../tests/phase4-contracts.mjs"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^5.1.0",

@@ -31,4 +31,3 @@ Disable the adapter or correct its resource name. Optional adapters must degrade
 ## Support Data
 
 Provide the Services+ version, LB Phone/framework/database versions, startup order, relevant console lines, exact workflow, and whether the issue reproduces after a clean resource restart. Remove player identifiers, phone numbers, and message contents from public reports.
-

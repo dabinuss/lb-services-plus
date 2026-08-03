@@ -7,7 +7,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (path) => readFile(resolve(root, path), "utf8");
 const [manifest, callbacks, events, config, api, exportsFile, apiDocs, repository, calls, schema, constants, packageJson, app, bridge, integrations, main, logger] = await Promise.all([
   read("fxmanifest.lua"), read("client/callbacks.lua"), read("server/events.lua"), read("config.lua"), read("server/api.lua"),
-  read("server/exports.lua"), read("API.md"), read("server/repository.lua"), read("server/calls.lua"), read("sql/install.sql"),
+  read("server/exports.lua"), read("docs/api/API.md"), read("server/repository.lua"), read("server/calls.lua"), read("sql/install.sql"),
   read("shared/constants.lua"), read("ui/package.json"), read("ui/src/App.tsx"), read("bridge/server.lua"), read("integrations/server.lua"), read("server/main.lua"), read("server/logger.lua")
 ]);
 
@@ -37,9 +37,9 @@ for (const eventName of ["requestLifecycle", "requestCreated", "requestUpdated",
   assert.ok(apiDocs.includes(`services-plus:server:${eventName}`) || apiDocs.includes(`\`${eventName}\``), `Undocumented local event: ${eventName}`);
 }
 
-assert.match(manifest, /version "0\.3\.0-rc1"/);
+assert.match(manifest, /version "0\.4\.0-rc1"/);
 assert.doesNotMatch(manifest, /server\/prototypes\.lua/, "Development prototypes are loaded in production");
-assert.match(constants, /ApiVersion = 7/);
+assert.match(constants, /ApiVersion = 8/);
 assert.match(repository, /GetNumberQueue\(numberId, limit\)[\s\S]*LIMIT \?/);
 assert.match(calls, /GetNumberQueue\(numberId, Config\.MaxQueueBroadcastEntries\)/);
 assert.match(repository, /EndOpenCalls[\s\S]*UPDATE `services_plus_call_history` h[\s\S]*JOIN `services_plus_call_queue` q/);
@@ -59,7 +59,7 @@ for (const index of [
   "idx_services_plus_call_company", "idx_services_plus_inbox_company", "idx_services_plus_inbox_messages"
 ]) assert.ok(schema.includes(index), `Common query index is missing: ${index}`);
 
-const requiredDocs = ["README.md", "CHANGELOG.md", "INSTALLATION.md", "CONFIGURATION.md", "COMPATIBILITY.md", "DATABASE.md", "TROUBLESHOOTING.md", "INTEGRATIONS.md", "API.md", "RELEASE_CHECKLIST.md"];
+const requiredDocs = ["README.md", "docs/INDEX.md", "docs/CHANGELOG.md", "docs/guides/INSTALLATION.md", "docs/guides/CONFIGURATION.md", "docs/reference/COMPATIBILITY.md", "docs/guides/DATABASE.md", "docs/guides/TROUBLESHOOTING.md", "docs/reference/INTEGRATIONS.md", "docs/api/API.md", "docs/development/RELEASE_CHECKLIST.md"];
 await Promise.all(requiredDocs.map((path) => read(path)));
 assert.match(packageJson, /phase3-contracts\.mjs/);
 

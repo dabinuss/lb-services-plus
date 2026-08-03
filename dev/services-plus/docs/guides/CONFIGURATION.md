@@ -30,7 +30,7 @@ All runtime configuration lives in `config.lua`. Database-managed companies and 
 
 `Config.RateLimits` contains every write or expensive network action. Do not remove entries when adding callbacks. `Config.ApiAllowedResources` is an exact allow-list for trusted server exports; never add untrusted or client-controlled names.
 
-Optional integrations are disabled by default. Enable an adapter only after implementing its documented boundary in `integrations/server.lua`. Missing optional resources must not disable core Services+ workflows. See `INTEGRATIONS.md` and `API.md`.
+Optional integrations are disabled by default. Enable an adapter only after implementing its documented boundary in `integrations/server.lua`. Missing optional resources must not disable core Services+ workflows. See [integration boundaries](../reference/INTEGRATIONS.md) and the [API reference](../api/API.md).
 
 ## Standalone
 

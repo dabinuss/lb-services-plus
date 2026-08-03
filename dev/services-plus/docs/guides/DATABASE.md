@@ -28,4 +28,3 @@ Migrations are not run automatically. This prevents an unexpected resource resta
 SQL down-migrations are intentionally not provided because later migrations can transform or remove data. To roll back safely, stop the resource, restore the complete pre-migration backup, deploy the matching earlier resource version, and start the server. Do not manually decrement schema-version rows.
 
 After restart, Services+ returns active requests to a safe pending state and ends open call queue records. Native LB Phone records remain owned by LB Phone.
-

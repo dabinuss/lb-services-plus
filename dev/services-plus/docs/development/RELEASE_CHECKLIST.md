@@ -1,19 +1,20 @@
-# Phase 3 Release Candidate Validation
+# Release Candidate Validation
 
-Version: `0.3.0-rc1`
+Version: `0.4.0-rc1`
 
 ## Automated Gates
 
 - [x] TypeScript type checking
 - [x] ESLint with zero warnings
 - [x] Component and logic tests
-- [x] Phase 1, Phase 2, and Phase 3 contract tests
+- [x] Phase 1, Phase 2, Phase 3, and Phase 4 contract tests
 - [x] Lua parsing/static checks
 - [x] Production frontend build
 - [x] Browser smoke tests at compact and desktop viewports
 - [x] Production manifest excludes `server/prototypes.lua`
+- [x] API exports, events, app actions, push types, examples, and documentation links match source inventory
 
-Local validation completed on 2026-08-03: 12 UI tests, 26 parsed Lua files, all three contract suites, and browser portal smoke checks at 390 x 844 and 900 x 1000 without page errors, horizontal overflow, or clipped controls.
+Local validation completed on 2026-08-03: 12 UI tests, 26 parsed Lua files, all four contract suites, and browser portal smoke checks at 390 x 844 and 900 x 1000 without page errors, horizontal overflow, or clipped controls.
 
 Record command results in the release commit or deployment ticket. A checked item must correspond to the exact files being deployed.
 
@@ -45,4 +46,4 @@ Capture the server artifact, client count, company count, test dataset size, and
 
 ## Release Decision
 
-Do not promote this release candidate to a production release until all applicable live gates have evidence, no critical or high-severity issue remains, database restore has been rehearsed, and the Phase 4 API documentation review is complete.
+Do not promote this release candidate to a production release until all applicable live gates have evidence, no critical or high-severity issue remains, and database restore has been rehearsed. The Phase 4 API inventory and automated documentation review are complete for API version 8.

@@ -29,11 +29,10 @@ add_ace group.admin servicesplus.admin allow
 ```
 
 7. Start the server and confirm that the console reports `Services+ server initialized` without schema or dependency errors.
-8. Complete the runtime checks in `RELEASE_CHECKLIST.md` before opening the resource to players.
+8. Complete the [runtime release checks](../development/RELEASE_CHECKLIST.md) before opening the resource to players.
 
 The shipped `web/` directory is the production frontend. To rebuild it, run `npm ci` and `npm run build` in `ui/`. Do not deploy `ui/node_modules` or load `server/prototypes.lua` in production.
 
 ## Upgrade
 
-Follow `DATABASE.md`. Apply every missing migration in numeric order while `services-plus` is stopped, then deploy the matching resource version and restart it.
-
+Follow [database operations](DATABASE.md). Apply every missing migration in numeric order while `services-plus` is stopped, then deploy the matching resource version and restart it.

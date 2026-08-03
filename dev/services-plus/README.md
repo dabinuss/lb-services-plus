@@ -2,18 +2,20 @@
 
 Services+ is a separate LB Phone custom app resource providing a company directory, native multi-number calls, shared inboxes with LB Phone media and reactions, structured requests, and a server-authoritative employee portal. The portal keeps requests, inboxes, calls and the searchable active team in separate paginated workspace tabs. Red tab counters are reserved for unanswered requests, unread messages and calls not yet viewed during the current app session; neutral counters show zero or informational team totals.
 
-Version `0.3.0-rc1` is the Phase 3 technical release candidate. Production promotion still requires the live-server evidence in `RELEASE_CHECKLIST.md` and the Phase 4 API documentation review.
+Version `0.4.0-rc1` includes the complete Phase 4 API and integration reference. Production promotion still requires the live-server evidence in the release checklist.
 
 ## Documentation
 
-- [Installation](INSTALLATION.md): deployment and upgrades
-- [Configuration](CONFIGURATION.md): settings and permissions
-- [Compatibility](COMPATIBILITY.md): supported boundaries and validation matrix
-- [Database operations](DATABASE.md): migrations, backups and rollback
-- [Troubleshooting](TROUBLESHOOTING.md): operational diagnosis
-- [Integrations](INTEGRATIONS.md): optional-resource boundaries
-- [API contracts](API.md): callback, event and trusted-resource inventory
-- [Release checklist](RELEASE_CHECKLIST.md): automated and live release gates
+- [Documentation index](docs/INDEX.md): all technical documentation
+- [Installation](docs/guides/INSTALLATION.md): deployment and upgrades
+- [Configuration](docs/guides/CONFIGURATION.md): settings and permissions
+- [Compatibility](docs/reference/COMPATIBILITY.md): supported boundaries and validation matrix
+- [Database operations](docs/guides/DATABASE.md): migrations, backups and rollback
+- [Troubleshooting](docs/guides/TROUBLESHOOTING.md): operational diagnosis
+- [Integrations](docs/reference/INTEGRATIONS.md): optional-resource boundaries
+- [API reference](docs/api/API.md): complete exports, events, callbacks, entities and examples
+- [Release checklist](docs/development/RELEASE_CHECKLIST.md): automated and live release gates
+- [Changelog](docs/CHANGELOG.md): versioned changes
 
 ## Requirements
 
@@ -24,7 +26,7 @@ Version `0.3.0-rc1` is the Phase 3 technical release candidate. Production promo
 
 ## Installation
 
-The authoritative deployment procedure is in [INSTALLATION.md](INSTALLATION.md).
+The authoritative deployment procedure is in [the installation guide](docs/guides/INSTALLATION.md).
 
 1. Back up the server database.
 2. Apply `sql/install.sql` to the server database.
@@ -42,7 +44,7 @@ The resource checks required dependencies and the schema version during startup.
 
 ## Configuration
 
-See [CONFIGURATION.md](CONFIGURATION.md) for the complete configuration reference.
+See [the configuration guide](docs/guides/CONFIGURATION.md) for the complete configuration reference.
 
 `Config.Framework` accepts `auto`, `esx`, `qbcore`, `qbox`, or `standalone`. Automatic detection prioritizes Qbox, QBCore, then ESX. Standalone player mappings are keyed by the FiveM license identifier.
 
@@ -76,17 +78,17 @@ If request options cannot be loaded or a request cannot be created, the request 
 
 Citizens receive live in-app updates and LB Phone notifications when their request is accepted, returned, moved to another phase, completed, cancelled or deleted. Active requests are shown separately from request history. Request navigation can be disabled, offered as a notification action, or set automatically for the successful assignee; coordinates are derived server-side through OneSync and sent only after assignment.
 
-Trusted MDT, dispatch and business resources can use the allow-listed server exports documented in `API.md`. Add resource names to `Config.ApiAllowedResources`. Do not invoke Services+ internal network events from another resource.
+Trusted MDT, dispatch and business resources can use the allow-listed server exports documented in the [API reference](docs/api/API.md). Add resource names to `Config.ApiAllowedResources`. Do not invoke Services+ internal network events from another resource.
 
 The company request list shows the name and role snapshot of the employee who accepted each active or completed request. Trusted integrations receive the same primary assignee with a stable identifier and optional active player source. Services+ intentionally does not model patrol units, multiple officers or live tracking; external dispatch and MDT resources correlate those records through the request ID and the documented `requestLifecycle` event.
 
 Set `Config.RequireEquippedPhone = false` only for development environments where LB Phone has no equipped-phone concept available.
 
-Optional integrations are disabled by default. See `INTEGRATIONS.md` before adding an adapter.
+Optional integrations are disabled by default. See [integration boundaries](docs/reference/INTEGRATIONS.md) before adding an adapter.
 
 ## Database Changes
 
-See [DATABASE.md](DATABASE.md) before changing an existing installation.
+See [database operations](docs/guides/DATABASE.md) before changing an existing installation.
 
 Schema changes are versioned in `sql/migrations/`. Before applying any production migration:
 
