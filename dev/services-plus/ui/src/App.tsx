@@ -29,12 +29,29 @@ export default function App() {
   const setLocale = (next: Locale) => { localStorage.setItem("services-plus-locale", next); localeRef.current = next; setLocaleState(next); };
   useEffect(() => { sourceRef.current = state?.currentUser.source; stateRef.current = state; }, [state]);
   const notify = useCallback((message: string) => { if (toastTimer.current) window.clearTimeout(toastTimer.current); setToast(message); toastTimer.current = window.setTimeout(() => setToast(null), 2600); }, []);
-  const load = useCallback(async () => { setLoading(true); setError(null); const response = await getInitialState(); if (response.success) setState(response.data); else setError(response.error.message); setLoading(false); }, []);
-  const loadWorkspace = useCallback(async () => { const response = await fetchNui<CompanyWorkspace>("getCompanyWorkspace", { limit: 50, locale: localeRef.current }); if (response.success) setWorkspace(response.data); else notify(response.error.message); }, [notify]);
+  const load = useCallback(async () => {
+    setLoading(true); setError(null);
+    try {
+      const response = await getInitialState();
+      if (response.success) setState(response.data); else setError(response.error.message);
+    } catch {
+      setError(t(localeRef.current, "operationFailed"));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+  const loadWorkspace = useCallback(async () => {
+    try {
+      const response = await fetchNui<CompanyWorkspace>("getCompanyWorkspace", { limit: 50, locale: localeRef.current });
+      if (response.success) setWorkspace(response.data); else notify(response.error.message);
+    } catch {
+      notify(t(localeRef.current, "operationFailed"));
+    }
+  }, [notify]);
   const markConversationRead = useCallback((conversationId: number) => setWorkspace((current) => { if (!current?.conversations.some((item) => item.id === conversationId && Number(item.unreadCount) > 0)) return current; return { ...current, conversations: current.conversations.map((item) => item.id === conversationId ? { ...item, unreadCount: 0 } : item) }; }), []);
 
   useEffect(() => {
-    let active = true; void getInitialState().then((response) => { if (!active) return; if (response.success) setState(response.data); else setError(response.error.message); setLoading(false); });
+    let active = true; void getInitialState().then((response) => { if (!active) return; if (response.success) setState(response.data); else setError(response.error.message); }).catch(() => { if (active) setError(t(localeRef.current, "operationFailed")); }).finally(() => { if (active) setLoading(false); });
     const unsubscribe = subscribeToNui((message: AppMessage) => {
       if (!active) return;
       if (message.type === "company.updated") { const company = message.payload as Company; setState((current) => current ? { ...current, companies: current.companies.some((item) => item.id === company.id) ? current.companies.map((item) => item.id === company.id ? company : item) : [...current.companies, company] } : current); }
@@ -60,7 +77,19 @@ export default function App() {
     return () => { active = false; unsubscribe(); if (toastTimer.current) window.clearTimeout(toastTimer.current); void fetchNui("appClosed"); };
   }, [load, loadWorkspace, notify]);
 
-  const run = async <T,>(action: string, payload: unknown, apply: (data: T) => void) => { setBusy(true); const response = await fetchNui<T>(action, payload); if (response.success) apply(response.data); else notify(response.error.message); setBusy(false); return response.success; };
+  const run = async <T,>(action: string, payload: unknown, apply: (data: T) => void) => {
+    setBusy(true);
+    try {
+      const response = await fetchNui<T>(action, payload);
+      if (response.success) apply(response.data); else notify(response.error.message);
+      return response.success;
+    } catch {
+      notify(t(localeRef.current, "operationFailed"));
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  };
   const applySession = (data: { currentUser: CurrentUser; companies: Company[] }) => setState((current) => current ? { ...current, currentUser: data.currentUser, companies: data.companies } : current);
   const updateEmployee = (employee: Employee) => setState((current) => { const employment = current?.currentUser.employment; return !current || !employment ? current : { ...current, currentUser: { ...current.currentUser, employment: { ...employment, employee, activeEmployees: employment.activeEmployees.map((item) => item.source === employee.source ? employee : item) } } }; });
   const updateDispatch = (employee: Employee) => { updateEmployee(employee); void loadWorkspace(); };
@@ -72,12 +101,60 @@ export default function App() {
   const enterDuty = async () => { const success = await run<{ currentUser: CurrentUser; companies: Company[] }>("enterDuty", {}, applySession); if (success) await loadWorkspace(); return success; };
   const leaveDuty = async () => { const success = await run<{ currentUser: CurrentUser; companies: Company[] }>("leaveDuty", {}, applySession); if (success) { setWorkspace(null); setView("directory"); } };
   const openPortal = async () => { setView("portal"); if (state?.currentUser.employment?.onDuty) await loadWorkspace(); };
-  const openActivity = async () => { setView("activity"); setActivityLoading(true); const [history, inbox] = await Promise.all([fetchNui<MyActivity>("getMyActivity", { limit: 30 }), fetchNui<InboxConversation[]>("getCitizenInbox", { limit: 30 })]); if (history.success) setActivity({ ...history.data, conversations: inbox.success ? inbox.data : [] }); else notify(history.error.message); setActivityLoading(false); };
-  const openAdmin = async () => { setView("admin"); if (adminState) return; setBusy(true); const response = await fetchNui<AdminState>("getAdminState"); if (response.success) setAdminState(response.data); else { notify(response.error.message); setView("directory"); } setBusy(false); };
-  const refreshAdmin = async () => { const response = await fetchNui<AdminState>("getAdminState"); if (response.success) setAdminState(response.data); };
-  const callCompanyNumber = async (company: Company, number?: CompanyNumber) => { setBusy(true); const response = await fetchNui<{ number: string }>("startCompanyCall", { companyId: company.id, numberId: number?.id }); if (response.success) startCall(response.data.number); else notify(response.error.message); setBusy(false); setCallCompanyChoice(null); };
+  const openActivity = async () => {
+    setView("activity"); setActivityLoading(true);
+    try {
+      const [history, inbox] = await Promise.all([fetchNui<MyActivity>("getMyActivity", { limit: 30 }), fetchNui<InboxConversation[]>("getCitizenInbox", { limit: 30 })]);
+      if (history.success) setActivity({ ...history.data, conversations: inbox.success ? inbox.data : [] }); else notify(history.error.message);
+      if (!inbox.success) notify(inbox.error.message);
+    } catch {
+      notify(t(localeRef.current, "operationFailed"));
+    } finally {
+      setActivityLoading(false);
+    }
+  };
+  const openAdmin = async () => {
+    setView("admin"); if (adminState) return; setBusy(true);
+    try {
+      const response = await fetchNui<AdminState>("getAdminState");
+      if (response.success) setAdminState(response.data); else { notify(response.error.message); setView("directory"); }
+    } catch {
+      notify(t(localeRef.current, "operationFailed")); setView("directory");
+    } finally {
+      setBusy(false);
+    }
+  };
+  const refreshAdmin = async () => {
+    try {
+      const response = await fetchNui<AdminState>("getAdminState");
+      if (response.success) setAdminState(response.data); else notify(response.error.message);
+    } catch {
+      notify(t(localeRef.current, "operationFailed"));
+    }
+  };
+  const callCompanyNumber = async (company: Company, number?: CompanyNumber) => {
+    setBusy(true);
+    try {
+      const response = await fetchNui<{ number: string }>("startCompanyCall", { companyId: company.id, numberId: number?.id });
+      if (response.success) startCall(response.data.number); else notify(response.error.message);
+    } catch {
+      notify(t(localeRef.current, "operationFailed"));
+    } finally {
+      setBusy(false); setCallCompanyChoice(null);
+    }
+  };
   const callCompany = async (company: Company) => { const numbers = company.numbers.filter((number) => number.enabled && number.publicVisible && number.callsEnabled && number.available); if (numbers.length > 1) { setCallCompanyChoice({ ...company, numbers }); return; } if (numbers[0]) await callCompanyNumber(company, numbers[0]); };
-  const callEmployee = async (employee: Employee) => { setBusy(true); const response = await fetchNui<{ number: string }>("getEmployeeContact", { targetSource: employee.source }); if (response.success) startCall(response.data.number); else notify(response.error.message); setBusy(false); };
+  const callEmployee = async (employee: Employee) => {
+    setBusy(true);
+    try {
+      const response = await fetchNui<{ number: string }>("getEmployeeContact", { targetSource: employee.source });
+      if (response.success) startCall(response.data.number); else notify(response.error.message);
+    } catch {
+      notify(t(localeRef.current, "operationFailed"));
+    } finally {
+      setBusy(false);
+    }
+  };
   const createRequest = async (templateId: string, values: Record<string, string | number>) => {
     if (!requestCompany) return false;
     setBusy(true);

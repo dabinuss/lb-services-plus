@@ -1,4 +1,6 @@
-# Services+ Phase 2 API Contracts
+# Services+ API Contracts
+
+Current API version: `7`. This inventory is frozen for the `0.3.0-rc1` Phase 3 release candidate and is the input to the complete Phase 4 API reference review.
 
 All payloads are JSON-compatible. Every response uses `{ success, data? , error? }`.
 Server events are request/response based and return through `services-plus:client:response`.

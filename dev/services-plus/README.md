@@ -1,6 +1,19 @@
-# Services+ Phase 2
+# Services+
 
 Services+ is a separate LB Phone custom app resource providing a company directory, native multi-number calls, shared inboxes with LB Phone media and reactions, structured requests, and a server-authoritative employee portal. The portal keeps requests, inboxes, calls and the searchable active team in separate paginated workspace tabs. Red tab counters are reserved for unanswered requests, unread messages and calls not yet viewed during the current app session; neutral counters show zero or informational team totals.
+
+Version `0.3.0-rc1` is the Phase 3 technical release candidate. Production promotion still requires the live-server evidence in `RELEASE_CHECKLIST.md` and the Phase 4 API documentation review.
+
+## Documentation
+
+- [Installation](INSTALLATION.md): deployment and upgrades
+- [Configuration](CONFIGURATION.md): settings and permissions
+- [Compatibility](COMPATIBILITY.md): supported boundaries and validation matrix
+- [Database operations](DATABASE.md): migrations, backups and rollback
+- [Troubleshooting](TROUBLESHOOTING.md): operational diagnosis
+- [Integrations](INTEGRATIONS.md): optional-resource boundaries
+- [API contracts](API.md): callback, event and trusted-resource inventory
+- [Release checklist](RELEASE_CHECKLIST.md): automated and live release gates
 
 ## Requirements
 
@@ -10,6 +23,8 @@ Services+ is a separate LB Phone custom app resource providing a company directo
 - OneSync-enabled FiveM server
 
 ## Installation
+
+The authoritative deployment procedure is in [INSTALLATION.md](INSTALLATION.md).
 
 1. Back up the server database.
 2. Apply `sql/install.sql` to the server database.
@@ -26,6 +41,8 @@ ensure services-plus
 The resource checks required dependencies and the schema version during startup. It does not modify LB Phone or framework files.
 
 ## Configuration
+
+See [CONFIGURATION.md](CONFIGURATION.md) for the complete configuration reference.
 
 `Config.Framework` accepts `auto`, `esx`, `qbcore`, `qbox`, or `standalone`. Automatic detection prioritizes Qbox, QBCore, then ESX. Standalone player mappings are keyed by the FiveM license identifier.
 
@@ -69,6 +86,8 @@ Optional integrations are disabled by default. See `INTEGRATIONS.md` before addi
 
 ## Database Changes
 
+See [DATABASE.md](DATABASE.md) before changing an existing installation.
+
 Schema changes are versioned in `sql/migrations/`. Before applying any production migration:
 
 1. Stop `services-plus`.
@@ -88,6 +107,7 @@ Run from `ui/`:
 npm run typecheck
 npm run lint
 npm test
+npm run test:contracts
 npm run build
 ```
 

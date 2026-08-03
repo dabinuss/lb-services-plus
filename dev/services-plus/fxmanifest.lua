@@ -3,7 +3,7 @@ game "gta5"
 
 author "Services+"
 description "Company communication and request workflows for LB Phone"
-version "0.2.18-phase2"
+version "0.3.0-rc1"
 
 lua54 "yes"
 
@@ -33,8 +33,8 @@ client_scripts {
 server_scripts {
     "@oxmysql/lib/MySQL.lua",
     "bridge/server.lua",
-    "integrations/server.lua",
     "server/logger.lua",
+    "integrations/server.lua",
     "server/rate_limiter.lua",
     "server/migrations.lua",
     "server/repository.lua",
@@ -46,7 +46,6 @@ server_scripts {
     "server/api.lua",
     "server/exports.lua",
     "server/events.lua",
-    "server/prototypes.lua",
     "server/main.lua"
 }
 

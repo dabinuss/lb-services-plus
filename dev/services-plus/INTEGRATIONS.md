@@ -10,7 +10,9 @@ Services+ is a separate resource and only uses documented FiveM, LB Phone, frame
 - No third-party files, global framework state, jobs, inventories, invoices or map state are modified.
 - External side effects must be added behind `integrations/server.lua`, with server-side permission checks and rate limits.
 
-Phase 2 uses documented LB Phone custom-number callbacks, call lifecycle events, messaging exports, notification exports and contact APIs. Services+ does not replace LB Phone audio, messages or contacts; it coordinates company permissions and persists its own workflow metadata.
+Services+ uses documented LB Phone custom-number callbacks, call lifecycle events, messaging exports, notification exports and contact APIs. Services+ does not replace LB Phone audio, messages or contacts; it coordinates company permissions and persists its own workflow metadata.
+
+The supported callback, event, entity and trusted-resource inventory is maintained in [API.md](API.md). Do not treat internal Lua modules or Services+ network events as external integration APIs.
 
 Message attachments are selected through the custom-app `components.setGallery` API. LB Phone remains responsible for gallery access and configured media uploads; Services+ only validates and forwards the selected HTTPS URLs. Emoji messages use ordinary LB Phone message text, while Services+-specific message reactions are stored in the Services+ database.
 

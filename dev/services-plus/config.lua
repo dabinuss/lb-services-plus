@@ -3,12 +3,14 @@ Config = Config or {}
 Config.Framework = "auto" -- auto, esx, qbcore, qbox, standalone
 Config.Locale = "en"
 Config.Debug = false
+Config.LogLevel = "info" -- debug, info, warning, error
 Config.DatabaseBackedCategories = false
 Config.AppDefaultInstalled = true
 Config.AppIcon = "https://cfx-nui-services-plus/web/icon.svg"
 Config.RegistrationDelayMs = 750
 Config.ServerCallbackTimeoutMs = 10000
 Config.MaxCompanies = 100
+Config.MaxQueueBroadcastEntries = 100
 Config.RequireEquippedPhone = true
 Config.AdminAce = "servicesplus.admin"
 Config.ApiAllowedResources = {
@@ -16,7 +18,7 @@ Config.ApiAllowedResources = {
 }
 
 Config.RateLimits = {
-    initialState = { limit = 12, windowMs = 60000 },
+    getInitialState = { limit = 12, windowMs = 60000 },
     enterDuty = { limit = 5, windowMs = 30000 },
     leaveDuty = { limit = 5, windowMs = 30000 },
     updateStatus = { limit = 15, windowMs = 30000 },

@@ -8,7 +8,7 @@ function Integrations.Refresh()
         local configured = integration.enabled and integration.resource ~= ""
         availability[name] = configured and GetResourceState(integration.resource) == "started"
         if configured and not availability[name] then
-            print(("[services-plus] [WARN] Optional %s integration '%s' is unavailable; core behavior remains active."):format(name, integration.resource))
+            ServicesPlus.Logger.Warn("Optional integration is unavailable; core behavior remains active", { integration = name, resource = integration.resource })
         end
     end
 end

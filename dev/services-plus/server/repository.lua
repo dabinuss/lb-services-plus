@@ -329,8 +329,9 @@ function Repository.GetQueuePosition(numberId, queueId)
     return tonumber(MySQL.scalar.await("SELECT COUNT(*) FROM `services_plus_call_queue` WHERE `number_id` = ? AND `status` IN ('queued','offered') AND `id` <= ?", { numberId, queueId })) or 0
 end
 
-function Repository.GetNumberQueue(numberId)
-    return MySQL.query.await("SELECT `id`, `call_token` FROM `services_plus_call_queue` WHERE `number_id` = ? AND `status` IN ('queued','offered') ORDER BY `id`", { numberId }) or {}
+function Repository.GetNumberQueue(numberId, limit)
+    limit = math.max(1, math.min(math.floor(tonumber(limit) or 100), 250))
+    return MySQL.query.await("SELECT `id`, `call_token` FROM `services_plus_call_queue` WHERE `number_id` = ? AND `status` IN ('queued','offered') ORDER BY `id` LIMIT ?", { numberId, limit }) or {}
 end
 
 function Repository.AcceptCallQueue(id, identifier)
@@ -348,10 +349,14 @@ end
 
 function Repository.EndOpenCalls(result)
     local rows = MySQL.query.await("SELECT `id`, `assigned_identifier` FROM `services_plus_call_queue` WHERE `status` IN ('queued','offered','accepted')") or {}
+    MySQL.update.await([=[
+        UPDATE `services_plus_call_history` h
+        JOIN `services_plus_call_queue` q
+          ON JSON_UNQUOTE(JSON_EXTRACT(h.`metadata`, '$.queueId')) = CAST(q.`id` AS CHAR)
+        SET h.`result` = ?
+        WHERE q.`status` IN ('queued','offered','accepted')
+    ]=], { result })
     MySQL.update.await("UPDATE `services_plus_call_queue` SET `status` = 'ended', `ended_at` = CURRENT_TIMESTAMP WHERE `status` IN ('queued','offered','accepted')")
-    for _, row in ipairs(rows) do
-        MySQL.update.await("UPDATE `services_plus_call_history` SET `result` = ? WHERE JSON_UNQUOTE(JSON_EXTRACT(`metadata`, '$.queueId')) = ?", { result, tostring(row.id) })
-    end
     return rows
 end
 

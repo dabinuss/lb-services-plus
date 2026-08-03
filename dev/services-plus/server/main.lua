@@ -32,7 +32,7 @@ local function initialize()
     ServicesPlus.Employees.RestoreOnlineDuty()
     initialized = true
     ServicesPlus.Ready = true
-    ServicesPlus.Logger.Info("Phase 2 server initialized", { framework = bridgeResult })
+    ServicesPlus.Logger.Info("Services+ server initialized", { framework = bridgeResult })
 end
 
 CreateThread(function()

@@ -34,7 +34,7 @@ local function push(source, eventType, payload)
 end
 
 function Calls.BroadcastQueue(numberId)
-    for position, row in ipairs(ServicesPlus.Repository.GetNumberQueue(numberId)) do
+    for position, row in ipairs(ServicesPlus.Repository.GetNumberQueue(numberId, Config.MaxQueueBroadcastEntries)) do
         local offer = runtimeOffers[row.call_token]
         if offer and offer.callerSource then
             push(offer.callerSource, "call.queue", { id = row.id, position = position, status = "queued" })

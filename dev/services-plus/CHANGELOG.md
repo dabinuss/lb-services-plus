@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.0-rc1
+
+- Add Phase 3 installation, configuration, compatibility, database, troubleshooting and release-validation documentation.
+- Guarantee frontend loading and busy states recover from rejected or timed-out NUI requests, including a localized conversation retry state.
+- Bound call queue broadcasts and batch restart call-history cleanup to avoid unbounded reads and per-row updates.
+- Correct the initial-state rate-limit key and add configurable debug, info, warning and error log thresholds.
+- Remove diagnostic prototypes from the production manifest and make startup logging phase-neutral.
+- Add Phase 3 contracts for callback responses, allow-lists, rate limits, API handlers, documentation coverage, query indexes, queue limits and production packaging.
+- Preserve API version 7 while freezing the release-candidate surface for the Phase 4 documentation review.
+
 ## 0.2.18-phase2
 
 - Show the assigned employee name and role on active and completed company requests.
