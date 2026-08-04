@@ -24,13 +24,13 @@ export async function fetchNui<T>(event: string, data: unknown = {}): Promise<Ap
     ];
     employment.onDuty = true; employment.employee = employee; employment.activeEmployees = [employee, ...colleagues];
     browserWorkspace.numberStates?.forEach((number) => { number.canSelectForDispatch = number.enabled; number.selectedForDispatch = number.enabled; });
-    browserState.companies = browserState.companies.map((company) => company.id === employment.companyId ? { ...company, available: true, employeeCount: 3, numbers: company.numbers.map((number) => ({ ...number, available: number.enabled })) } : company);
+    browserState.companies = browserState.companies.map((company) => company.id === employment.companyId ? { ...company, available: true, numbers: company.numbers.map((number) => ({ ...number, available: number.enabled })) } : company);
     persistBrowserConfiguration();
     return { success: true, data: { currentUser: structuredClone(browserState.currentUser), companies: structuredClone(browserState.companies) } as T };
   }
   if (event === "leaveDuty" && employment) {
     employment.onDuty = false; employment.employee = null; employment.activeEmployees = [];
-    browserState.companies = browserState.companies.map((company) => company.id === employment.companyId ? { ...company, available: false, employeeCount: 0, numbers: company.numbers.map((number) => ({ ...number, available: false })) } : company);
+    browserState.companies = browserState.companies.map((company) => company.id === employment.companyId ? { ...company, available: false, numbers: company.numbers.map((number) => ({ ...number, available: false })) } : company);
     persistBrowserConfiguration();
     return { success: true, data: { currentUser: structuredClone(browserState.currentUser), companies: structuredClone(browserState.companies) } as T };
   }
@@ -134,7 +134,7 @@ export async function fetchNui<T>(event: string, data: unknown = {}): Promise<Ap
       const existing = current?.numbers.find((item) => item.id === id);
       return { ...number, id, available: existing?.available ?? (available && number.enabled) };
     });
-    const company: Company = { ...input, categoryName: category?.name ?? input.categoryId, available, employeeCount: current?.employeeCount ?? 0, primaryNumber: numbers.find((number) => number.enabled)?.number, numbers, version: Date.now() };
+    const company: Company = { ...input, categoryName: category?.name ?? input.categoryId, available, primaryNumber: numbers.find((number) => number.enabled)?.number, numbers, version: Date.now() };
     if (index >= 0) browserState.companies[index] = company; else browserState.companies.push(company);
     jobs[company.id] = input.job;
     if (company.id === browserWorkspace.companyId) {
@@ -162,7 +162,7 @@ export async function fetchNui<T>(event: string, data: unknown = {}): Promise<Ap
     if (index < 0) return { success: false, error: { code: "company_not_found", message: "Company not found.", retryable: false } };
     const [restored] = browserDeletedCompanies.splice(index, 1);
     const category = browserState.categories.find((item) => item.id === restored.categoryId);
-    const company: Company = { id: restored.id, displayName: restored.displayName, logo: restored.logo ?? "", backgroundImage: "", categoryId: restored.categoryId, categoryName: category?.name ?? restored.categoryId, description: "", location: "", openingHours: "", keywords: [], available: false, employeeCount: 0, requestsEnabled: false, messagesEnabled: true, dispatchMode: "ring_all", numbers: [], version: Date.now() };
+    const company: Company = { id: restored.id, displayName: restored.displayName, logo: restored.logo ?? "", backgroundImage: "", categoryId: restored.categoryId, categoryName: category?.name ?? restored.categoryId, description: "", location: "", openingHours: "", keywords: [], available: false, requestsEnabled: false, messagesEnabled: true, dispatchMode: "ring_all", numbers: [], version: Date.now() };
     browserState.companies.push(company);
     persistBrowserConfiguration();
     return { success: true, data: structuredClone(company) as T };
@@ -221,16 +221,16 @@ if (persistedBrowserConfiguration) {
   if (persistedBrowserConfiguration.currentUser) browserState.currentUser = persistedBrowserConfiguration.currentUser;
 }
 const browserActivity: MyActivity = { calls: [
-  { id: 103, companyId: "downtown-cab", displayName: "Downtown Cab Co.", number: "5550100", result: "completed", created_at: "2026-08-01T19:42:00Z" },
-  { id: 102, companyId: "pillbox", displayName: "Pillbox Medical Center", number: "912", result: "answered", created_at: "2026-07-30T08:15:00Z" },
-  { id: 101, companyId: "bennys", displayName: "Benny's Motorworks", number: "5550200", result: "missed", created_at: "2026-07-27T16:03:00Z" }
+  { id: 103, companyId: "downtown-cab", displayName: "Downtown Cab Co.", number: "5550100", result: "completed", created_at: "2026-08-01T19:42:00Z", distribution: "dispatch_only", queueDurationSeconds: 14, callDurationSeconds: 187 },
+  { id: 102, companyId: "pillbox", displayName: "Pillbox Medical Center", number: "912", result: "answered", created_at: "2026-07-30T08:15:00Z", distribution: "ring_all", queueDurationSeconds: 3, callDurationSeconds: 62 },
+  { id: 101, companyId: "bennys", displayName: "Benny's Motorworks", number: "5550200", result: "missed", created_at: "2026-07-27T16:03:00Z", distribution: "ring_all", queueDurationSeconds: 45, callDurationSeconds: null }
 ], requests: [] };
 const requestSettings: RequestSettings = { label: "Ride Request", createLabel: "Request a ride", templateIds: ["immediate_pickup"], navigationOnAccept: "automatic", defaultPhone: "5550199", requestNumbers: [{ id: "taxi-main", label: "Dispatch" }], templates: [
   { id: "immediate_pickup", kind: "specialized", name: "Pickup", fields: [{ id: "people", type: "people", label: "Passengers", required: true, minimum: 1, maximum: 20 }, { id: "phone", type: "phone", label: "Phone number", required: false, maxLength: 32 }] },
 ], phases: [{ id: "accepted", name: "Accepted" }, { id: "on_the_way", name: "On the way" }, { id: "picked_up", name: "Passenger picked up" }, { id: "ride_active", name: "Ride active" }, { id: "completed", name: "Completed" }], numberId: "taxi-main" };
 const browserCitizenConversations: InboxConversation[] = [{ id: 501, companyId: "downtown-cab", companyName: "Downtown Cab Co.", logo: "./icon.svg", numberId: "taxi-main", numberLabel: "Dispatch", lastMessage: "Your driver is on the way.", lastMessageAt: "2026-08-02T18:35:00Z", unreadCount: 0 }];
 const browserMessages: InboxMessage[] = [{ id: 1, senderNumber: "5550199", senderType: "citizen", body: "Can I get a pickup at Legion Square?", attachments: [], reactions: [{ emoji: "👍", count: 2, mine: false }], createdAt: "2026-08-02T18:30:00Z" }, { id: 2, senderNumber: "5550100", senderType: "employee", body: "Your driver is on the way.", attachments: [], createdAt: "2026-08-02T18:35:00Z" }];
-const browserWorkspace: CompanyWorkspace = { companyId: "downtown-cab", requestSettings, pagination: { conversations: { hasMore: false }, requests: { hasMore: false }, calls: { hasMore: false } }, numberStates: [{ numberId: "taxi-main", label: "Dispatch", enabled: true, callsEnabled: true, inboxEnabled: true, requestsEnabled: true, canSelectForDispatch: true, selectedForDispatch: true }], requests: [{ id: 701, companyId: "downtown-cab", companyName: "Downtown Cab Co.", templateId: "immediate_pickup", requestLabel: "Ride Request", status: "pending", payload: { people: 2, phone: "5550199" }, createdAt: "2026-08-02T19:10:00Z" }, { id: 700, companyId: "downtown-cab", companyName: "Downtown Cab Co.", templateId: "immediate_pickup", requestLabel: "Ride Request", status: "active", phaseId: "driving_to_pickup", payload: { people: 1, phone: "5550124" }, assignee: { name: "Mika Hart", role: "Dispatcher", source: 31 }, createdAt: "2026-08-02T18:50:00Z" }], conversations: [{ id: 501, numberId: "taxi-main", numberLabel: "Dispatch", externalNumber: "5550199", lastMessage: "Can I get a pickup at Legion Square?", lastMessageAt: "2026-08-02T18:30:00Z", unreadCount: 2 }], calls: [{ id: 301, callerNumber: "5550188", numberId: "taxi-main", status: "completed", created_at: "2026-08-02T17:20:00Z" }] };
+const browserWorkspace: CompanyWorkspace = { companyId: "downtown-cab", requestSettings, pagination: { conversations: { hasMore: false }, requests: { hasMore: false }, calls: { hasMore: false } }, numberStates: [{ numberId: "taxi-main", label: "Dispatch", enabled: true, callsEnabled: true, inboxEnabled: true, requestsEnabled: true, canSelectForDispatch: true, selectedForDispatch: true }], requests: [{ id: 701, companyId: "downtown-cab", companyName: "Downtown Cab Co.", templateId: "immediate_pickup", requestLabel: "Ride Request", status: "pending", payload: { people: 2, phone: "5550199" }, createdAt: "2026-08-02T19:10:00Z" }, { id: 700, companyId: "downtown-cab", companyName: "Downtown Cab Co.", templateId: "immediate_pickup", requestLabel: "Ride Request", status: "active", phaseId: "driving_to_pickup", payload: { people: 1, phone: "5550124" }, assignee: { name: "Mika Hart", role: "Dispatcher", source: 31 }, createdAt: "2026-08-02T18:50:00Z" }], conversations: [{ id: 501, numberId: "taxi-main", numberLabel: "Dispatch", externalNumber: "5550199", lastMessage: "Can I get a pickup at Legion Square?", lastMessageAt: "2026-08-02T18:30:00Z", unreadCount: 2 }], calls: [{ id: 301, callerNumber: "5550188", numberId: "taxi-main", distribution: "dispatch_only", status: "completed", created_at: "2026-08-02T17:20:00Z", queueDurationSeconds: 9, callDurationSeconds: 214 }] };
 browserWorkspace.requests.push(...Array.from({ length: 62 }, (_, index) => ({ id: 699 - index, companyId: "downtown-cab", companyName: "Downtown Cab Co.", templateId: "immediate_pickup", requestLabel: "Ride Request", status: index % 7 === 0 ? "returned" : "completed", payload: { people: index % 4 + 1, phone: `555${String(1200 + index)}` }, createdAt: new Date(Date.UTC(2026, 6, 31, 20, 0, -index)).toISOString() })));
 browserWorkspace.calls.push(...Array.from({ length: 62 }, (_, index) => ({ id: 300 - index, callerNumber: `555${String(2000 + index)}`, numberId: "taxi-main", status: index % 5 === 0 ? "missed" : "completed", created_at: new Date(Date.UTC(2026, 6, 31, 18, 0, -index)).toISOString() })));
 browserWorkspace.conversations.push(...Array.from({ length: 62 }, (_, index) => ({ id: 500 - index, numberId: index % 2 === 0 ? "taxi-main" : "taxi-booking", numberLabel: index % 2 === 0 ? "Dispatch" : "Bookings", externalNumber: `555${String(3000 + index)}`, lastMessage: `Browser preview conversation ${index + 1}`, lastMessageAt: new Date(Date.UTC(2026, 6, 31, 16, 0, -index)).toISOString(), unreadCount: index % 9 === 0 ? 1 : 0 })));

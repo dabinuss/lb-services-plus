@@ -18,7 +18,9 @@ local function defaultTemplateIds(company)
 end
 
 local function templateAllowed(company, template)
-    return template and template.kind == "specialized" and template.categoryId == company.categoryId
+    if not template or template.kind ~= "specialized" then return false end
+    for _, categoryId in ipairs(template.categoryIds or {}) do if categoryId == company.categoryId then return true end end
+    return false
 end
 
 local function resolvedTemplateIds(company, storedIds)

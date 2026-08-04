@@ -132,7 +132,6 @@ function Companies.ToPublic(company)
         openingHours = company.openingHours,
         keywords = copyArray(company.keywords),
         available = employeeCount > 0,
-        employeeCount = employeeCount,
         requestsEnabled = company.requestsEnabled,
         hasRequestTemplates = #(ServicesPlus.RequestDefinitions.categoryTemplates[company.categoryId] or {}) > 0,
         messagesEnabled = company.messagesEnabled,

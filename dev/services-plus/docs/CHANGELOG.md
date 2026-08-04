@@ -2,6 +2,11 @@
 
 ## 0.7.0-rc1
 
+- Add call distribution mode and derived queue/call duration to `getMyActivity` and `getCompanyWorkspace` call entries, and display them in the personal and company call lists; add migration 012 with the required `services_plus_call_queue.distribution` column.
+- Remove the unused `Company.employeeCount` field from every API response; it was computed and transmitted but never rendered by the frontend.
+- Remove the request-cancellation-reason requirement from the product plan; no cancellation reason is captured or planned.
+- Remove the unused `Config.DatabaseBackedCategories` setting; categories are always configuration-only.
+- Make the `delivery` request template available to both `restaurants_food` and `retail` companies instead of restaurants only; request templates now support multiple categories via `categoryIds`.
 - Fix `adminDeleteCompany` to also soft-delete the company's own numbers (previously only the company row was soft-deleted, leaving its numbers untouched even though the API reference already documented cascading deletion).
 - Add `adminRestoreCompany` and an `AdminState.deletedCompanies` list so administrators can restore a soft-deleted company (and the numbers deleted alongside it) from the admin panel instead of only being able to revive it by re-creating the same `id`.
 - Fix client-authoritative call termination: only the caller or the currently assigned employee may end a company call token; a bystander who was previously offered the call can no longer end it for everyone.

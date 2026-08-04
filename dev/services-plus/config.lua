@@ -4,7 +4,6 @@ Config.Framework = "auto" -- auto, esx, qbcore, qbox, standalone
 Config.Locale = "en"
 Config.Debug = false
 Config.LogLevel = "info" -- debug, info, warning, error
-Config.DatabaseBackedCategories = false
 Config.AppDefaultInstalled = true
 Config.AppIcon = "https://cfx-nui-services-plus/web/icon.svg"
 Config.RegistrationDelayMs = 750

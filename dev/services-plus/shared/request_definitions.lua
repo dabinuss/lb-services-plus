@@ -21,19 +21,21 @@ ServicesPlus.RequestDefinitions = {
         } }
     },
     templates = {
-        immediate_pickup = { kind = "specialized", categoryId = "taxi_transport", name = { en = "Pickup", de = "Abholung" }, fields = { { id = "people", required = true }, { id = "phone", required = false } } },
-        roadside_assistance = { kind = "specialized", categoryId = "vehicle_services", name = { en = "Roadside or towing assistance", de = "Pannen- oder Abschlepphilfe" }, fields = { { id = "location", required = true }, { id = "description", required = true }, { id = "vehicle_plate", required = false }, { id = "phone", required = false } } },
-        delivery = { kind = "specialized", categoryId = "restaurants_food", name = { en = "Delivery", de = "Lieferung" }, fields = { { id = "description", required = true }, { id = "location", required = true }, { id = "phone", required = false } } },
-        reservation = { kind = "specialized", categoryId = "restaurants_food", name = { en = "Table reservation", de = "Tischreservierung" }, fields = { { id = "requested_time", required = true }, { id = "people", required = true }, { id = "phone", required = false }, { id = "notes", required = false } } },
-        medical_transport = { kind = "specialized", categoryId = "emergency_medical", name = { en = "Medical transport", de = "Krankentransport" }, fields = { { id = "location", required = true }, { id = "people", required = true }, { id = "injuries", required = true } } },
-        property_viewing = { kind = "specialized", categoryId = "real_estate", name = { en = "Property viewing", de = "Immobilienbesichtigung" }, fields = { { id = "location", required = true }, { id = "description", required = true }, { id = "phone", required = false } } },
-        legal_assistance = { kind = "specialized", categoryId = "police_justice", name = { en = "Legal assistance", de = "Anwalt anfragen" }, fields = { { id = "legal_area", required = true }, { id = "urgency", required = true }, { id = "phone", required = false } } },
-        police_report = { kind = "specialized", categoryId = "police_justice", name = { en = "Police request", de = "Polizeiliche Anfrage" }, fields = { { id = "location", required = true }, { id = "description", required = true }, { id = "phone", required = false } } }
+        immediate_pickup = { kind = "specialized", categoryIds = { "taxi_transport" }, name = { en = "Pickup", de = "Abholung" }, fields = { { id = "people", required = true }, { id = "phone", required = false } } },
+        roadside_assistance = { kind = "specialized", categoryIds = { "vehicle_services" }, name = { en = "Roadside or towing assistance", de = "Pannen- oder Abschlepphilfe" }, fields = { { id = "location", required = true }, { id = "description", required = true }, { id = "vehicle_plate", required = false }, { id = "phone", required = false } } },
+        -- General-purpose delivery, usable by any category that ships physical goods, not restaurant-specific.
+        delivery = { kind = "specialized", categoryIds = { "restaurants_food", "retail" }, name = { en = "Delivery", de = "Lieferung" }, fields = { { id = "description", required = true }, { id = "location", required = true }, { id = "phone", required = false } } },
+        reservation = { kind = "specialized", categoryIds = { "restaurants_food" }, name = { en = "Table reservation", de = "Tischreservierung" }, fields = { { id = "requested_time", required = true }, { id = "people", required = true }, { id = "phone", required = false }, { id = "notes", required = false } } },
+        medical_transport = { kind = "specialized", categoryIds = { "emergency_medical" }, name = { en = "Medical transport", de = "Krankentransport" }, fields = { { id = "location", required = true }, { id = "people", required = true }, { id = "injuries", required = true } } },
+        property_viewing = { kind = "specialized", categoryIds = { "real_estate" }, name = { en = "Property viewing", de = "Immobilienbesichtigung" }, fields = { { id = "location", required = true }, { id = "description", required = true }, { id = "phone", required = false } } },
+        legal_assistance = { kind = "specialized", categoryIds = { "police_justice" }, name = { en = "Legal assistance", de = "Anwalt anfragen" }, fields = { { id = "legal_area", required = true }, { id = "urgency", required = true }, { id = "phone", required = false } } },
+        police_report = { kind = "specialized", categoryIds = { "police_justice" }, name = { en = "Police request", de = "Polizeiliche Anfrage" }, fields = { { id = "location", required = true }, { id = "description", required = true }, { id = "phone", required = false } } }
     },
     categoryTemplates = {
         taxi_transport = { "immediate_pickup" },
         vehicle_services = { "roadside_assistance" },
         restaurants_food = { "delivery", "reservation" },
+        retail = { "delivery" },
         emergency_medical = { "medical_transport" },
         real_estate = { "property_viewing" },
         police_justice = { "police_report", "legal_assistance" }

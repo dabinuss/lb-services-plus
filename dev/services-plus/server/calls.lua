@@ -53,7 +53,7 @@ function Calls.RegisterIncoming(source, payload)
     local selected = selectEmployees(company, number)
     local selectedIds = identifiers(selected)
     local state = #selected > 0 and "offered" or "queued"
-    local entry = existing or ServicesPlus.Repository.CreateCallQueue({ callToken = token, companyId = company.id, numberId = number.id, status = state, offeredIdentifiers = selectedIds })
+    local entry = existing or ServicesPlus.Repository.CreateCallQueue({ callToken = token, companyId = company.id, numberId = number.id, distribution = number.distribution, status = state, offeredIdentifiers = selectedIds })
     if not entry then return false, "call_queue_failed" end
     if existing and existing.status == "queued" and #selectedIds > 0 then
         state = "offered"
@@ -223,7 +223,7 @@ AddEventHandler("lb-phone:newCall", function(call)
     local player = caller.source and ServicesPlus.Bridge.GetPlayer(caller.source) or nil
     local company, number = ServicesPlus.Companies.FindByNumber(callee.number or call.company)
     if company and number then
-        local row = ServicesPlus.Repository.CreateCallQueue({ callToken = token, lbCallId = call.callId, callerIdentifier = player and player.identifier or nil, callerNumber = caller.number, companyId = company.id, numberId = number.id, status = "queued", offeredIdentifiers = {} })
+        local row = ServicesPlus.Repository.CreateCallQueue({ callToken = token, lbCallId = call.callId, callerIdentifier = player and player.identifier or nil, callerNumber = caller.number, companyId = company.id, numberId = number.id, distribution = number.distribution, status = "queued", offeredIdentifiers = {} })
         runtimeOffers[token] = runtimeOffers[token] or { declined = {}, sources = {}, callerSource = caller.source }
         runtimeOffers[token].callerSource = caller.source
         if row then ServicesPlus.Repository.AttachCallHistory(player and player.identifier or nil, company.id, number.id, row.id) end

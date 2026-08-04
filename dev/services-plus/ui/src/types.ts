@@ -36,7 +36,6 @@ export interface Company {
   openingHours: string;
   keywords: string[];
   available: boolean;
-  employeeCount: number;
   requestsEnabled: boolean;
   hasRequestTemplates?: boolean;
   messagesEnabled: boolean;
@@ -180,6 +179,9 @@ export interface CitizenCall {
   number: string;
   result: string;
   created_at: string;
+  distribution?: "ring_all" | "random" | "dispatch_only";
+  queueDurationSeconds?: number;
+  callDurationSeconds?: number | null;
 }
 
 export interface RequestField {
@@ -238,7 +240,7 @@ export interface MessageReaction { emoji: string; count: number; mine: boolean; 
 export interface MessageReactionUpdate { messageId: number; conversationId: number; reactions: MessageReaction[]; personal?: boolean; }
 
 export interface ConversationData { conversation: { id: number; companyId: string; numberId: string; externalNumber: string }; messages: InboxMessage[]; }
-export interface CompanyCall { id: number; callerNumber?: string; numberId: string; status: string; assignedIdentifier?: string; created_at: string; }
+export interface CompanyCall { id: number; callerNumber?: string; numberId: string; distribution?: "ring_all" | "random" | "dispatch_only"; status: string; assignedIdentifier?: string; created_at: string; queueDurationSeconds?: number; callDurationSeconds?: number | null; }
 export interface NumberState { numberId: string; label: string; enabled: boolean; callsEnabled: boolean; inboxEnabled: boolean; requestsEnabled: boolean; canSelectForDispatch: boolean; selectedForDispatch: boolean; }
 export type WorkspaceSection = "conversations" | "requests" | "calls";
 export interface ConversationCursor { lastMessageAt: string; id: number; }

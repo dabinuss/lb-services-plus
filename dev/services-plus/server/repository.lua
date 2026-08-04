@@ -312,10 +312,13 @@ end
 
 function Repository.GetMyActivity(identifier, limit)
     local calls = MySQL.query.await([=[
-        SELECT h.`id`, h.`company_id` AS `companyId`, c.`display_name` AS `displayName`, n.`number`, h.`result`, h.`created_at`
+        SELECT h.`id`, h.`company_id` AS `companyId`, c.`display_name` AS `displayName`, n.`number`, h.`result`, h.`created_at`, q.`distribution`,
+          TIMESTAMPDIFF(SECOND, q.`created_at`, COALESCE(q.`accepted_at`, q.`ended_at`, NOW())) AS `queueDurationSeconds`,
+          CASE WHEN q.`accepted_at` IS NOT NULL THEN TIMESTAMPDIFF(SECOND, q.`accepted_at`, COALESCE(q.`ended_at`, NOW())) ELSE NULL END AS `callDurationSeconds`
         FROM `services_plus_call_history` h
         JOIN `services_plus_companies` c ON c.`id` = h.`company_id`
         JOIN `services_plus_company_numbers` n ON n.`id` = h.`number_id`
+        LEFT JOIN `services_plus_call_queue` q ON q.`id` = CAST(JSON_UNQUOTE(JSON_EXTRACT(h.`metadata`, '$.queueId')) AS UNSIGNED)
         WHERE h.`caller_identifier` = ?
         ORDER BY h.`id` DESC LIMIT ?
     ]=], { identifier, limit }) or {}
@@ -334,10 +337,10 @@ end
 function Repository.CreateCallQueue(entry)
     MySQL.insert.await([=[
         INSERT INTO `services_plus_call_queue`
-            (`call_token`, `lb_call_id`, `caller_identifier`, `caller_number`, `company_id`, `number_id`, `status`, `offered_identifiers`)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            (`call_token`, `lb_call_id`, `caller_identifier`, `caller_number`, `company_id`, `number_id`, `distribution`, `status`, `offered_identifiers`)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON DUPLICATE KEY UPDATE `lb_call_id` = COALESCE(VALUES(`lb_call_id`), `lb_call_id`)
-    ]=], { entry.callToken, entry.lbCallId, entry.callerIdentifier, entry.callerNumber, entry.companyId, entry.numberId, entry.status, json.encode(entry.offeredIdentifiers or {}) })
+    ]=], { entry.callToken, entry.lbCallId, entry.callerIdentifier, entry.callerNumber, entry.companyId, entry.numberId, entry.distribution, entry.status, json.encode(entry.offeredIdentifiers or {}) })
     return MySQL.single.await("SELECT * FROM `services_plus_call_queue` WHERE `call_token` = ?", { entry.callToken })
 end
 
@@ -406,7 +409,9 @@ end
 
 function Repository.GetCompanyCalls(companyId, cursor, limit)
     return MySQL.query.await([=[
-        SELECT q.`id`, q.`caller_number` AS `callerNumber`, q.`number_id` AS `numberId`, q.`status`, q.`assigned_identifier` AS `assignedIdentifier`, q.`created_at`, q.`accepted_at`, q.`ended_at`
+        SELECT q.`id`, q.`caller_number` AS `callerNumber`, q.`number_id` AS `numberId`, q.`distribution`, q.`status`, q.`assigned_identifier` AS `assignedIdentifier`, q.`created_at`, q.`accepted_at`, q.`ended_at`,
+          TIMESTAMPDIFF(SECOND, q.`created_at`, COALESCE(q.`accepted_at`, q.`ended_at`, NOW())) AS `queueDurationSeconds`,
+          CASE WHEN q.`accepted_at` IS NOT NULL THEN TIMESTAMPDIFF(SECOND, q.`accepted_at`, COALESCE(q.`ended_at`, NOW())) ELSE NULL END AS `callDurationSeconds`
         FROM `services_plus_call_queue` q WHERE q.`company_id` = ? AND q.`id` < ? ORDER BY q.`id` DESC LIMIT ?
     ]=], { companyId, cursor, limit }) or {}
 end

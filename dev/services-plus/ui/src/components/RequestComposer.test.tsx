@@ -21,7 +21,6 @@ const company = {
   openingHours: "24/7",
   keywords: [],
   available: true,
-  employeeCount: 1,
   requestsEnabled: true,
   messagesEnabled: true,
   dispatchMode: "dispatch_only",

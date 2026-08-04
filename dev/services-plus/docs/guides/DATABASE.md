@@ -12,9 +12,11 @@ Before installation, migration, rollback, or destructive administration work:
 
 ## Migrations
 
-The install schema is current through migration 011. Existing installations must apply each missing file from `sql/migrations/` in numeric order. Never skip a migration or apply a newer resource against an older schema.
+The install schema is current through migration 012. Existing installations must apply each missing file from `sql/migrations/` in numeric order. Never skip a migration or apply a newer resource against an older schema.
 
 Migration 011 stops physically deleting companies and company numbers. `adminDeleteCompany` and number removal now set `deleted_at` (and `deleted_by` on companies) instead, so call, request, and conversation history stays joinable and readable. Deleted company IDs, job links, and phone numbers remain reserved and are not reused automatically; saving a company or number with the same identifier revives the soft-deleted row.
+
+Migration 012 adds a `distribution` column to `services_plus_call_queue`, capturing the number's distribution mode at the moment a call was queued. Queue and call duration are not stored; they are derived at read time from the existing `created_at`, `accepted_at`, and `ended_at` timestamps.
 
 1. Stop `services-plus` and back up the database.
 2. Check the current rows in `services_plus_schema_migrations`.

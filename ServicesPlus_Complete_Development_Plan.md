@@ -844,7 +844,6 @@ Stored data:
 - Workflow phase history
 - Acceptance time
 - Completion time
-- Cancellation reason
 
 History lists are always paginated.
 
@@ -874,7 +873,6 @@ This includes:
 - Default request templates
 - Fixed category request workflows
 - Default request field definitions
-- Whether category administration is config-only or database-backed
 
 ### 13.2 In-App Administration
 

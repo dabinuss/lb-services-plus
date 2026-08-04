@@ -193,6 +193,7 @@ CREATE TABLE IF NOT EXISTS `services_plus_call_queue` (
   `caller_number` VARCHAR(32) NULL,
   `company_id` VARCHAR(64) NOT NULL,
   `number_id` VARCHAR(64) NOT NULL,
+  `distribution` ENUM('ring_all','random','dispatch_only') NULL,
   `status` ENUM('queued','offered','accepted','declined','ended') NOT NULL DEFAULT 'queued',
   `assigned_identifier` VARCHAR(96) NULL,
   `offered_identifiers` JSON NULL,
@@ -279,4 +280,5 @@ INSERT IGNORE INTO `services_plus_schema_migrations` (`version`, `name`) VALUES
   (8, 'simplify_dispatch_line_selection'),
   (9, 'request_assignee_integration_contract'),
   (10, 'inbox_cursor_index'),
-  (11, 'soft_delete_companies_and_numbers');
+  (11, 'soft_delete_companies_and_numbers'),
+  (12, 'call_duration_and_distribution');
