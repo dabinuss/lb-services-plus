@@ -222,15 +222,19 @@ AddEventHandler("lb-phone:newCall", function(call)
     local callee = call.callee or {}
     local player = caller.source and ServicesPlus.Bridge.GetPlayer(caller.source) or nil
     local company, number = ServicesPlus.Companies.FindByNumber(callee.number or call.company)
+    -- LB Phone's CallData carries the caller's real number even when hideCallerId is set;
+    -- withholding it is left to the receiving script. Store nil in that case so it is
+    -- displayed as an unknown number instead of a normal (merely masked) one.
+    local callerNumber = not call.hideCallerId and caller.number or nil
     if company and number then
-        local row = ServicesPlus.Repository.CreateCallQueue({ callToken = token, lbCallId = call.callId, callerIdentifier = player and player.identifier or nil, callerNumber = caller.number, companyId = company.id, numberId = number.id, distribution = number.distribution, status = "queued", offeredIdentifiers = {} })
+        local row = ServicesPlus.Repository.CreateCallQueue({ callToken = token, lbCallId = call.callId, callerIdentifier = player and player.identifier or nil, callerNumber = callerNumber, companyId = company.id, numberId = number.id, distribution = number.distribution, status = "queued", offeredIdentifiers = {} })
         runtimeOffers[token] = runtimeOffers[token] or { declined = {}, sources = {}, callerSource = caller.source }
         runtimeOffers[token].callerSource = caller.source
         if row then ServicesPlus.Repository.AttachCallHistory(player and player.identifier or nil, company.id, number.id, row.id) end
         if caller.source and row then push(caller.source, "call.queue", { id = row.id, companyId = company.id, position = ServicesPlus.Repository.GetQueuePosition(number.id, row.id), status = row.status }) end
         Calls.BroadcastQueue(number.id)
     else
-        ServicesPlus.Repository.AttachLbCall(token, call.callId, player and player.identifier or nil, caller.number)
+        ServicesPlus.Repository.AttachLbCall(token, call.callId, player and player.identifier or nil, callerNumber)
     end
 end)
 

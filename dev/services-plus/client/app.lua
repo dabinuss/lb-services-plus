@@ -14,9 +14,17 @@ function ServicesPlusClient.RegisterApp()
         description = "Companies, public services and employee duty portal",
         developer = "Services+",
         defaultApp = Config.AppDefaultInstalled,
-        ui = "web/index.html",
+        -- LB Phone resolves `ui` relative to the resource namespace, matching the
+        -- official app template (GetCurrentResourceName() .. "/<path>"); a bare
+        -- path here fails to embed correctly inside the phone frame.
+        ui = ServicesPlus.Constants.ResourceName .. "/web/index.html",
         icon = Config.AppIcon,
-        fixBlur = true,
+        -- `fixBlur = true` renders the iframe crisply but requires the app's CSS
+        -- to use em/rem units instead of px (per LB Phone's docs); our CSS is
+        -- px-based, so this is left false to use LB Phone's normal scaled
+        -- iframe sizing. Not related to the earlier fullscreen bug, which was
+        -- actually caused by also declaring our own `ui_page` (see fxmanifest.lua).
+        fixBlur = false,
         onClose = function()
             TriggerServerEvent("services-plus:server:appClosed")
         end

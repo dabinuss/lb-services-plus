@@ -2,6 +2,8 @@
 
 ## 0.7.0-rc1
 
+- Fix the app rendering fullscreen and unfocused instead of embedded in the phone frame: remove the resource's own `ui_page` declaration. LB Phone embeds custom apps through its own iframe and only injects `fetchNui`/`onNuiEvent`/etc. into that iframe's `contentWindow`; declaring `ui_page` on top of that spun up a second, independent NUI overlay that never received the injection and was always rendered on top.
+- Respect LB Phone's `hideCallerId` flag on incoming calls: a citizen calling with a suppressed number is now stored with no caller number and shown to employees as an unknown caller, instead of being masked the same way as a normal (non-anonymous) caller.
 - Mask citizen phone numbers shown to company employees (call history and shared-inbox conversations) to their last four characters; a hidden/anonymous caller shows as an unknown number instead of a blank field. The citizen viewing their own conversation and the trusted `services-plus:server:messageReceived` event still receive the full number.
 - Add call distribution mode and derived queue/call duration to `getMyActivity` and `getCompanyWorkspace` call entries, and display them in the personal and company call lists; add migration 012 with the required `services_plus_call_queue.distribution` column.
 - Remove the unused `Company.employeeCount` field from every API response; it was computed and transmitted but never rendered by the frontend.

@@ -7,7 +7,12 @@ version "0.7.0-rc1"
 
 lua54 "yes"
 
-ui_page "web/index.html"
+-- No ui_page here on purpose: LB Phone embeds the custom app itself via its own
+-- iframe, fetching these files through the cfx-nui- origin below. Declaring our
+-- own ui_page would additionally spin up an independent, unmanaged NUI overlay
+-- that LB Phone never focuses or sizes and that never receives its `fetchNui`
+-- injection (LB Phone injects it only into the iframe's own contentWindow) -
+-- verified directly in LB Phone's compiled UI bundle.
 
 files {
     "web/index.html",

@@ -32,7 +32,9 @@
 
 * { box-sizing: border-box; }
 html, body, #root { position: fixed; inset: 0; width: 100%; height: 100%; margin: 0; overflow: hidden; }
-body { color: var(--text); background: transparent; letter-spacing: 0; }
+/* Hidden by default so the page never renders on top of the game before LB Phone
+   actually shows it; main.tsx makes it visible immediately for the browser preview. */
+body { color: var(--text); background: transparent; letter-spacing: 0; visibility: hidden; }
 button, input, textarea, select { font: inherit; letter-spacing: 0; }
 button { color: inherit; cursor: pointer; transition: border-color .15s ease, background-color .15s ease, color .15s ease, box-shadow .15s ease, opacity .15s ease, transform .15s ease; }
 button:hover:not(:disabled) { transform: translateY(-1px); }
