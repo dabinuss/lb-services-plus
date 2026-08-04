@@ -79,9 +79,14 @@ local function store(company, number, externalNumber, senderNumber, senderIdenti
     })
     if not messageId or messageId == 0 then return { duplicate = true, conversationId = conversation.id } end
     local payload = { conversationId = conversation.id, messageId = messageId, companyId = company.id, numberId = number.id, numberLabel = number.label, externalNumber = externalNumber, body = body, senderType = senderType, attachments = attachments, coords = coords, createdAt = os.date("!%Y-%m-%dT%H:%M:%SZ") }
-    pushCompany(company.id, "inbox.message", payload, number.id)
+    -- Trusted integrations and the citizen who owns the number keep the raw payload;
+    -- other company employees only ever see the masked number.
+    local employeePayload = {}
+    for key, value in pairs(payload) do employeePayload[key] = value end
+    employeePayload.externalNumber = ServicesPlus.MaskNumber(externalNumber)
+    pushCompany(company.id, "inbox.message", employeePayload, number.id)
     TriggerEvent("services-plus:server:messageReceived", payload)
-    return payload
+    return senderType == "employee" and employeePayload or payload
 end
 
 function Inboxes.SendCitizen(source, payload)
@@ -187,7 +192,8 @@ function Inboxes.GetMessages(source, conversationId, cursor, limit, citizen)
         local employee = ServicesPlus.Employees.Get(source)
         if messages[1] then ServicesPlus.Repository.MarkConversationRead(conversationId, employee.identifier, messages[1].id) end
     end
-    return true, { conversation = { id = conversation.id, companyId = conversation.company_id, numberId = conversation.number_id, externalNumber = conversation.external_number }, messages = messages }
+    local externalNumber = citizen and conversation.external_number or ServicesPlus.MaskNumber(conversation.external_number)
+    return true, { conversation = { id = conversation.id, companyId = conversation.company_id, numberId = conversation.number_id, externalNumber = externalNumber }, messages = messages }
 end
 
 function Inboxes.DeleteConversation(source, conversationId)

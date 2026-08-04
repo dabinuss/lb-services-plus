@@ -90,7 +90,7 @@ All entities below are API version 11. Optional means the field can be absent, n
 
 ### Conversation and Message
 
-`Conversation` contains `id`, `companyId`, `companyName`, `logo`, `numberId`, `numberLabel`, optional `externalNumber`, `lastMessage`, `lastMessageAt`, and `unreadCount`.
+`Conversation` contains `id`, `companyId`, `companyName`, `logo`, `numberId`, `numberLabel`, optional `externalNumber`, `lastMessage`, `lastMessageAt`, and `unreadCount`. In every employee-facing read and push, `externalNumber` is masked to its last four characters (e.g. `***0199`) or omitted entirely for an unresolved number; the citizen viewing their own conversation and trusted `services-plus:server:messageReceived` consumers still receive the full number.
 
 `Message` contains `id`, `senderNumber`, `senderType` (`citizen` or `employee`), `body`, up to four HTTP(S) `attachments`, optional `coords: { x, y }`, timestamps, and `reactions: { emoji, count, mine }[]`.
 
@@ -210,7 +210,7 @@ These are same-context FiveM server events emitted with `TriggerEvent`; they are
 | `services-plus:server:requestCompleted` | RequestIntegration | Final phase | Employee has been released. |
 | `services-plus:server:requestCancelled` | RequestIntegration | Citizen cancellation | Any assignee has been released. |
 | `services-plus:server:requestDeleted` | RequestIntegration | Dispatch soft deletion | Record remains auditable but is hidden from normal reads. |
-| `services-plus:server:messageReceived` | Message event entity | Persisted citizen or employee message | Contains `conversationId`, `messageId`, company/number IDs, number label, external number, body, sender type, attachments, coords, and `createdAt`. |
+| `services-plus:server:messageReceived` | Message event entity | Persisted citizen or employee message | Contains `conversationId`, `messageId`, company/number IDs, number label, the full unmasked external number, body, sender type, attachments, coords, and `createdAt`. Trusted-resource only; never forward the unmasked number to a player. |
 
 Listen and correlate external dispatch state:
 
@@ -285,7 +285,7 @@ Version for all action contracts: API 8. Errors marked below are contract-specif
 | `updateCompanyOperations { companyId, patch }` | Company | Leader of same company; boolean request/message flags and distribution enum. | 8/min | Persists operations and pushes company delta. `forbidden`, `validation_failed`. |
 | `updateNumberOperations { numbers }` | Company | Same-company leader; <= 10 existing number IDs and complete boolean/distribution patch. | 8/min | Persists channel flags, resyncs numbers and offers. `number_not_found`, `number_update_failed`. |
 | `toggleDispatchLine { numberId, enabled }` | EmployeePublic | Active dispatcher; existing enabled number. | 20/min | Changes current duty-session line selection. `dispatch_required`, `number_not_found`. |
-| `getCompanyWorkspace { sections?, cursors?, conversationNumberId?, seenCallId?, includeSummary?, limit?, locale? }` | CompanyWorkspace | On-duty employee; `sections` contains any of `conversations`, `requests`, `calls`; each matching cursor is independent; the optional inbox must be enabled and shared; pagination `1..50`. | 15/min | Filters conversations in SQL. Conversation cursors are `{ lastMessageAt, id }`; request/call cursors remain integers. `summary` is returned unless `includeSummary` is false. Omitted sections are empty. Each call includes `distribution` (the number's distribution mode at the time the call was queued), `queueDurationSeconds` and `callDurationSeconds` (`null` if never accepted). `not_on_duty`, `inbox_disabled`, `invalid_payload`. |
+| `getCompanyWorkspace { sections?, cursors?, conversationNumberId?, seenCallId?, includeSummary?, limit?, locale? }` | CompanyWorkspace | On-duty employee; `sections` contains any of `conversations`, `requests`, `calls`; each matching cursor is independent; the optional inbox must be enabled and shared; pagination `1..50`. | 15/min | Filters conversations in SQL. Conversation cursors are `{ lastMessageAt, id }`; request/call cursors remain integers. `summary` is returned unless `includeSummary` is false. Omitted sections are empty. Each call includes `distribution` (the number's distribution mode at the time the call was queued), `queueDurationSeconds`, `callDurationSeconds` (`null` if never accepted), and a masked `callerNumber` (absent for a hidden/anonymous caller). `not_on_duty`, `inbox_disabled`, `invalid_payload`. |
 
 ### Calls and Contacts
 
@@ -317,9 +317,9 @@ Version for all action contracts: API 8. Errors marked below are contract-specif
 | Action and input | Success data | Permission and validation | Limit | Effects / errors |
 | --- | --- | --- | --- | --- |
 | `sendCitizenMessage { companyId, numberId?, body, attachments?, includeCurrentLocation?, clientRequestId? }` | Message event | Equipped phone; enabled public shared inbox; body <= 2000, <= 4 HTTPS attachments on `Config.AllowedMediaDomains`. | 12/min | Sends via LB Phone, persists and pushes. `includeCurrentLocation` makes the server read the sender's own position with `GetEntityCoords`; the client cannot supply arbitrary coordinates. `clientRequestId` deduplicates retries for 20 seconds. `inbox_disabled`, `message_failed`. |
-| `sendEmployeeMessage { conversationId, body, attachments?, includeCurrentLocation?, clientRequestId? }` | Message event | On duty and authorized for enabled shared inbox; same content limits. | 20/min | Replies as company number and persists. Same server-resolved location and retry deduplication as `sendCitizenMessage`. `forbidden`, `message_failed`. |
+| `sendEmployeeMessage { conversationId, body, attachments?, includeCurrentLocation?, clientRequestId? }` | Message event | On duty and authorized for enabled shared inbox; same content limits. | 20/min | Replies as company number and persists. Same server-resolved location and retry deduplication as `sendCitizenMessage`. The returned `externalNumber` is masked. `forbidden`, `message_failed`. |
 | `getCitizenInbox { cursor?, limit? }` | Conversation[] | Equipped phone number owns conversations. | 15/min | Bounded read. `phone_required`. |
-| `getConversationMessages { conversationId, citizen, cursor?, limit? }` | `{ conversation, messages }` | Citizen number owns conversation or employee has same-company number access. | 20/min | Bounded read; employee read cursor updated. `forbidden`. |
+| `getConversationMessages { conversationId, citizen, cursor?, limit? }` | `{ conversation, messages }` | Citizen number owns conversation or employee has same-company number access. | 20/min | Bounded read; employee read cursor updated. `conversation.externalNumber` is masked for an employee caller, full for the owning citizen. `forbidden`. |
 | `reactToMessage { messageId, emoji, citizen }` | `{ messageId, conversationId, reactions }` | Authorized participant; emoji from fixed ten-item allow-list. | 30/min | Toggle per-actor reaction and push update. `message_unavailable`, `forbidden`. |
 | `deleteConversation { id }` | `{ id }` | Active owning-company dispatch with number access. | 10/min | Audited Services+ soft delete only. `conversation_unavailable`. |
 | `deleteMessage { id }` | `{ id, conversationId }` | Active owning-company dispatch with number access. | 20/min | Audited Services+ soft delete only. `message_unavailable`. |
@@ -360,7 +360,7 @@ Server pushes arrive through the client and official LB Phone `SendCustomAppMess
 | `request.offer.removed` | Employee with stale/lost offer | `{ id }`. |
 | `request.updated` | Relevant company employees | RequestCompany delta. |
 | `request.citizen.updated` | Connected request owner | RequestPublic. |
-| `inbox.message` | Authorized number inbox employees | Message event entity. |
+| `inbox.message` | Authorized number inbox employees | Message event entity with a masked `externalNumber`. |
 | `inbox.reaction` | Authorized employees and connected citizen | `{ messageId, conversationId, reactions }`. |
 | `inbox.deleted` | Authorized inbox employees | `{ id, companyId }`. |
 | `inbox.message.deleted` | Authorized inbox employees | `{ messageId, conversationId }`. |

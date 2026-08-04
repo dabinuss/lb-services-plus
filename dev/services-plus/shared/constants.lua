@@ -46,3 +46,12 @@ function ServicesPlus.Error(code, message, retryable)
         }
     }
 end
+
+-- Masks a citizen phone number for employee-facing views, keeping only the last
+-- four characters. Returns nil for a missing number (e.g. a hidden/anonymous
+-- caller), which the frontend renders as an unknown-number placeholder.
+function ServicesPlus.MaskNumber(number)
+    if type(number) ~= "string" or number == "" then return nil end
+    if #number <= 4 then return number end
+    return ("*"):rep(#number - 4) .. number:sub(-4)
+end

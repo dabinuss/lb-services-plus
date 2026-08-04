@@ -408,12 +408,14 @@ function Repository.EndOpenCalls(result)
 end
 
 function Repository.GetCompanyCalls(companyId, cursor, limit)
-    return MySQL.query.await([=[
+    local rows = MySQL.query.await([=[
         SELECT q.`id`, q.`caller_number` AS `callerNumber`, q.`number_id` AS `numberId`, q.`distribution`, q.`status`, q.`assigned_identifier` AS `assignedIdentifier`, q.`created_at`, q.`accepted_at`, q.`ended_at`,
           TIMESTAMPDIFF(SECOND, q.`created_at`, COALESCE(q.`accepted_at`, q.`ended_at`, NOW())) AS `queueDurationSeconds`,
           CASE WHEN q.`accepted_at` IS NOT NULL THEN TIMESTAMPDIFF(SECOND, q.`accepted_at`, COALESCE(q.`ended_at`, NOW())) ELSE NULL END AS `callDurationSeconds`
         FROM `services_plus_call_queue` q WHERE q.`company_id` = ? AND q.`id` < ? ORDER BY q.`id` DESC LIMIT ?
     ]=], { companyId, cursor, limit }) or {}
+    for _, row in ipairs(rows) do row.callerNumber = ServicesPlus.MaskNumber(row.callerNumber) end
+    return rows
 end
 
 function Repository.UpsertConversation(companyId, numberId, externalNumber, channelId, preview)
@@ -441,7 +443,7 @@ function Repository.GetCompanyConversations(companyId, identifier, cursor, limit
     params[#params + 1] = cursor.lastMessageAt
     params[#params + 1] = cursor.id
     params[#params + 1] = limit
-    return MySQL.query.await(([=[
+    local rows = MySQL.query.await(([=[
         SELECT c.`id`, c.`number_id` AS `numberId`, n.`label` AS `numberLabel`, c.`external_number` AS `externalNumber`, c.`last_message` AS `lastMessage`, c.`last_message_at` AS `lastMessageAt`,
           (SELECT COUNT(*) FROM `services_plus_inbox_messages` m WHERE m.`conversation_id` = c.`id` AND m.`deleted_at` IS NULL AND m.`id` > COALESCE(r.`last_read_message_id`, 0)) AS `unreadCount`
         FROM `services_plus_inbox_conversations` c
@@ -451,6 +453,8 @@ function Repository.GetCompanyConversations(companyId, identifier, cursor, limit
           AND (c.`last_message_at` < ? OR (c.`last_message_at` = ? AND c.`id` < ?))
         ORDER BY c.`last_message_at` DESC, c.`id` DESC LIMIT ?
     ]=]):format(numberClause), params) or {}
+    for _, row in ipairs(rows) do row.externalNumber = ServicesPlus.MaskNumber(row.externalNumber) end
+    return rows
 end
 
 function Repository.GetCompanyUnreadCounts(companyId, identifier)

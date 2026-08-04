@@ -2,6 +2,7 @@
 
 ## 0.7.0-rc1
 
+- Mask citizen phone numbers shown to company employees (call history and shared-inbox conversations) to their last four characters; a hidden/anonymous caller shows as an unknown number instead of a blank field. The citizen viewing their own conversation and the trusted `services-plus:server:messageReceived` event still receive the full number.
 - Add call distribution mode and derived queue/call duration to `getMyActivity` and `getCompanyWorkspace` call entries, and display them in the personal and company call lists; add migration 012 with the required `services_plus_call_queue.distribution` column.
 - Remove the unused `Company.employeeCount` field from every API response; it was computed and transmitted but never rendered by the frontend.
 - Remove the request-cancellation-reason requirement from the product plan; no cancellation reason is captured or planned.
