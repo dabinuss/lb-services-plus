@@ -34,16 +34,6 @@ local function resolvedTemplateIds(company, storedIds)
     return #result > 0 and result or available
 end
 
-local function defaultPhases(company)
-    return copy(definitions.phases[company.categoryId] or definitions.phases.other)
-end
-
-local navigationDefaults = {
-    taxi_transport = "automatic",
-    emergency_medical = "automatic",
-    police_justice = "automatic"
-}
-
 local function value(request, snake, camel)
     local resolved = request[snake]
     if resolved == nil then resolved = request[camel] end
@@ -74,7 +64,6 @@ function Requests.ToPublic(request)
         templateId = value(request, "template_id", "templateId"),
         requestLabel = value(request, "request_label", "requestLabel"),
         status = request.status,
-        phaseId = value(request, "phase_id", "phaseId"),
         targetNumberId = value(request, "target_number_id", "targetNumberId"),
         payload = request.payload or {},
         createdAt = value(request, "created_at", "createdAt"),
@@ -84,7 +73,11 @@ end
 
 function Requests.ToCompanyPublic(request)
     local result = Requests.ToPublic(request)
-    if result then result.assignee = assignee(request, false) end
+    if result then
+        result.assignee = assignee(request, false)
+        local x, y = tonumber(value(request, "location_x", "locationX")), tonumber(value(request, "location_y", "locationY"))
+        if x and y then result.location = { x = x, y = y } end
+    end
     return result
 end
 
@@ -101,8 +94,8 @@ function Requests.ToIntegration(request)
 end
 
 local lifecycleNames = {
-    requestAccepted = "accepted", requestPhaseChanged = "phase_changed", requestReturned = "returned",
-    requestCompleted = "completed", requestCancelled = "cancelled", requestDeleted = "deleted"
+    requestAccepted = "accepted", requestReturned = "returned",
+    requestCancelled = "cancelled", requestDeleted = "deleted"
 }
 
 local function emitLifecycle(eventName, request)
@@ -117,12 +110,6 @@ end
 function Requests.ResolveSettings(company, locale)
     local stored = ServicesPlus.Repository.GetRequestSettings(company.id) or {}
     local templateIds = resolvedTemplateIds(company, stored.templateIds)
-    local phases = {}
-    for _, phase in ipairs(defaultPhases(company)) do
-        phases[#phases + 1] = { id = phase.id, name = localeName(phase.name, locale) }
-    end
-    if #phases == 0 then phases = { { id = "accepted", name = locale == "de" and "Angenommen" or "Accepted" }, { id = "completed", name = locale == "de" and "Abgeschlossen" or "Completed" } } end
-
     local templates = {}
     for _, templateId in ipairs(defaultTemplateIds(company)) do
         local template = definitions.templates[templateId]
@@ -150,13 +137,14 @@ function Requests.ResolveSettings(company, locale)
     local validNumber = false
     for _, number in ipairs(requestNumbers) do if number.id == numberId then validNumber = true break end end
     if not validNumber then numberId = requestNumbers[1] and requestNumbers[1].id or nil end
-    return { label = stored.label or (locale == "de" and "Anfrage" or "Request"), createLabel = stored.createLabel or (locale == "de" and "Anfrage erstellen" or "Create request"), templateIds = templateIds, templates = templates, phases = phases, fieldSettings = stored.fieldSettings or {}, numberId = numberId, requestNumbers = requestNumbers, navigationOnAccept = stored.navigationOnAccept or navigationDefaults[company.categoryId] or "disabled" }
+    -- Navigation on acceptance defaults to automatic for every category now - dispatches
+    -- are meant to be zero-config; a leader can only rename the dispatch and change this.
+    return { label = stored.label or (locale == "de" and "Anfrage" or "Request"), createLabel = stored.createLabel or stored.label or (locale == "de" and "Anfrage erstellen" or "Create request"), templateIds = templateIds, templates = templates, fieldSettings = stored.fieldSettings or {}, numberId = numberId, requestNumbers = requestNumbers, navigationOnAccept = stored.navigationOnAccept or "automatic" }
 end
 
 local function notifyCreator(request, eventType)
     if not request then return end
-    local phase = request.phase_id or request.phaseId
-    local content = phase and (("%s - %s"):format(request.status or "updated", phase)) or (request.status or "updated")
+    local content = request.status or "updated"
     if request.creator_number then
         pcall(function()
             exports["lb-phone"]:SendNotification(request.creator_number, { app = ServicesPlus.Constants.AppIdentifier,
@@ -238,21 +226,33 @@ local function pushCompany(companyId, eventType, payload, availableOnly)
         end
         if numberAllowed and not sent[employee.source] and (not availableOnly or (employee.status == "available" and not employee.activeCall and not employee.activeRequest)) then
             sent[employee.source] = true
-            TriggerClientEvent("services-plus:client:push", employee.source, { type = eventType, timestamp = os.time(), payload = clientPayload })
             if eventType == "request.offer" then
-                pcall(function()
-                    exports["lb-phone"]:SendNotification(employee.source, {
-                        app = ServicesPlus.Constants.AppIdentifier,
-                        title = clientPayload.requestLabel or "New request",
-                        content = clientPayload.companyName or "Services+",
-                        customData = {
-                            buttons = {
-                                { title = "-", event = "services-plus:client:requestNotificationAction", data = { id = payload.id, action = "decline" }, remove = true },
-                                { title = "+", event = "services-plus:client:requestNotificationAction", data = { id = payload.id, action = "accept" }, remove = true }
-                            }
+                -- Most companies just get informed - no buttons, and nothing forces the
+                -- phone open (see client/app.lua). Only companies that opted into
+                -- actionable request notifications (time-critical work: taxi, PD, EMS)
+                -- get Accept/Decline right in the notification and the full "looks like
+                -- an incoming call" in-app screen, the same as a real call would.
+                local actionable = audienceCompany.requestNotificationActionable == true
+                local offerPayload = {}
+                for key, value in pairs(clientPayload) do offerPayload[key] = value end
+                offerPayload.actionable = actionable
+                TriggerClientEvent("services-plus:client:push", employee.source, { type = eventType, timestamp = os.time(), payload = offerPayload })
+                local notification = {
+                    app = ServicesPlus.Constants.AppIdentifier,
+                    title = clientPayload.requestLabel or "New request",
+                    content = clientPayload.companyName or "Services+"
+                }
+                if actionable then
+                    notification.customData = {
+                        buttons = {
+                            { title = "-", event = "services-plus:client:requestNotificationAction", data = { id = payload.id, action = "decline" }, remove = true },
+                            { title = "+", event = "services-plus:client:requestNotificationAction", data = { id = payload.id, action = "accept" }, remove = true }
                         }
-                    })
-                end)
+                    }
+                end
+                pcall(function() exports["lb-phone"]:SendNotification(employee.source, notification) end)
+            else
+                TriggerClientEvent("services-plus:client:push", employee.source, { type = eventType, timestamp = os.time(), payload = clientPayload })
             end
         end
     end
@@ -316,11 +316,10 @@ function Requests.Accept(source, requestId)
     local request = ServicesPlus.Repository.GetRequestById(requestId)
     if not Requests.CanHandle(employee, request) or employee.status ~= "available" then return false, "employee_unavailable" end
     local company = ServicesPlus.Companies.Get(request.company_id)
-    local phases = Requests.ResolveSettings(company, Config.Locale).phases
-    if not ServicesPlus.Repository.AcceptRequest(requestId, employee, phases[1].id) then return false, "already_accepted" end
+    if not ServicesPlus.Repository.AcceptRequest(requestId, employee) then return false, "already_accepted" end
     local assigned = ServicesPlus.Employees.AssignWork(source, "request", requestId)
     if not assigned then ServicesPlus.Repository.ReturnRequest(requestId, employee.identifier); return false, "employee_unavailable" end
-    ServicesPlus.Repository.AddRequestEvent(requestId, employee.identifier, "accepted", { phaseId = phases[1].id })
+    ServicesPlus.Repository.AddRequestEvent(requestId, employee.identifier, "accepted", {})
     request = ServicesPlus.Repository.GetRequestById(requestId)
     pushCompany(request.company_id, "request.updated", request, false)
     local settings = Requests.ResolveSettings(company, Config.Locale)
@@ -339,31 +338,25 @@ function Requests.Accept(source, requestId)
     return true, Requests.ToCompanyPublic(request)
 end
 
+-- Lets an eligible employee (re-)set the GPS waypoint to a request's captured
+-- location on demand, independent of the accept-time navigationOnAccept setting.
+function Requests.Navigate(source, requestId)
+    ServicesPlus.Employees.ValidateEmployment(source)
+    local employee = ServicesPlus.Employees.Get(source)
+    local request = ServicesPlus.Repository.GetRequestById(requestId)
+    if not Requests.CanHandle(employee, request) then return false, "forbidden" end
+    local x, y = tonumber(value(request, "location_x", "locationX")), tonumber(value(request, "location_y", "locationY"))
+    if not x or not y then return false, "location_unavailable" end
+    TriggerClientEvent("services-plus:client:requestNavigation", source, { id = request.id, x = x, y = y, title = value(request, "request_label", "requestLabel") })
+    return true, { id = requestId }
+end
+
 function Requests.Decline(source, requestId)
     local employee = ServicesPlus.Employees.Get(source)
     local request = ServicesPlus.Repository.GetRequestById(requestId)
     if not Requests.CanHandle(employee, request) or (request.status ~= "pending" and request.status ~= "returned") then return false, "request_unavailable" end
     ServicesPlus.Repository.AddRequestEvent(requestId, employee.identifier, "declined", {})
     return true, { id = requestId }
-end
-
-function Requests.Transition(source, requestId, nextPhaseId)
-    local employee = ServicesPlus.Employees.Get(source)
-    local request = ServicesPlus.Repository.GetRequestById(requestId)
-    if not employee or not request or request.assigned_identifier ~= employee.identifier or tostring(employee.activeRequest) ~= tostring(requestId) then return false, "forbidden" end
-    local company = ServicesPlus.Companies.Get(request.company_id)
-    local phases = Requests.ResolveSettings(company, Config.Locale).phases
-    local currentIndex, nextIndex
-    for index, phase in ipairs(phases) do if phase.id == request.phase_id then currentIndex = index end; if phase.id == nextPhaseId then nextIndex = index end end
-    if not currentIndex or not nextIndex or nextIndex ~= currentIndex + 1 then return false, "invalid_transition" end
-    local status = nextIndex == #phases and "completed" or "active"
-    if not ServicesPlus.Repository.TransitionRequest(requestId, employee.identifier, status, nextPhaseId) then return false, "transition_failed" end
-    ServicesPlus.Repository.AddRequestEvent(requestId, employee.identifier, status == "completed" and "completed" or "phase_changed", { phaseId = nextPhaseId })
-    if status == "completed" then ServicesPlus.Employees.ReleaseWorkByIdentifier(employee.identifier, "request", requestId) end
-    request = ServicesPlus.Repository.GetRequestById(requestId)
-    pushCompany(request.company_id, "request.updated", request, false)
-    notifyCreator(request, status == "completed" and "requestCompleted" or "requestPhaseChanged")
-    return true, Requests.ToCompanyPublic(request)
 end
 
 function Requests.Return(source, requestId)
@@ -393,7 +386,12 @@ end
 function Requests.Delete(source, requestId)
     local employee = ServicesPlus.Employees.Get(source)
     local request = ServicesPlus.Repository.GetRequestById(requestId)
-    if not employee or not employee.dispatchEnabled or not request or request.company_id ~= employee.companyId then return false, "forbidden" end
+    if not employee or not request or request.company_id ~= employee.companyId then return false, "forbidden" end
+    -- A dispatcher can clear any of the company's requests; the employee who accepted
+    -- one can also resolve it themselves this way - accept/decline/delete is the whole
+    -- workflow now, there is no separate "mark as done" step.
+    local isAssignee = request.assigned_identifier == employee.identifier
+    if not employee.dispatchEnabled and not isAssignee then return false, "forbidden" end
     if not ServicesPlus.Repository.DeleteRequest(requestId, employee.companyId, employee.identifier) then return false, "request_unavailable" end
     if request.assigned_identifier then ServicesPlus.Employees.ReleaseWorkByIdentifier(request.assigned_identifier, "request", requestId) end
     ServicesPlus.Repository.AddRequestEvent(requestId, employee.identifier, "deleted", {})
@@ -424,31 +422,15 @@ function Requests.EmployeeLeft(employee)
     end
 end
 
+-- A leader can only rename the dispatch and choose navigation-on-acceptance now - which
+-- templates/fields/number apply is derived automatically (all templates configured for
+-- the company's category, full fields, first eligible number), no leader config needed.
 function Requests.SaveSettings(source, input)
     local employee = ServicesPlus.Employees.Get(source)
     local company = employee and ServicesPlus.Companies.Get(employee.companyId)
     if not employee or not employee.isLeader or not company or type(input) ~= "table" then return false, "forbidden" end
-    if type(input.label) ~= "string" or #input.label < 2 or #input.label > 80 or type(input.createLabel) ~= "string" or #input.createLabel < 2 or #input.createLabel > 80 then return false, "validation_failed" end
-    local validTemplates = {}
-    for _, id in ipairs(input.templateIds or {}) do local template = definitions.templates[id]; if templateAllowed(company, template) then validTemplates[#validTemplates + 1] = id end end
-    if #validTemplates == 0 then return false, "validation_failed" end
-    local numberId = nil
-    for _, number in ipairs(company.numbers) do if number.id == input.numberId and number.enabled and number.requestsEnabled then numberId = number.id break end end
-    local fieldSettings = {}
-    for templateId, values in pairs(type(input.fieldSettings) == "table" and input.fieldSettings or {}) do
-        local template = definitions.templates[templateId]
-        if template and type(values) == "table" then
-            local supported = {}; for _, field in ipairs(template.fields) do supported[field.id] = true end
-            fieldSettings[templateId] = {}
-            for fieldId, setting in pairs(values) do
-                if supported[fieldId] and type(setting) == "table" and type(setting.enabled) == "boolean" and type(setting.required) == "boolean" then
-                    fieldSettings[templateId][fieldId] = { enabled = setting.enabled, required = setting.required }
-                end
-            end
-        end
-    end
+    if type(input.label) ~= "string" or #input.label < 2 or #input.label > 80 then return false, "validation_failed" end
     if not ServicesPlus.Constants.NavigationModes[input.navigationOnAccept] then return false, "validation_failed" end
-    local settings = { label = input.label, createLabel = input.createLabel, templateIds = validTemplates, fieldSettings = fieldSettings, numberId = numberId, navigationOnAccept = input.navigationOnAccept }
-    ServicesPlus.Repository.SaveRequestSettings(company.id, settings)
+    ServicesPlus.Repository.SaveRequestSettings(company.id, { label = input.label, createLabel = input.label, navigationOnAccept = input.navigationOnAccept })
     return true, Requests.ResolveSettings(company, Config.Locale)
 end

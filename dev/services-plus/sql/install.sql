@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS `services_plus_companies` (
   `requests_enabled` TINYINT(1) NOT NULL DEFAULT 0,
   `messages_enabled` TINYINT(1) NOT NULL DEFAULT 1,
   `dispatch_mode` ENUM('ring_all','random','dispatch_only') NOT NULL DEFAULT 'ring_all',
+  `request_notification_actionable` TINYINT(1) NOT NULL DEFAULT 0,
   `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   `deleted_at` TIMESTAMP NULL,
   `deleted_by` VARCHAR(96) NULL,
@@ -211,6 +212,7 @@ CREATE TABLE IF NOT EXISTS `services_plus_inbox_conversations` (
   `company_id` VARCHAR(64) NOT NULL,
   `number_id` VARCHAR(64) NOT NULL,
   `external_number` VARCHAR(32) NOT NULL,
+  `anonymous` TINYINT(1) NOT NULL DEFAULT 0,
   `channel_id` BIGINT NULL,
   `last_message` VARCHAR(500) NOT NULL DEFAULT '',
   `last_message_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -281,4 +283,6 @@ INSERT IGNORE INTO `services_plus_schema_migrations` (`version`, `name`) VALUES
   (9, 'request_assignee_integration_contract'),
   (10, 'inbox_cursor_index'),
   (11, 'soft_delete_companies_and_numbers'),
-  (12, 'call_duration_and_distribution');
+  (12, 'call_duration_and_distribution'),
+  (13, 'anonymous_company_messages'),
+  (14, 'request_notification_actionable');

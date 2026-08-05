@@ -1,25 +1,25 @@
 import { BriefcaseBusiness, CheckCircle2, CircleOff, Coffee, LogOut, Phone, Radio, Settings, UserRoundCheck } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { t, type Locale } from "../lib/i18n";
-import type { CitizenRequest, Company, CompanyOperationsPatch, CompanyWorkspace as WorkspaceData, CurrentUser, Employee, EmployeeStatus, InboxConversation, NumberOperationsPatch, RequestSettings, WorkspaceCursor, WorkspaceSection } from "../types";
+import type { CitizenRequest, Company, CompanyWorkspace as WorkspaceData, CurrentUser, Employee, EmployeeStatus, InboxConversation, NumberOperationsPatch, RequestSettings, WorkspaceCursor, WorkspaceSection } from "../types";
 import { LeaderEditor } from "./LeaderEditor";
 import { CompanyWorkspace } from "./CompanyWorkspace";
 
 interface Props {
   user: CurrentUser; companies: Company[]; locale: Locale; busy: boolean;
   onEnter: () => Promise<unknown>; onLeave: () => void; onStatus: (status: EmployeeStatus) => void;
-  onDispatch: (enabled: boolean) => void; onCompanySave: (companyId: string, patch: CompanyOperationsPatch) => void;
+  onDispatch: (enabled: boolean) => void;
   onNumberOperations: (numbers: NumberOperationsPatch[]) => void; onDispatchLine: (numberId: string, enabled: boolean) => void;
   onCallEmployee: (employee: Employee) => void; onContactEmployee: (employee: Employee) => void;
   workspace: WorkspaceData | null; onOpenConversation: (conversation: InboxConversation) => void;
   onLoadMore: (section: WorkspaceSection, cursor?: WorkspaceCursor, conversationNumberId?: string) => Promise<boolean>;
   onInboxChange: (numberId?: string) => Promise<boolean>; onCallsSeen: (latestCallId: number) => void;
-  onAcceptRequest: (request: CitizenRequest) => void; onTransitionRequest: (request: CitizenRequest, phaseId: string) => void;
-  onReturnRequest: (request: CitizenRequest) => void; onSaveRequestSettings: (settings: Pick<RequestSettings, "label" | "createLabel" | "templateIds" | "fieldSettings" | "numberId" | "navigationOnAccept">) => void;
+  onAcceptRequest: (request: CitizenRequest) => void;
+  onReturnRequest: (request: CitizenRequest) => void; onNavigateToRequest: (request: CitizenRequest) => void; onSaveRequestSettings: (settings: Pick<RequestSettings, "label" | "navigationOnAccept">) => void;
   onDeleteRequest: (request: CitizenRequest) => void; onDeleteConversation: (conversation: InboxConversation) => void;
 }
 
-export function Portal({ user, companies, locale, busy, onEnter, onLeave, onStatus, onDispatch, onCompanySave, onNumberOperations, onDispatchLine, onCallEmployee, onContactEmployee, workspace, onOpenConversation, onLoadMore, onInboxChange, onCallsSeen, onAcceptRequest, onTransitionRequest, onReturnRequest, onSaveRequestSettings, onDeleteRequest, onDeleteConversation }: Props) {
+export function Portal({ user, companies, locale, busy, onEnter, onLeave, onStatus, onDispatch, onNumberOperations, onDispatchLine, onCallEmployee, onContactEmployee, workspace, onOpenConversation, onLoadMore, onInboxChange, onCallsSeen, onAcceptRequest, onReturnRequest, onNavigateToRequest, onSaveRequestSettings, onDeleteRequest, onDeleteConversation }: Props) {
   const employment = user.employment;
   const [loginStep, setLoginStep] = useState(0);
   const [editing, setEditing] = useState(false);
@@ -47,8 +47,8 @@ export function Portal({ user, companies, locale, busy, onEnter, onLeave, onStat
       <div className="dispatch-roster"><span className="section-label">{t(locale, "currentDispatch")}</span><strong>{dispatchers.length ? dispatchers.map((employee) => employee.name).join(", ") : t(locale, "noDispatch")}</strong></div>
       {self.dispatchEnabled && workspace?.numberStates && <div className="line-subscriptions"><span className="section-label">{t(locale, "staffedLines")}</span>{workspace.numberStates.filter((number) => number.enabled).map((number) => <label key={number.numberId}><span><Phone size={15} /><strong>{number.label}</strong></span><input type="checkbox" checked={number.selectedForDispatch} disabled={busy || !number.canSelectForDispatch} onChange={(event) => onDispatchLine(number.numberId, event.target.checked)} /></label>)}</div>}
     </section>
-    <CompanyWorkspace data={workspace} onLoadMore={onLoadMore} onInboxChange={onInboxChange} onCallsSeen={onCallsSeen} employees={employment.activeEmployees} selfSource={user.source} locale={locale} busy={busy} employeeStatus={self.status} activeRequestId={self.activeRequestId} isLeader={self.isLeader} canDelete={self.dispatchEnabled} onOpenConversation={onOpenConversation} onAcceptRequest={onAcceptRequest} onTransition={onTransitionRequest} onReturn={onReturnRequest} onSaveSettings={onSaveRequestSettings} onDeleteRequest={onDeleteRequest} onDeleteConversation={onDeleteConversation} onCallEmployee={onCallEmployee} onContactEmployee={onContactEmployee} />
+    <CompanyWorkspace data={workspace} onLoadMore={onLoadMore} onInboxChange={onInboxChange} onCallsSeen={onCallsSeen} employees={employment.activeEmployees} selfSource={user.source} locale={locale} busy={busy} employeeStatus={self.status} activeRequestId={self.activeRequestId} isLeader={self.isLeader} canDelete={self.dispatchEnabled} onOpenConversation={onOpenConversation} onAcceptRequest={onAcceptRequest} onReturn={onReturnRequest} onNavigate={onNavigateToRequest} onSaveSettings={onSaveRequestSettings} onDeleteRequest={onDeleteRequest} onDeleteConversation={onDeleteConversation} onCallEmployee={onCallEmployee} onContactEmployee={onContactEmployee} />
     <button type="button" className="logout-button" onClick={onLeave} disabled={busy}><LogOut size={17} />{t(locale, "leaveDuty")}</button>
-    {editing && <LeaderEditor company={company} locale={locale} busy={busy} onClose={() => setEditing(false)} onSave={(patch) => onCompanySave(company.id, patch)} onSaveNumbers={(numbers) => { onNumberOperations(numbers); setEditing(false); }} />}
+    {editing && <LeaderEditor company={company} locale={locale} busy={busy} onClose={() => setEditing(false)} onSaveNumbers={(numbers) => { onNumberOperations(numbers); setEditing(false); }} />}
   </main>;
 }

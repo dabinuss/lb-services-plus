@@ -1,9 +1,8 @@
-import { BriefcaseBusiness, Building2, CarTaxiFront, HeartPulse, Landmark, LayoutGrid, Music, Radio, Shield, ShoppingBag, Utensils, Wrench } from "lucide-react";
+import { Building2, CarTaxiFront, Gavel, HeartPulse, LayoutGrid, Newspaper, Package, Shield, Users, Utensils, Wrench } from "lucide-react";
 
 const icons = {
-  shield: Shield, "heart-pulse": HeartPulse, "car-taxi-front": CarTaxiFront, wrench: Wrench,
-  utensils: Utensils, "shopping-bag": ShoppingBag, landmark: Landmark, "building-2": Building2,
-  radio: Radio, music: Music, "briefcase-business": BriefcaseBusiness
+  shield: Shield, gavel: Gavel, "heart-pulse": HeartPulse, "car-taxi-front": CarTaxiFront, wrench: Wrench,
+  utensils: Utensils, package: Package, newspaper: Newspaper, users: Users, "building-2": Building2
 };
 
 export function CategoryIcon({ name, size = 18 }: { name?: string; size?: number }) {

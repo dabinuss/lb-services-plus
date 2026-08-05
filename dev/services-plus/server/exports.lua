@@ -109,14 +109,6 @@ exports("ReturnRequest", function(source, requestId)
     end, "externalWrite")
 end)
 
-exports("TransitionRequest", function(source, requestId, phaseId)
-    return guarded(function()
-        if not ServicesPlus.RateLimiter.Allow(tonumber(source) or 0, "externalTransitionRequest") then return ServicesPlus.Error("rate_limited", "Too many external transitions.", true) end
-        local success, result = ServicesPlus.Requests.Transition(tonumber(source), tonumber(requestId), phaseId)
-        return success and ServicesPlus.Ok(integrationRequest(requestId) or result) or ServicesPlus.Error(result, "The request transition was rejected.", false)
-    end, "externalWrite")
-end)
-
 exports("SendCompanyMessage", function(source, payload)
     return guarded(function()
         if not ServicesPlus.RateLimiter.Allow(tonumber(source) or 0, "externalSendCompanyMessage") then return ServicesPlus.Error("rate_limited", "Too many external messages.", true) end

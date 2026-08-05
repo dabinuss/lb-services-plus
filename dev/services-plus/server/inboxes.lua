@@ -69,9 +69,9 @@ local function pushCompany(companyId, eventType, payload, numberId)
     end
 end
 
-local function store(company, number, externalNumber, senderNumber, senderIdentifier, senderType, body, attachments, coords, lbResult)
+local function store(company, number, externalNumber, senderNumber, senderIdentifier, senderType, body, attachments, coords, lbResult, anonymous)
     local preview = body ~= "" and body:sub(1, 500) or (coords and "Location" or "Attachment")
-    local conversation = ServicesPlus.Repository.UpsertConversation(company.id, number.id, externalNumber, lbResult and lbResult.channelId or nil, preview)
+    local conversation = ServicesPlus.Repository.UpsertConversation(company.id, number.id, externalNumber, lbResult and lbResult.channelId or nil, preview, anonymous)
     if not conversation then return nil end
     local messageId = ServicesPlus.Repository.InsertInboxMessage(conversation.id, {
         lbMessageId = lbResult and (lbResult.messageId or lbResult.id) or nil, senderNumber = senderNumber,
@@ -80,10 +80,11 @@ local function store(company, number, externalNumber, senderNumber, senderIdenti
     if not messageId or messageId == 0 then return { duplicate = true, conversationId = conversation.id } end
     local payload = { conversationId = conversation.id, messageId = messageId, companyId = company.id, numberId = number.id, numberLabel = number.label, externalNumber = externalNumber, body = body, senderType = senderType, attachments = attachments, coords = coords, createdAt = os.date("!%Y-%m-%dT%H:%M:%SZ") }
     -- Trusted integrations and the citizen who owns the number keep the raw payload;
-    -- other company employees only ever see the masked number.
+    -- other company employees only ever see the masked number, or no number at all when
+    -- the citizen messaged the business with a hidden/anonymous number.
     local employeePayload = {}
     for key, value in pairs(payload) do employeePayload[key] = value end
-    employeePayload.externalNumber = ServicesPlus.MaskNumber(externalNumber)
+    employeePayload.externalNumber = anonymous and nil or ServicesPlus.MaskNumber(externalNumber)
     pushCompany(company.id, "inbox.message", employeePayload, number.id)
     TriggerEvent("services-plus:server:messageReceived", payload)
     return senderType == "employee" and employeePayload or payload
@@ -119,7 +120,7 @@ function Inboxes.SendEmployee(source, payload)
     local employee = ServicesPlus.Employees.Get(source)
     if not employee or type(payload) ~= "table" or type(payload.conversationId) ~= "number" or type(payload.body) ~= "string" or #payload.body > 2000 then return false, "validation_failed" end
     local conversation = ServicesPlus.Repository.GetConversation(employee.companyId, payload.conversationId)
-    if not conversation or conversation.shared_inbox ~= 1 or not canUseNumber(employee, conversation.number_id) then return false, "forbidden" end
+    if not conversation or not ServicesPlus.ToBool(conversation.shared_inbox) or not canUseNumber(employee, conversation.number_id) then return false, "forbidden" end
     local clientRequestId = type(payload.clientRequestId) == "string" and payload.clientRequestId:sub(1, 128) or nil
     local scopeKey = clientRequestId and ("sendEmployeeMessage:" .. employee.identifier .. ":" .. clientRequestId) or nil
     return ServicesPlus.Idempotency.Resolve(scopeKey, function()
@@ -192,7 +193,7 @@ function Inboxes.GetMessages(source, conversationId, cursor, limit, citizen)
         local employee = ServicesPlus.Employees.Get(source)
         if messages[1] then ServicesPlus.Repository.MarkConversationRead(conversationId, employee.identifier, messages[1].id) end
     end
-    local externalNumber = citizen and conversation.external_number or ServicesPlus.MaskNumber(conversation.external_number)
+    local externalNumber = citizen and conversation.external_number or (ServicesPlus.ToBool(conversation.anonymous) and nil or ServicesPlus.MaskNumber(conversation.external_number))
     return true, { conversation = { id = conversation.id, companyId = conversation.company_id, numberId = conversation.number_id, externalNumber = externalNumber }, messages = messages }
 end
 
@@ -200,7 +201,7 @@ function Inboxes.DeleteConversation(source, conversationId)
     local employee = ServicesPlus.Employees.Get(source)
     if not employee or not employee.dispatchEnabled then return false, "forbidden" end
     local conversation = ServicesPlus.Repository.GetConversation(employee.companyId, conversationId)
-    if not conversation or conversation.shared_inbox ~= 1 or not canUseNumber(employee, conversation.number_id) then return false, "forbidden" end
+    if not conversation or not ServicesPlus.ToBool(conversation.shared_inbox) or not canUseNumber(employee, conversation.number_id) then return false, "forbidden" end
     if not ServicesPlus.Repository.DeleteConversation(conversationId, employee.companyId, employee.identifier) then return false, "conversation_unavailable" end
     pushCompany(employee.companyId, "inbox.deleted", { id = conversationId, companyId = employee.companyId }, conversation.number_id)
     return true, { id = conversationId }
@@ -210,7 +211,7 @@ function Inboxes.DeleteMessage(source, messageId)
     local employee = ServicesPlus.Employees.Get(source)
     local context = ServicesPlus.Repository.GetMessageContext(messageId)
     if not employee or not employee.dispatchEnabled or not context or employee.companyId ~= context.company_id
-        or context.shared_inbox ~= 1 or not canUseNumber(employee, context.number_id) then return false, "forbidden" end
+        or not ServicesPlus.ToBool(context.shared_inbox) or not canUseNumber(employee, context.number_id) then return false, "forbidden" end
     if not ServicesPlus.Repository.DeleteInboxMessage(messageId, employee.identifier) then return false, "message_unavailable" end
     pushCompany(employee.companyId, "inbox.message.deleted", { messageId = messageId, conversationId = context.conversation_id }, context.number_id)
     return true, { id = messageId, conversationId = context.conversation_id }
@@ -230,7 +231,7 @@ function Inboxes.React(source, payload)
         actorKey = "phone:" .. number
     else
         local employee = ServicesPlus.Employees.Get(source)
-        if not employee or employee.companyId ~= context.company_id or context.shared_inbox ~= 1 or not canUseNumber(employee, context.number_id) then return false, "forbidden" end
+        if not employee or employee.companyId ~= context.company_id or not ServicesPlus.ToBool(context.shared_inbox) or not canUseNumber(employee, context.number_id) then return false, "forbidden" end
         actorKey = "employee:" .. employee.identifier
     end
 
@@ -267,5 +268,5 @@ AddEventHandler("lb-phone:newCompanyMessage", function(message)
     local number
     for _, candidate in ipairs(company.numbers) do if candidate.enabled and candidate.inboxEnabled and candidate.sharedInbox then number = candidate break end end
     if not number then return end
-    store(company, number, message.sender, message.sender, nil, "citizen", message.message or "", {}, message.coords, nil)
+    store(company, number, message.sender, message.sender, nil, "citizen", message.message or "", {}, message.coords, nil, message.anonymous == true)
 end)

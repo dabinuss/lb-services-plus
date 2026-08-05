@@ -16,11 +16,11 @@ assert.match(docs, /API version: `11`/);
 assert.match(changelog, /API version from 10 to 11/);
 
 const exportsList = [...exportsFile.matchAll(/exports\("([A-Za-z]+)"/g)].map((match) => match[1]);
-assert.equal(exportsList.length, 11);
+assert.equal(exportsList.length, 10);
 for (const name of exportsList) assert.ok(docs.includes(`| \`${name}\` |`), `API reference is missing export ${name}`);
 
 const actions = Object.keys(JSON.parse(await read("shared/api_contracts.json")).actions);
-assert.equal(actions.length, 38);
+assert.equal(actions.length, 36);
 for (const action of actions) {
   assert.ok(docs.includes(`\`${action} `) || docs.includes(`\`${action} {`) || docs.includes(`\`${action}\``), `API reference is missing action ${action}`);
   assert.match(config, new RegExp(`\\b${action}\\s*=\\s*\\{\\s*limit\\s*=`), `Action ${action} has no configured rate limit`);
@@ -31,7 +31,7 @@ for (const helper of ["openEmployeeContact", "sendCurrentLocation"]) {
   assert.ok(docs.includes(`\`${helper}`), `API reference is missing local helper ${helper}`);
 }
 
-const localEvents = ["requestLifecycle", "requestCreated", "requestUpdated", "requestAccepted", "requestPhaseChanged", "requestReturned", "requestCompleted", "requestCancelled", "requestDeleted", "messageReceived"];
+const localEvents = ["requestLifecycle", "requestCreated", "requestUpdated", "requestAccepted", "requestReturned", "requestCancelled", "requestDeleted", "messageReceived"];
 for (const event of localEvents) assert.ok(docs.includes(`services-plus:server:${event}`), `API reference is missing event ${event}`);
 assert.match(requests, /requestCreated", Requests\.ToIntegration\(request\)/);
 assert.match(requests, /local integration = Requests\.ToIntegration\(request\)[\s\S]*requestUpdated", integration/);
@@ -47,7 +47,7 @@ for (const section of ["Response Envelope", "Entity Reference", "Trusted Server 
   assert.ok(docs.includes(`## ${section}`), `API reference is missing section ${section}`);
 }
 assert.match(docs, /```mermaid[\s\S]*stateDiagram-v2/);
-for (const example of [":GetCompany(", ":GetCompanyNumbers(", ":GetCompanyEmployees(", ":GetCompanyRequests(", ":CreateRequest(", ":AcceptRequest(", ":DeclineRequest(", ":TransitionRequest(", ":ReturnRequest(", "requestLifecycle"]) {
+for (const example of [":GetCompany(", ":GetCompanyNumbers(", ":GetCompanyEmployees(", ":GetCompanyRequests(", ":CreateRequest(", ":AcceptRequest(", ":DeclineRequest(", ":ReturnRequest(", "requestLifecycle"]) {
   assert.ok(docs.includes(example), `API reference is missing example ${example}`);
 }
 assert.doesNotMatch(docs, /TriggerServerEvent\("services-plus:server:request"/);

@@ -80,43 +80,14 @@ function Api.toggleDispatch(source, payload)
     return ServicesPlus.Ok(result)
 end
 
-function Api.updateCompanyOperations(source, payload)
-    if type(payload) ~= "table" or type(payload.patch) ~= "table" or type(payload.companyId) ~= "string" then
-        return ServicesPlus.Error("invalid_payload", "Invalid company payload.", false)
-    end
-    ServicesPlus.Employees.ValidateEmployment(source)
-    local employee = ServicesPlus.Employees.Get(source)
-    if not employee or not employee.isLeader or employee.companyId ~= payload.companyId then
-        return ServicesPlus.Error("forbidden", "Leader access is required.", false)
-    end
-
-    local patch = payload.patch
-    if type(patch.requestsEnabled) ~= "boolean" or type(patch.messagesEnabled) ~= "boolean"
-        or not ServicesPlus.Constants.DistributionModes[patch.dispatchMode] then
-        return ServicesPlus.Error("validation_failed", "Invalid operational settings.", false)
-    end
-    local company = ServicesPlus.Companies.Get(payload.companyId)
-    if #(ServicesPlus.RequestDefinitions.categoryTemplates[company.categoryId] or {}) == 0 then patch.requestsEnabled = false end
-
-    local success, result = ServicesPlus.Companies.UpdateOperations(payload.companyId, patch)
-    if not success then return ServicesPlus.Error(result, "The company could not be updated.", true) end
-    for target in pairs(subscribers) do
-        TriggerClientEvent("services-plus:client:push", target, {
-            type = "company.updated",
-            version = result.version,
-            timestamp = os.time(),
-            payload = result
-        })
-    end
-    return ServicesPlus.Ok(result)
-end
-
 function Api.updateNumberOperations(source, payload)
     ServicesPlus.Employees.ValidateEmployment(source)
     local employee = ServicesPlus.Employees.Get(source)
     local company = employee and ServicesPlus.Companies.Get(employee.companyId) or nil
     local updates = type(payload) == "table" and payload.numbers or nil
     if not employee or not employee.isLeader or not company or type(updates) ~= "table" or #updates > 10 then
+        print(("[services-plus] updateNumberOperations forbidden for source %d: employee=%s isLeader=%s company=%s updatesTable=%s"):format(
+            source, tostring(employee ~= nil), tostring(employee and employee.isLeader), tostring(company ~= nil), tostring(type(updates) == "table")))
         return ServicesPlus.Error("forbidden", "Leader access is required.", false)
     end
     local clean = {}
@@ -125,13 +96,17 @@ function Api.updateNumberOperations(source, payload)
         if type(number) ~= "table" or type(number.id) ~= "string" or type(number.enabled) ~= "boolean"
             or type(number.callsEnabled) ~= "boolean" or type(number.inboxEnabled) ~= "boolean" or type(number.requestsEnabled) ~= "boolean"
             or type(number.publicVisible) ~= "boolean" or not ServicesPlus.Constants.DistributionModes[number.distribution] then
+            print("[services-plus] updateNumberOperations rejected: invalid number entry", json.encode(number, { indent = true }))
             return ServicesPlus.Error("validation_failed", "Invalid number operations.", false)
         end
         if not requestsAvailable then number.requestsEnabled = false end
         clean[#clean + 1] = number
     end
     local success, result = ServicesPlus.Companies.UpdateNumberOperations(company.id, clean)
-    if not success then return ServicesPlus.Error(result, "Number operations could not be saved.", true) end
+    if not success then
+        print(("[services-plus] updateNumberOperations failed to persist for '%s': %s"):format(company.id, tostring(result)))
+        return ServicesPlus.Error(result, "Number operations could not be saved.", true)
+    end
     for _, member in ipairs(ServicesPlus.Employees.GetPublicForCompany(company.id)) do
         ServicesPlus.Employees.SyncPhoneNumbers(member.source)
         ServicesPlus.Calls.RevalidateEmployee(member.source)
@@ -318,10 +293,7 @@ function Api.getCompanyWorkspace(source, payload)
         if ServicesPlus.Requests.CanHandle(employee, request) or request.assignedIdentifier == employee.identifier then visibleRequests[#visibleRequests + 1] = request end
     end
     for index, request in ipairs(visibleRequests) do
-        local owner = ServicesPlus.Companies.Get(request.companyId or request.company_id)
-        local public = ServicesPlus.Requests.ToCompanyPublic(request)
-        public.phases = owner and ServicesPlus.Requests.ResolveSettings(owner, type(payload) == "table" and payload.locale == "de" and "de" or "en").phases or {}
-        visibleRequests[index] = public
+        visibleRequests[index] = ServicesPlus.Requests.ToCompanyPublic(request)
     end
     local calls, callPage = {}, { hasMore = false }
     if requested.calls then
@@ -379,18 +351,18 @@ function Api.declineRequest(source, payload)
     return success and ServicesPlus.Ok(result) or ServicesPlus.Error(result, "The request could not be declined.", false)
 end
 
-function Api.transitionRequest(source, payload)
-    local id = type(payload) == "table" and tonumber(payload.id) or nil
-    if not id or type(payload.phaseId) ~= "string" then return ServicesPlus.Error("invalid_payload", "Invalid request transition.", false) end
-    local success, result = ServicesPlus.Requests.Transition(source, id, payload.phaseId)
-    return success and ServicesPlus.Ok(result) or ServicesPlus.Error(result, "The request phase could not be changed.", false)
-end
-
 function Api.returnRequest(source, payload)
     local id = type(payload) == "table" and tonumber(payload.id) or nil
     if not id then return ServicesPlus.Error("invalid_payload", "Invalid request identifier.", false) end
     local success, result = ServicesPlus.Requests.Return(source, id)
     return success and ServicesPlus.Ok(result) or ServicesPlus.Error(result, "The request could not be returned.", false)
+end
+
+function Api.navigateToRequest(source, payload)
+    local id = type(payload) == "table" and tonumber(payload.id) or nil
+    if not id then return ServicesPlus.Error("invalid_payload", "Invalid request identifier.", false) end
+    local success, result = ServicesPlus.Requests.Navigate(source, id)
+    return success and ServicesPlus.Ok(result) or ServicesPlus.Error(result, result == "location_unavailable" and "This request has no captured location." or "The waypoint could not be set.", false)
 end
 
 function Api.cancelRequest(source, payload)
@@ -481,6 +453,7 @@ local function validateAdminCompany(input)
         or not validateString(input.location or "", 0, 150) or not validateString(input.openingHours or "", 0, 100)
         or type(input.categoryId) ~= "string" or not ServicesPlus.Categories[input.categoryId]
         or type(input.requestsEnabled) ~= "boolean" or type(input.messagesEnabled) ~= "boolean" or not ServicesPlus.Constants.DistributionModes[input.dispatchMode]
+        or type(input.requestNotificationActionable) ~= "boolean"
         or type(input.keywords) ~= "table" or #input.keywords > 20 or type(input.numbers) ~= "table" or #input.numbers > 10 then
         return nil
     end
@@ -506,7 +479,8 @@ local function validateAdminCompany(input)
     end
     return { id = input.id, job = input.job, displayName = input.displayName, logo = input.logo or "", backgroundImage = input.backgroundImage or "", categoryId = input.categoryId,
         description = input.description or "", location = input.location or "", openingHours = input.openingHours or "", keywords = keywords,
-        requestsEnabled = #(ServicesPlus.RequestDefinitions.categoryTemplates[input.categoryId] or {}) > 0 and input.requestsEnabled or false, messagesEnabled = input.messagesEnabled, dispatchMode = input.dispatchMode, numbers = numbers }
+        requestsEnabled = #(ServicesPlus.RequestDefinitions.categoryTemplates[input.categoryId] or {}) > 0 and input.requestsEnabled or false, messagesEnabled = input.messagesEnabled, dispatchMode = input.dispatchMode,
+        requestNotificationActionable = input.requestNotificationActionable, numbers = numbers }
 end
 
 function Api.getAdminState(source)
@@ -518,8 +492,12 @@ end
 function Api.adminSaveCompany(source, payload)
     local adminError = requireAdmin(source)
     if adminError then return adminError end
-    local company = validateAdminCompany(type(payload) == "table" and payload.company or nil)
-    if not company then return ServicesPlus.Error("validation_failed", "One or more company fields are invalid.", false) end
+    local rawCompany = type(payload) == "table" and payload.company or nil
+    local company = validateAdminCompany(rawCompany)
+    if not company then
+        print("[services-plus] adminSaveCompany rejected: payload failed validateAdminCompany", json.encode(rawCompany or "nil", { indent = true }))
+        return ServicesPlus.Error("validation_failed", "One or more company fields are invalid.", false)
+    end
     if not ServicesPlus.Companies.Get(company.id) and ServicesPlus.Companies.Count() >= Config.MaxCompanies then
         return ServicesPlus.Error("company_limit_reached", "The configured company limit has been reached.", false)
     end
@@ -532,7 +510,10 @@ function Api.adminSaveCompany(source, payload)
         end
     end
     local success, result = ServicesPlus.Companies.SaveAdmin(company)
-    if not success then return ServicesPlus.Error(result, "The company could not be saved.", true) end
+    if not success then
+        print(("[services-plus] adminSaveCompany failed to persist for company '%s': %s"):format(company.id, tostring(result)))
+        return ServicesPlus.Error(result, "The company could not be saved.", true)
+    end
     ServicesPlus.Employees.RevalidateCompany(company.id)
     for _, member in ipairs(ServicesPlus.Employees.GetPublicForCompany(company.id)) do
         ServicesPlus.Employees.SyncPhoneNumbers(member.source)

@@ -13,6 +13,7 @@ This directory contains all technical documentation for the Services+ resource. 
 - [Configuration](guides/CONFIGURATION.md)
 - [Database migrations, backup, and rollback](guides/DATABASE.md)
 - [Troubleshooting](guides/TROUBLESHOOTING.md)
+- [LB Phone design reference](guides/LB_PHONE_DESIGN.md): design tokens, safe-area/spacing rules, and font/color conventions for custom apps.
 
 ## Reference
 

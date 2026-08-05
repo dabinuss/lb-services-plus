@@ -106,6 +106,7 @@ function Companies.ToPublic(company)
     local employeeCount = ServicesPlus.Employees and ServicesPlus.Employees.CountForCompany(company.id) or 0
     local numbers = {}
     for _, number in ipairs(company.numbers) do
+        local coverage = ServicesPlus.Employees and ServicesPlus.Employees.NumberHasCoverage(company.id, number, true) or false
         numbers[#numbers + 1] = {
             id = number.id,
             label = number.label,
@@ -117,7 +118,7 @@ function Companies.ToPublic(company)
             inboxEnabled = number.inboxEnabled,
             requestsEnabled = number.requestsEnabled,
             publicVisible = number.publicVisible,
-            available = ServicesPlus.Employees and ServicesPlus.Employees.NumberHasCoverage(company.id, number, true) or false
+            available = coverage
         }
     end
     return {
@@ -136,6 +137,7 @@ function Companies.ToPublic(company)
         hasRequestTemplates = #(ServicesPlus.RequestDefinitions.categoryTemplates[company.categoryId] or {}) > 0,
         messagesEnabled = company.messagesEnabled,
         dispatchMode = company.dispatchMode,
+        requestNotificationActionable = company.requestNotificationActionable,
         primaryNumber = (function() for _, number in ipairs(numbers) do if number.enabled and number.callsEnabled and number.publicVisible then return number.number end end end)(),
         numbers = numbers,
         version = version
@@ -161,18 +163,6 @@ function Companies.UpdateNumberOperations(companyId, updates)
         number.publicVisible = update.publicVisible
         number.distribution = update.distribution
     end
-    version = version + 1
-    return true, Companies.ToPublic(company)
-end
-
-function Companies.UpdateOperations(companyId, patch)
-    local company = cache[companyId]
-    if not company then return false, "company_not_found" end
-    local affected = ServicesPlus.Repository.UpdateCompanyOperations(companyId, patch)
-    if type(affected) ~= "number" then return false, "company_update_failed" end
-    company.requestsEnabled = patch.requestsEnabled
-    company.messagesEnabled = patch.messagesEnabled
-    company.dispatchMode = patch.dispatchMode
     version = version + 1
     return true, Companies.ToPublic(company)
 end

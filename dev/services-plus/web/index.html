@@ -4,9 +4,22 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light dark" />
+    <!-- The hashed JS/CSS filenames change on every build, so once fetched they are safe
+    to cache forever. This HTML file itself is not (its URL never changes), so without
+    these it can get stuck in the FiveM client's NUI cache pointing at an old build even
+    after the server-side files and the resource have been updated. -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
     <title>Services+</title>
-    <script type="module" crossorigin src="./assets/index-C1I7oRV_.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-DVtA31m5.css">
+
+    <!-- Poppins is the typeface every native LB Phone app ships with; matching it here
+    is what makes this custom app read as "native" instead of third-party. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,400;0,500;0,600;0,700;0,750;0,800;1,400&display=swap" rel="stylesheet" />
+    <script type="module" crossorigin src="./assets/index-BsmxSHRS.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-D3JMzX-T.css">
   </head>
   <body>
     <div id="root"></div>

@@ -133,6 +133,8 @@ end
 
 function Bridge.IsServerAdmin(source)
     if IsPlayerAceAllowed(source, Config.AdminAce) then return true end
+    local identifier = getLicense(source)
+    if identifier and Config.StandaloneAdmins[identifier] then return true end
     if activeFramework == "esx" then
         local player = frameworkObject.GetPlayerFromId(source)
         local group = player and player.getGroup and player.getGroup() or "user"

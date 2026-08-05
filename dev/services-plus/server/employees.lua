@@ -183,7 +183,8 @@ function Employees.EnterDuty(source)
     local phoneNumber = ServicesPlus.Bridge.GetEquippedPhoneNumber(source)
     if not phoneNumber then return false, "phone_required" end
     local settings = ServicesPlus.Repository.GetEmployeeSettings(player.identifier, company.id)
-    local preferred = settings and settings.dispatch_preference == 1 or false
+    local preferred = settings and ServicesPlus.ToBool(settings.dispatch_preference) or false
+    local explicitLeader = settings and ServicesPlus.ToBool(settings.explicit_leader) or false
     local employee = {
         source = source,
         identifier = player.identifier,
@@ -197,8 +198,8 @@ function Employees.EnterDuty(source)
         dispatchEnabled = preferred,
         dispatchNumberSelections = preferred and {} or nil,
         dispatchForced = false,
-        isLeader = ServicesPlus.Bridge.IsLeader(player, company) or (settings and settings.explicit_leader == 1),
-        explicitLeader = settings and settings.explicit_leader == 1 or false,
+        isLeader = ServicesPlus.Bridge.IsLeader(player, company) or explicitLeader,
+        explicitLeader = explicitLeader,
         activeCall = nil,
         activeRequest = nil,
         version = nextSequence()
@@ -234,9 +235,19 @@ end
 
 function Employees.UpdateStatus(source, status)
     local employee = dutyBySource[source]
-    if not employee then return false, "not_on_duty" end
-    if not ServicesPlus.Constants.MutableEmployeeStatuses[status] then return false, "invalid_status" end
-    if employee.status == "busy" then return false, "employee_busy" end
+    if not employee then
+        print(("[services-plus] UpdateStatus rejected for source %d: not on duty (target status '%s')"):format(source, tostring(status)))
+        return false, "not_on_duty"
+    end
+    if not ServicesPlus.Constants.MutableEmployeeStatuses[status] then
+        print(("[services-plus] UpdateStatus rejected for source %d: '%s' is not a mutable status"):format(source, tostring(status)))
+        return false, "invalid_status"
+    end
+    if employee.status == "busy" then
+        print(("[services-plus] UpdateStatus rejected for source %d: currently busy (activeCall=%s activeRequest=%s)"):format(
+            source, tostring(employee.activeCall), tostring(employee.activeRequest)))
+        return false, "employee_busy"
+    end
     employee.status = status
     employee.version = nextSequence()
     setDutySession(source, employee)

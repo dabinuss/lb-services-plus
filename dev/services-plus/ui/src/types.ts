@@ -40,6 +40,7 @@ export interface Company {
   hasRequestTemplates?: boolean;
   messagesEnabled: boolean;
   dispatchMode: "ring_all" | "random" | "dispatch_only";
+  requestNotificationActionable: boolean;
   primaryNumber?: string;
   numbers: CompanyNumber[];
   version: number;
@@ -112,12 +113,6 @@ export interface AppMessage<T = unknown> {
   payload: T;
 }
 
-export interface CompanyOperationsPatch {
-  requestsEnabled: boolean;
-  messagesEnabled: boolean;
-  dispatchMode: "ring_all" | "random" | "dispatch_only";
-}
-
 export type NumberOperationsPatch = Pick<CompanyNumber, "id" | "enabled" | "callsEnabled" | "inboxEnabled" | "requestsEnabled" | "publicVisible" | "distribution">;
 
 export interface AdminCompany extends Company {
@@ -147,6 +142,7 @@ export interface CompanyPatch {
   requestsEnabled: boolean;
   messagesEnabled: boolean;
   dispatchMode: "ring_all" | "random" | "dispatch_only";
+  requestNotificationActionable: boolean;
   keywords: string[];
   numbers: Array<Omit<CompanyNumber, "id" | "available"> & { id?: string }>;
 }
@@ -157,11 +153,9 @@ export interface CitizenRequest {
   company_id?: string;
   companyName: string;
   status: string;
-  phaseId?: string;
-  phase_id?: string;
   payload?: Record<string, string | number>;
   details?: string;
-  location?: string;
+  location?: { x: number; y: number };
   createdAt?: string;
   created_at?: string;
   templateId?: string;
@@ -169,7 +163,6 @@ export interface CitizenRequest {
   requestLabel?: string;
   request_label?: string;
   assignee?: { name: string; role: string; source?: number; identifier?: string };
-  phases?: RequestPhase[];
 }
 
 export interface CitizenCall {
@@ -197,13 +190,11 @@ export interface RequestField {
 }
 
 export interface RequestTemplate { id: string; kind: "general" | "specialized"; name: string; fields: RequestField[]; }
-export interface RequestPhase { id: string; name: string; }
 export interface RequestSettings {
   label: string;
   createLabel: string;
   templateIds: string[];
   templates: RequestTemplate[];
-  phases: RequestPhase[];
   fieldSettings?: Record<string, Record<string, { enabled: boolean; required: boolean }>>;
   numberId?: string;
   requestNumbers?: Array<{ id: string; label: string }>;
@@ -249,17 +240,11 @@ export interface WorkspacePageState { nextCursor?: WorkspaceCursor; hasMore: boo
 export interface WorkspaceSummary { unansweredRequests: number; unreadMessages: number; unreadByNumber: Record<string, number>; unseenCalls: number; latestCallId: number; }
 export interface CompanyWorkspace { companyId?: string; conversations: InboxConversation[]; requests: CitizenRequest[]; calls: CompanyCall[]; requestSettings: RequestSettings; numberStates?: NumberState[]; pagination: Record<WorkspaceSection, WorkspacePageState>; summary?: WorkspaceSummary; }
 export interface WorkOffer {
-  kind: "call" | "request";
+  kind: "call";
   id: number;
   title: string;
   subtitle: string;
   callToken?: string;
-  payload?: Record<string, unknown>;
-  companyName?: string;
-  companyLogo?: string;
-  companyBackground?: string;
-  categoryName?: string;
-  categoryIcon?: string;
 }
 
 export interface MyActivity { calls: CitizenCall[]; requests: CitizenRequest[]; conversations?: InboxConversation[]; }

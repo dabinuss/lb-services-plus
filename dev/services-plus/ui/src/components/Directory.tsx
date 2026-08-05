@@ -16,14 +16,14 @@ export function Directory({ companies, categories, settings, locale, onCall, onR
   const [category, setCategory] = useState("all");
   const filtered = useMemo(() => filterCompanies(companies, categories, query, category), [companies, categories, query, category]);
   const groups = useMemo(() => categories.map((item) => ({ category: item, companies: filtered.filter((company) => company.categoryId === item.id) })).filter((group) => group.companies.length > 0), [categories, filtered]);
+  const availableCategories = useMemo(() => categories.filter((item) => companies.some((company) => company.categoryId === item.id)), [categories, companies]);
 
   return <main className="directory">
     <div className="search-wrap"><Search size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t(locale, "search")} aria-label={t(locale, "search")} />{query && <button type="button" className="clear-search" onClick={() => setQuery("")} aria-label="Clear search"><X size={17} /></button>}</div>
     <div className="category-strip" aria-label={t(locale, "all")}>
       <button type="button" className={category === "all" ? "active" : ""} onClick={() => setCategory("all")} title={t(locale, "all")} aria-label={t(locale, "all")}><LayoutGrid size={18} /></button>
-      {categories.map((item) => <button type="button" key={item.id} className={category === item.id ? "active" : ""} onClick={() => setCategory(item.id)} title={item.names[locale] || item.name} aria-label={item.names[locale] || item.name}><CategoryIcon name={item.icon} /></button>)}
+      {availableCategories.map((item) => <button type="button" key={item.id} className={category === item.id ? "active" : ""} onClick={() => setCategory(item.id)} title={item.names[locale] || item.name} aria-label={item.names[locale] || item.name}><CategoryIcon name={item.icon} /></button>)}
     </div>
-    <div className="result-summary"><strong>{filtered.length}</strong> {t(locale, "services")}</div>
     <div className="category-groups">
       {groups.map((group) => <section className="category-section" key={group.category.id}>
         <header><CategoryIcon name={group.category.icon} size={17} /><h2>{group.category.names[locale] || group.category.name}</h2><span>{group.companies.length}</span></header>

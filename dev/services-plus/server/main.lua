@@ -59,3 +59,18 @@ AddEventHandler("onResourceStop", function(resourceName)
     ServicesPlus.Ready = false
     ServicesPlus.Employees.ClearAll()
 end)
+
+-- Dev helper: prints your own identifiers so you can add yourself to
+-- Config.StandalonePlayers / Config.StandaloneAdmins in config.lua. Not permission-gated
+-- since it can only ever reveal the calling player's own identifiers.
+RegisterCommand("spwhoami", function(source)
+    if source == 0 then return end
+    local identifiers = GetPlayerIdentifiers(source)
+    local license = nil
+    for _, identifier in ipairs(identifiers) do
+        if identifier:sub(1, 8) == "license:" then license = identifier break end
+    end
+    print(("[services-plus] %s (source %d) identifiers: %s"):format(GetPlayerName(source), source, table.concat(identifiers, ", ")))
+    TriggerClientEvent("chat:addMessage", source, { args = { "[Services+]", ("License: %s"):format(license or "not found") } })
+    TriggerClientEvent("chat:addMessage", source, { args = { "[Services+]", ("All identifiers: %s"):format(table.concat(identifiers, ", ")) } })
+end, false)

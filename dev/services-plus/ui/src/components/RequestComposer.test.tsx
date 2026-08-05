@@ -24,6 +24,7 @@ const company = {
   requestsEnabled: true,
   messagesEnabled: true,
   dispatchMode: "dispatch_only",
+  requestNotificationActionable: true,
   numbers: [],
   version: 1
 } satisfies Company;
@@ -33,7 +34,6 @@ const settings: RequestSettings = {
   createLabel: "Fahrt anfragen",
   templateIds: ["immediate_pickup"],
   templates: [{ id: "immediate_pickup", kind: "specialized", name: "Abholung", fields: [{ id: "people", type: "people", label: "Personen", required: false }] }],
-  phases: [],
   navigationOnAccept: "automatic"
 };
 

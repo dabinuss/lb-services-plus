@@ -67,7 +67,7 @@ end
 function Repository.LoadCompanies()
     local companies = MySQL.query.await([=[
         SELECT `id`, `job`, `display_name`, `logo`, `background_image`, `category_id`, `description`, `location`,
-               `opening_hours`, `keywords`, `requests_enabled`, `messages_enabled`, `dispatch_mode`
+               `opening_hours`, `keywords`, `requests_enabled`, `messages_enabled`, `dispatch_mode`, `request_notification_actionable`
         FROM `services_plus_companies`
         WHERE `deleted_at` IS NULL
         ORDER BY `display_name`, `id`
@@ -93,9 +93,10 @@ function Repository.LoadCompanies()
             location = row.location,
             openingHours = row.opening_hours,
             keywords = decode(row.keywords, {}),
-            requestsEnabled = row.requests_enabled == 1,
-            messagesEnabled = row.messages_enabled == 1,
+            requestsEnabled = ServicesPlus.ToBool(row.requests_enabled),
+            messagesEnabled = ServicesPlus.ToBool(row.messages_enabled),
             dispatchMode = row.dispatch_mode or "ring_all",
+            requestNotificationActionable = ServicesPlus.ToBool(row.request_notification_actionable),
             numbers = {}
         }
         byId[company.id] = company
@@ -108,12 +109,12 @@ function Repository.LoadCompanies()
                 label = row.label,
                 number = row.number,
                 distribution = row.distribution,
-                sharedInbox = row.shared_inbox == 1,
-                enabled = row.enabled == 1,
-                callsEnabled = row.calls_enabled == 1,
-                inboxEnabled = row.inbox_enabled == 1,
-                requestsEnabled = row.requests_enabled == 1,
-                publicVisible = row.public_visible == 1
+                sharedInbox = ServicesPlus.ToBool(row.shared_inbox),
+                enabled = ServicesPlus.ToBool(row.enabled),
+                callsEnabled = ServicesPlus.ToBool(row.calls_enabled),
+                inboxEnabled = ServicesPlus.ToBool(row.inbox_enabled),
+                requestsEnabled = ServicesPlus.ToBool(row.requests_enabled),
+                publicVisible = ServicesPlus.ToBool(row.public_visible)
             }
             company.numbers[#company.numbers + 1] = number
         end
@@ -165,30 +166,24 @@ function Repository.UpdateCompany(companyId, patch)
     })
 end
 
-function Repository.UpdateCompanyOperations(companyId, patch)
-    return MySQL.update.await([=[
-        UPDATE `services_plus_companies`
-        SET `requests_enabled` = ?, `messages_enabled` = ?, `dispatch_mode` = ?
-        WHERE `id` = ?
-    ]=], { patch.requestsEnabled and 1 or 0, patch.messagesEnabled and 1 or 0, patch.dispatchMode, companyId })
-end
 
 function Repository.SaveCompany(company)
     local queries = {
         {
             query = [=[
                 INSERT INTO `services_plus_companies`
-                    (`id`, `job`, `display_name`, `logo`, `background_image`, `category_id`, `description`, `location`, `opening_hours`, `keywords`, `requests_enabled`, `messages_enabled`, `dispatch_mode`)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (`id`, `job`, `display_name`, `logo`, `background_image`, `category_id`, `description`, `location`, `opening_hours`, `keywords`, `requests_enabled`, `messages_enabled`, `dispatch_mode`, `request_notification_actionable`)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON DUPLICATE KEY UPDATE `job` = VALUES(`job`), `display_name` = VALUES(`display_name`),
                     `logo` = VALUES(`logo`), `background_image` = VALUES(`background_image`), `category_id` = VALUES(`category_id`), `description` = VALUES(`description`),
                     `location` = VALUES(`location`), `opening_hours` = VALUES(`opening_hours`), `keywords` = VALUES(`keywords`),
                     `requests_enabled` = VALUES(`requests_enabled`), `messages_enabled` = VALUES(`messages_enabled`), `dispatch_mode` = VALUES(`dispatch_mode`),
+                    `request_notification_actionable` = VALUES(`request_notification_actionable`),
                     `deleted_at` = NULL, `deleted_by` = NULL
             ]=],
             values = { company.id, company.job, company.displayName, company.logo, company.backgroundImage, company.categoryId, company.description,
                 company.location, company.openingHours, json.encode(company.keywords), company.requestsEnabled and 1 or 0,
-                company.messagesEnabled and 1 or 0, company.dispatchMode }
+                company.messagesEnabled and 1 or 0, company.dispatchMode, company.requestNotificationActionable and 1 or 0 }
         },
     }
 
@@ -227,7 +222,15 @@ function Repository.SaveCompany(company)
         queries[#queries + 1] = { query = "UPDATE `services_plus_company_numbers` SET `deleted_at` = CURRENT_TIMESTAMP WHERE `company_id` = ? AND `deleted_at` IS NULL", values = { company.id } }
     end
 
-    return MySQL.transaction.await(queries)
+    local ok, result = pcall(MySQL.transaction.await, queries)
+    if not ok then
+        print(("[services-plus] Repository.SaveCompany transaction errored for '%s': %s"):format(company.id, tostring(result)))
+        return false
+    end
+    if not result then
+        print(("[services-plus] Repository.SaveCompany transaction returned false for '%s' (oxmysql rejected one of the queries; check the server console above this line for the MySQL error)"):format(company.id))
+    end
+    return result
 end
 
 -- Soft-deleted companies and numbers keep their unique job/number values reserved
@@ -324,7 +327,7 @@ function Repository.GetMyActivity(identifier, limit)
     ]=], { identifier, limit }) or {}
     local requests = MySQL.query.await([=[
         SELECT r.`id`, r.`company_id` AS `companyId`, c.`display_name` AS `companyName`, r.`request_label` AS `requestLabel`,
-          r.`status`, r.`phase_id` AS `phaseId`, r.`target_number_id` AS `targetNumberId`, r.`payload`, r.`created_at`, r.`updated_at`
+          r.`status`, r.`target_number_id` AS `targetNumberId`, r.`payload`, r.`created_at`, r.`updated_at`
         FROM `services_plus_requests` r
         JOIN `services_plus_companies` c ON c.`id` = r.`company_id`
         WHERE r.`creator_identifier` = ? AND r.`deleted_at` IS NULL
@@ -418,12 +421,12 @@ function Repository.GetCompanyCalls(companyId, cursor, limit)
     return rows
 end
 
-function Repository.UpsertConversation(companyId, numberId, externalNumber, channelId, preview)
+function Repository.UpsertConversation(companyId, numberId, externalNumber, channelId, preview, anonymous)
     MySQL.update.await([=[
-        INSERT INTO `services_plus_inbox_conversations` (`company_id`, `number_id`, `external_number`, `channel_id`, `last_message`, `last_message_at`)
-        VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-        ON DUPLICATE KEY UPDATE `channel_id` = COALESCE(VALUES(`channel_id`), `channel_id`), `last_message` = VALUES(`last_message`), `last_message_at` = CURRENT_TIMESTAMP, `deleted_at` = NULL, `deleted_by` = NULL
-    ]=], { companyId, numberId, externalNumber, channelId, preview })
+        INSERT INTO `services_plus_inbox_conversations` (`company_id`, `number_id`, `external_number`, `anonymous`, `channel_id`, `last_message`, `last_message_at`)
+        VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ON DUPLICATE KEY UPDATE `anonymous` = VALUES(`anonymous`), `channel_id` = COALESCE(VALUES(`channel_id`), `channel_id`), `last_message` = VALUES(`last_message`), `last_message_at` = CURRENT_TIMESTAMP, `deleted_at` = NULL, `deleted_by` = NULL
+    ]=], { companyId, numberId, externalNumber, anonymous and 1 or 0, channelId, preview })
     return MySQL.single.await("SELECT * FROM `services_plus_inbox_conversations` WHERE `number_id` = ? AND `external_number` = ?", { numberId, externalNumber })
 end
 
@@ -444,7 +447,7 @@ function Repository.GetCompanyConversations(companyId, identifier, cursor, limit
     params[#params + 1] = cursor.id
     params[#params + 1] = limit
     local rows = MySQL.query.await(([=[
-        SELECT c.`id`, c.`number_id` AS `numberId`, n.`label` AS `numberLabel`, c.`external_number` AS `externalNumber`, c.`last_message` AS `lastMessage`, c.`last_message_at` AS `lastMessageAt`,
+        SELECT c.`id`, c.`number_id` AS `numberId`, n.`label` AS `numberLabel`, c.`external_number` AS `externalNumber`, c.`anonymous` AS `anonymous`, c.`last_message` AS `lastMessage`, c.`last_message_at` AS `lastMessageAt`,
           (SELECT COUNT(*) FROM `services_plus_inbox_messages` m WHERE m.`conversation_id` = c.`id` AND m.`deleted_at` IS NULL AND m.`id` > COALESCE(r.`last_read_message_id`, 0)) AS `unreadCount`
         FROM `services_plus_inbox_conversations` c
         JOIN `services_plus_company_numbers` n ON n.`id` = c.`number_id`
@@ -453,7 +456,7 @@ function Repository.GetCompanyConversations(companyId, identifier, cursor, limit
           AND (c.`last_message_at` < ? OR (c.`last_message_at` = ? AND c.`id` < ?))
         ORDER BY c.`last_message_at` DESC, c.`id` DESC LIMIT ?
     ]=]):format(numberClause), params) or {}
-    for _, row in ipairs(rows) do row.externalNumber = ServicesPlus.MaskNumber(row.externalNumber) end
+    for _, row in ipairs(rows) do row.externalNumber = ServicesPlus.ToBool(row.anonymous) and nil or ServicesPlus.MaskNumber(row.externalNumber); row.anonymous = nil end
     return rows
 end
 
@@ -522,7 +525,7 @@ function Repository.GetMessageReactions(messageIds, actorKey)
     local grouped = {}
     for _, row in ipairs(rows) do
         grouped[row.messageId] = grouped[row.messageId] or {}
-        grouped[row.messageId][#grouped[row.messageId] + 1] = { emoji = row.emoji, count = tonumber(row.count) or 0, mine = row.mine == true or tonumber(row.mine) == 1 }
+        grouped[row.messageId][#grouped[row.messageId] + 1] = { emoji = row.emoji, count = tonumber(row.count) or 0, mine = ServicesPlus.ToBool(row.mine) }
     end
     return grouped
 end
@@ -590,8 +593,8 @@ end
 function Repository.CreateStructuredRequest(input)
     return MySQL.insert.await([=[
         INSERT INTO `services_plus_requests`
-          (`creator_identifier`, `creator_number`, `company_id`, `template_id`, `request_label`, `status`, `phase_id`, `target_number_id`, `location_x`, `location_y`, `external_source`, `external_id`, `payload`)
-        VALUES (?, ?, ?, ?, ?, 'pending', NULL, ?, ?, ?, ?, ?, ?)
+          (`creator_identifier`, `creator_number`, `company_id`, `template_id`, `request_label`, `status`, `target_number_id`, `location_x`, `location_y`, `external_source`, `external_id`, `payload`)
+        VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?)
     ]=], { input.identifier, input.phoneNumber, input.companyId, input.templateId, input.requestLabel, input.targetNumberId,
         input.locationX, input.locationY, input.externalSource, input.externalId, json.encode(input.values) })
 end
@@ -622,7 +625,7 @@ end
 function Repository.GetCompanyRequests(companyId, cursor, limit, activeOnly)
     local statusClause = activeOnly and "AND r.`status` IN ('pending','active','returned')" or ""
     local query = ([=[
-        SELECT r.`id`, r.`company_id` AS `companyId`, r.`template_id` AS `templateId`, r.`request_label` AS `requestLabel`, r.`status`, r.`phase_id` AS `phaseId`,
+        SELECT r.`id`, r.`company_id` AS `companyId`, r.`template_id` AS `templateId`, r.`request_label` AS `requestLabel`, r.`status`,
           r.`target_number_id` AS `targetNumberId`, r.`creator_number` AS `creatorNumber`, r.`payload`, r.`assigned_identifier` AS `assignedIdentifier`,
           r.`assigned_name` AS `assignedName`, r.`assigned_role` AS `assignedRole`, r.`location_x` AS `locationX`, r.`location_y` AS `locationY`,
           r.`external_source` AS `externalSource`, r.`external_id` AS `externalId`, r.`created_at`, r.`updated_at`
@@ -647,7 +650,7 @@ function Repository.GetVisibleRequests(companyId, identifier, categoryId, compet
         for _, value in ipairs(numberParams) do params[#params + 1] = value end
         params[#params + 1] = limit
         local rows = MySQL.query.await(([=[
-            SELECT r.`id`, r.`company_id` AS `companyId`, r.`template_id` AS `templateId`, r.`request_label` AS `requestLabel`, r.`status`, r.`phase_id` AS `phaseId`,
+            SELECT r.`id`, r.`company_id` AS `companyId`, r.`template_id` AS `templateId`, r.`request_label` AS `requestLabel`, r.`status`,
               r.`target_number_id` AS `targetNumberId`, r.`creator_number` AS `creatorNumber`, r.`payload`, r.`assigned_identifier` AS `assignedIdentifier`,
               r.`assigned_name` AS `assignedName`, r.`assigned_role` AS `assignedRole`, r.`location_x` AS `locationX`, r.`location_y` AS `locationY`,
               r.`external_source` AS `externalSource`, r.`external_id` AS `externalId`, r.`created_at`, r.`updated_at`
@@ -664,7 +667,7 @@ function Repository.GetVisibleRequests(companyId, identifier, categoryId, compet
     params[#params + 1] = limit
     local rows = MySQL.query.await(([=[
         SELECT r.`id`, r.`company_id` AS `companyId`, c.`display_name` AS `companyName`, r.`template_id` AS `templateId`,
-          r.`request_label` AS `requestLabel`, r.`status`, r.`phase_id` AS `phaseId`, r.`target_number_id` AS `targetNumberId`, r.`creator_number` AS `creatorNumber`, r.`payload`,
+          r.`request_label` AS `requestLabel`, r.`status`, r.`target_number_id` AS `targetNumberId`, r.`creator_number` AS `creatorNumber`, r.`payload`,
           r.`assigned_identifier` AS `assignedIdentifier`, r.`assigned_name` AS `assignedName`, r.`assigned_role` AS `assignedRole`,
           r.`location_x` AS `locationX`, r.`location_y` AS `locationY`, r.`external_source` AS `externalSource`, r.`external_id` AS `externalId`,
           r.`created_at`, r.`updated_at`
@@ -720,16 +723,11 @@ function Repository.GetPendingRequestsByCategory(categoryId, limit)
     return rows
 end
 
-function Repository.AcceptRequest(requestId, employee, phaseId)
+function Repository.AcceptRequest(requestId, employee)
     return MySQL.update.await([=[
-        UPDATE `services_plus_requests` SET `status` = 'active', `assigned_identifier` = ?, `assigned_name` = ?, `assigned_role` = ?, `phase_id` = ?, `accepted_at` = CURRENT_TIMESTAMP
+        UPDATE `services_plus_requests` SET `status` = 'active', `assigned_identifier` = ?, `assigned_name` = ?, `assigned_role` = ?, `accepted_at` = CURRENT_TIMESTAMP
         WHERE `id` = ? AND `status` IN ('pending','returned') AND `assigned_identifier` IS NULL
-    ]=], { employee.identifier, tostring(employee.name or ""):sub(1, 100), tostring(employee.role or ""):sub(1, 100), phaseId, requestId }) == 1
-end
-
-function Repository.TransitionRequest(requestId, identifier, status, phaseId)
-    local completed = status == "completed" and ", `completed_at` = CURRENT_TIMESTAMP" or ""
-    return MySQL.update.await(("UPDATE `services_plus_requests` SET `status` = ?, `phase_id` = ? %s WHERE `id` = ? AND `assigned_identifier` = ? AND `status` = 'active'"):format(completed), { status, phaseId, requestId, identifier }) == 1
+    ]=], { employee.identifier, tostring(employee.name or ""):sub(1, 100), tostring(employee.role or ""):sub(1, 100), requestId }) == 1
 end
 
 function Repository.CancelRequest(requestId, identifier)
@@ -748,7 +746,7 @@ end
 
 function Repository.ReturnRequest(requestId, identifier)
     return MySQL.update.await([=[
-        UPDATE `services_plus_requests` SET `status` = 'returned', `assigned_identifier` = NULL, `assigned_name` = NULL, `assigned_role` = NULL, `phase_id` = NULL
+        UPDATE `services_plus_requests` SET `status` = 'returned', `assigned_identifier` = NULL, `assigned_name` = NULL, `assigned_role` = NULL
         WHERE `id` = ? AND `assigned_identifier` = ? AND `status` = 'active'
     ]=], { requestId, identifier }) == 1
 end
@@ -758,6 +756,6 @@ function Repository.AddRequestEvent(requestId, identifier, eventType, payload)
 end
 
 function Repository.RecoverActiveRequests()
-    MySQL.update.await("UPDATE `services_plus_requests` SET `status` = 'returned', `assigned_identifier` = NULL, `assigned_name` = NULL, `assigned_role` = NULL, `phase_id` = NULL WHERE `status` = 'active'")
+    MySQL.update.await("UPDATE `services_plus_requests` SET `status` = 'returned', `assigned_identifier` = NULL, `assigned_name` = NULL, `assigned_role` = NULL WHERE `status` = 'active'")
     MySQL.update.await("UPDATE `services_plus_call_queue` SET `status` = 'ended', `ended_at` = CURRENT_TIMESTAMP WHERE `status` IN ('queued','offered','accepted')")
 end

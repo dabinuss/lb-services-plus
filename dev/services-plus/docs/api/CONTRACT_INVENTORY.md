@@ -13,7 +13,6 @@ API version: `11`
 | `leaveDuty` | None | `SessionState` | `leaveDuty` |
 | `updateStatus` | `status: string (available/occupied/on_break)` | `Employee` | `updateStatus` |
 | `toggleDispatch` | `enabled: boolean` | `Employee` | `toggleDispatch` |
-| `updateCompanyOperations` | `companyId: string (maxLength 64)`, `patch: object` | `Company` | `updateCompanyOperations` |
 | `updateNumberOperations` | `numbers: array (maxItems 10)` | `Company` | `updateNumberOperations` |
 | `toggleDispatchLine` | `numberId: string (maxLength 64)`, `enabled: boolean` | `Employee` | `toggleDispatchLine` |
 | `startCompanyCall` | `companyId: string (maxLength 64)`, `numberId?: string (maxLength 64)` | `PhoneTarget` | `startCompanyCall` |
@@ -26,7 +25,6 @@ API version: `11`
 | `getCompanyWorkspace` | `sections?: array (maxItems 3)`, `cursors?: object`, `conversationNumberId?: string (maxLength 64)`, `seenCallId?: integer (min 0)`, `includeSummary?: boolean`, `limit?: integer (min 1, max 50)`, `locale?: string (en/de)` | `CompanyWorkspace` | `getCompanyWorkspace` |
 | `acceptRequest` | `id: integer (min 1)` | `CompanyRequest` | `acceptRequest` |
 | `declineRequest` | `id: integer (min 1)` | `Identifier` | `declineRequest` |
-| `transitionRequest` | `id: integer (min 1)`, `phaseId: string (maxLength 64)` | `CompanyRequest` | `transitionRequest` |
 | `returnRequest` | `id: integer (min 1)` | `CompanyRequest` | `returnRequest` |
 | `cancelRequest` | `id: integer (min 1)` | `CitizenRequest` | `cancelRequest` |
 | `updateRequestSettings` | `settings: object` | `RequestSettings` | `updateRequestSettings` |
@@ -60,7 +58,6 @@ API version: `11`
 | `AcceptRequest` | `source`, `requestId` | `RequestIntegration` | `externalWrite` |
 | `DeclineRequest` | `source`, `requestId` | `RequestIntegration|Identifier` | `externalWrite` |
 | `ReturnRequest` | `source`, `requestId` | `RequestIntegration` | `externalWrite` |
-| `TransitionRequest` | `source`, `requestId`, `phaseId` | `RequestIntegration` | `externalWrite` |
 | `SendCompanyMessage` | `source`, `payload` | `InboxMessage` | `externalWrite` |
 
 ## Local Server Events
@@ -69,9 +66,7 @@ API version: `11`
 - `requestCreated`
 - `requestUpdated`
 - `requestAccepted`
-- `requestPhaseChanged`
 - `requestReturned`
-- `requestCompleted`
 - `requestCancelled`
 - `requestDeleted`
 - `messageReceived`

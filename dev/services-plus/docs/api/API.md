@@ -69,6 +69,7 @@ All entities below are API version 11. Optional means the field can be absent, n
 | `available`, `requestsEnabled`, `hasRequestTemplates`, `messagesEnabled` | boolean | Current public capabilities. |
 | `version` | number | Cache version. |
 | `dispatchMode` | `ring_all` \| `random` \| `dispatch_only` | Company default. |
+| `requestNotificationActionable` | boolean | When true, incoming request offers include Accept/Decline in LB Phone's native notification (and the RETURN/BACK keybinds work). When false (the default), employees only get informed by the notification and must open the app to act. Never renders any UI inside the app itself. |
 | `primaryNumber` | string, optional | First enabled public call number. |
 | `numbers` | CompanyNumber[] | Public operational number states. |
 
@@ -82,7 +83,7 @@ All entities below are API version 11. Optional means the field can be absent, n
 
 ### Request
 
-`RequestPublic` contains `id`, `companyId`, optional `companyName`, `templateId`, `requestLabel`, `status`, optional `phaseId`, optional `targetNumberId`, validated `payload`, `createdAt`, and `updatedAt`.
+`RequestPublic` contains `id`, `companyId`, optional `companyName`, `templateId`, `requestLabel`, `status`, optional `targetNumberId`, validated `payload`, `createdAt`, and `updatedAt`. `status` is `pending`, `active`, `returned`, `cancelled`, or `deleted` - there is no intermediate phase tracking; a company accepts, declines, or deletes a request.
 
 `RequestCompany` adds optional `assignee: { name, role, source? }`.
 
@@ -113,7 +114,6 @@ All exports were introduced by API version 7 and return API version 10 entities 
 | `AcceptRequest` | `source, requestId` | RequestIntegration | Source is available, on duty, eligible for the request/category/number. | Shared external action: 30/30 sec | Atomic assignment; sets employee Busy; emits accepted lifecycle and pushes. Only one employee can win. | `employee_unavailable`, `already_accepted`, common errors |
 | `DeclineRequest` | `source, requestId` | RequestIntegration | Source is eligible and request is pending/returned. | Shared external action: 30/30 sec | Audits personal decline; does not close the request. | `request_unavailable`, common errors |
 | `ReturnRequest` | `source, requestId` | RequestIntegration | Source owns the active assignment. | Shared external action: 30/30 sec | Clears assignee, restores employee state, reoffers request, emits returned lifecycle. | `return_failed`, common errors |
-| `TransitionRequest` | `source, requestId, phaseId: string` | RequestIntegration | Source owns active assignment; phase is exactly the next configured fixed phase. | 20/30 sec | Atomic next-phase update; final phase completes and releases employee. | `forbidden`, `invalid_transition`, `transition_failed`, common errors |
 | `SendCompanyMessage` | `source, messagePayload` | Message event entity | Source is on duty and authorized for the conversation's enabled shared inbox; body <= 2000; <= 4 HTTPS attachments on `Config.AllowedMediaDomains`; valid coords. | 20/min per player plus 60/min per invoking resource | Sends through LB Phone, persists projection, emits message event/push; duplicate LB message IDs are idempotent. | `validation_failed`, `forbidden`, `message_failed`, common errors |
 
 ### Export Examples
@@ -183,12 +183,7 @@ Perform validated lifecycle actions:
 
 ```lua
 local accepted = exports["services-plus"]:AcceptRequest(officerSource, requestId)
-if accepted.success then
-    local moved = exports["services-plus"]:TransitionRequest(officerSource, requestId, "on_scene")
-    if not moved.success then print(moved.error.code) end
-else
-    print(accepted.error.code)
-end
+if not accepted.success then print(accepted.error.code) end
 
 -- These use the same employee authority checks:
 exports["services-plus"]:DeclineRequest(officerSource, anotherRequestId)
@@ -201,13 +196,11 @@ These are same-context FiveM server events emitted with `TriggerEvent`; they are
 
 | Event | Payload | Emitted after | Notes |
 | --- | --- | --- | --- |
-| `services-plus:server:requestLifecycle` | `{ event, version, timestamp, request: RequestIntegration }` | Every lifecycle change | Preferred stable event. `event`: `created`, `accepted`, `phase_changed`, `returned`, `completed`, `cancelled`, `deleted`. |
+| `services-plus:server:requestLifecycle` | `{ event, version, timestamp, request: RequestIntegration }` | Every lifecycle change | Preferred stable event. `event`: `created`, `accepted`, `returned`, `cancelled`, `deleted`. |
 | `services-plus:server:requestCreated` | RequestIntegration | Successful create | Compatibility-specific event. |
-| `services-plus:server:requestUpdated` | RequestIntegration | Accepted, transitioned, returned, completed, cancelled, or deleted | General compatibility event. |
+| `services-plus:server:requestUpdated` | RequestIntegration | Accepted, returned, cancelled, or deleted | General compatibility event. |
 | `services-plus:server:requestAccepted` | RequestIntegration | Atomic acceptance | Assignment is already committed. |
-| `services-plus:server:requestPhaseChanged` | RequestIntegration | Non-final next phase | Fixed sequential transition already committed. |
 | `services-plus:server:requestReturned` | RequestIntegration | Manual return or disconnect recovery | Assignment has been cleared. |
-| `services-plus:server:requestCompleted` | RequestIntegration | Final phase | Employee has been released. |
 | `services-plus:server:requestCancelled` | RequestIntegration | Citizen cancellation | Any assignee has been released. |
 | `services-plus:server:requestDeleted` | RequestIntegration | Dispatch soft deletion | Record remains auditable but is hidden from normal reads. |
 | `services-plus:server:messageReceived` | Message event entity | Persisted citizen or employee message | Contains `conversationId`, `messageId`, company/number IDs, number label, the full unmasked external number, body, sender type, attachments, coords, and `createdAt`. Trusted-resource only; never forward the unmasked number to a player. |
@@ -237,11 +230,9 @@ stateDiagram-v2
     pending --> pending: DeclineRequest
     pending --> cancelled: owner cancels
     pending --> deleted: dispatch deletes
-    active --> active: next phase
-    active --> completed: final phase
     active --> returned: ReturnRequest / disconnect
     active --> cancelled: owner cancels
-    active --> deleted: dispatch deletes
+    active --> deleted: dispatch or assignee deletes
     returned --> active: AcceptRequest (atomic)
     returned --> cancelled: owner cancels
     returned --> deleted: dispatch deletes
@@ -282,8 +273,7 @@ Version for all action contracts: API 8. Errors marked below are contract-specif
 | `leaveDuty {}` | `{ currentUser, companies }` | On duty; no active call/request. | 5/30 sec | Clears duty and number registrations. `employee_busy`. |
 | `updateStatus { status }` | EmployeePublic | On duty; mutable status enum only. | 15/30 sec | Revalidates offers/coverage. `invalid_status`, `employee_busy`. |
 | `toggleDispatch { enabled: boolean }` | EmployeePublic | On duty; boolean. | 10/30 sec | Selects all lines initially when enabled; rebalances routing. |
-| `updateCompanyOperations { companyId, patch }` | Company | Leader of same company; boolean request/message flags and distribution enum. | 8/min | Persists operations and pushes company delta. `forbidden`, `validation_failed`. |
-| `updateNumberOperations { numbers }` | Company | Same-company leader; <= 10 existing number IDs and complete boolean/distribution patch. | 8/min | Persists channel flags, resyncs numbers and offers. `number_not_found`, `number_update_failed`. |
+| `updateNumberOperations { numbers }` | Company | Same-company leader; <= 10 existing number IDs and complete boolean/distribution patch. Messages/requests/notification-style and dispatch mode are admin-only now (`adminSaveCompany`) - a leader can only change per-number capabilities. | 8/min | Persists channel flags, resyncs numbers and offers. `number_not_found`, `number_update_failed`. |
 | `toggleDispatchLine { numberId, enabled }` | EmployeePublic | Active dispatcher; existing enabled number. | 20/min | Changes current duty-session line selection. `dispatch_required`, `number_not_found`. |
 | `getCompanyWorkspace { sections?, cursors?, conversationNumberId?, seenCallId?, includeSummary?, limit?, locale? }` | CompanyWorkspace | On-duty employee; `sections` contains any of `conversations`, `requests`, `calls`; each matching cursor is independent; the optional inbox must be enabled and shared; pagination `1..50`. | 15/min | Filters conversations in SQL. Conversation cursors are `{ lastMessageAt, id }`; request/call cursors remain integers. `summary` is returned unless `includeSummary` is false. Omitted sections are empty. Each call includes `distribution` (the number's distribution mode at the time the call was queued), `queueDurationSeconds`, `callDurationSeconds` (`null` if never accepted), and a masked `callerNumber` (absent for a hidden/anonymous caller). `not_on_duty`, `inbox_disabled`, `invalid_payload`. |
 
@@ -306,11 +296,10 @@ Version for all action contracts: API 8. Errors marked below are contract-specif
 | `createRequest { companyId, templateId, values, locale?, clientRequestId? }` | RequestPublic | Equipped phone; enabled target/template; server validates every configured field and location. | 4/min | Persists and offers request. When `clientRequestId` repeats within 20 seconds for the same player, the original result is replayed instead of creating a duplicate request. `template_disabled`, `location_unavailable`, `request_failed`. |
 | `acceptRequest { id }` | RequestCompany | Available eligible employee. | 8/30 sec | Atomic assignment, Busy state, optional waypoint, lifecycle events. `already_accepted`. |
 | `declineRequest { id }` | `{ id }` | Eligible employee; pending/returned request. | 12/30 sec | Audits personal decline. `request_unavailable`. |
-| `transitionRequest { id, phaseId }` | RequestCompany | Assigned employee; exactly next fixed phase. | 15/30 sec | Updates or completes request. `invalid_transition`, `transition_failed`. |
 | `returnRequest { id }` | RequestCompany | Assigned employee. | 8/30 sec | Clears assignment, restores employee, reoffers. `return_failed`. |
 | `cancelRequest { id }` | RequestPublic | Framework identity owns request. | 6/min | Cancels and releases assignment. `cancel_failed`. |
-| `deleteRequest { id }` | `{ id }` | Active dispatch of owning company. | 10/min | Audited soft delete; call history unaffected. `forbidden`, `request_unavailable`. |
-| `updateRequestSettings { settings }` | RequestSettings | Same-company leader; labels `2..80`, valid templates/fields/number/navigation enum. | 6/min | Persists controlled company overrides; phases remain fixed. `validation_failed`. |
+| `deleteRequest { id }` | `{ id }` | Active dispatch of the owning company, or the employee currently assigned to the request. | 10/min | Audited soft delete; call history unaffected. There is no separate "complete" step - accept, decline, or delete is the whole workflow. `forbidden`, `request_unavailable`. |
+| `updateRequestSettings { settings }` | RequestSettings | Same-company leader; labels `2..80`, valid templates/fields/number/navigation enum. | 6/min | Persists controlled company overrides. `validation_failed`. |
 
 ### Messages, Activity, and Administration
 
@@ -373,8 +362,8 @@ Server pushes arrive through the client and official LB Phone `SendCustomAppMess
 | Create/cancel own request | Yes | Yes | Yes | Yes | Yes | Create via export with validated source |
 | Citizen message/call | Yes | Yes | Yes | Yes | Yes | No direct citizen call export |
 | Duty, status, company workspace | No | Own company | Own company | Own company | Only if employed | Employee exports are read-only |
-| Accept/transition/return work | No | If eligible/assigned | If eligible/assigned | If eligible/assigned | No role bypass | Validated action exports |
-| Delete requests/messages | No | No | Own company | Only while dispatch | No role bypass | No delete export |
+| Accept/return work | No | If eligible/assigned | If eligible/assigned | If eligible/assigned | No role bypass | Validated action exports |
+| Delete requests/messages | No | Own assigned request only | Own company | Only while dispatch | No role bypass | No delete export |
 | Company operational/request settings | No | No | No | Own company | Admin UI can change full company | No write export |
 | Company identity/numbers/global/category config | No | No | No | No | Yes | Read exports only |
 | Stable employee identifiers / request integration fields | No | No | No | No | No NUI exposure | Yes, allow-listed server only |

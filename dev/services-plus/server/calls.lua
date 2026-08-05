@@ -221,7 +221,18 @@ AddEventHandler("lb-phone:newCall", function(call)
     local caller = call.caller or {}
     local callee = call.callee or {}
     local player = caller.source and ServicesPlus.Bridge.GetPlayer(caller.source) or nil
-    local company, number = ServicesPlus.Companies.FindByNumber(callee.number or call.company)
+    -- `callee.number` is absent when the call was placed via createCall({ company = ... })
+    -- rather than a specific number; FindByNumber can't resolve a job identifier, so fall
+    -- back to a job lookup and pick that company's first enabled, callable number.
+    local company, number = ServicesPlus.Companies.FindByNumber(callee.number)
+    if not company and call.company then
+        company = ServicesPlus.Companies.FindByJob(call.company)
+        if company then
+            for _, candidate in ipairs(company.numbers) do
+                if candidate.enabled and candidate.callsEnabled then number = candidate break end
+            end
+        end
+    end
     -- LB Phone's CallData carries the caller's real number even when hideCallerId is set;
     -- withholding it is left to the receiving script. Store nil in that case so it is
     -- displayed as an unknown number instead of a normal (merely masked) one.

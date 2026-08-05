@@ -32,7 +32,7 @@ assert.match(events, /TriggerClientEvent\("services-plus:client:response"[\s\S]*
 
 const exportNames = [...exportsFile.matchAll(/exports\("([A-Za-z]+)"/g)].map((match) => match[1]);
 for (const name of exportNames) assert.ok(apiDocs.includes(`| \`${name}\` |`), `Undocumented server export: ${name}`);
-for (const eventName of ["requestLifecycle", "requestCreated", "requestUpdated", "requestAccepted", "requestPhaseChanged", "requestReturned", "requestCompleted", "requestCancelled", "requestDeleted", "messageReceived"]) {
+for (const eventName of ["requestLifecycle", "requestCreated", "requestUpdated", "requestAccepted", "requestReturned", "requestCancelled", "requestDeleted", "messageReceived"]) {
   assert.ok(apiDocs.includes(`services-plus:server:${eventName}`) || apiDocs.includes(`\`${eventName}\``), `Undocumented local event: ${eventName}`);
 }
 

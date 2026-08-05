@@ -38,12 +38,10 @@ Config.RateLimits = {
     leaveDuty = { limit = 5, windowMs = 30000 },
     updateStatus = { limit = 15, windowMs = 30000 },
     toggleDispatch = { limit = 10, windowMs = 30000 },
-    updateCompanyOperations = { limit = 8, windowMs = 60000 },
     updateNumberOperations = { limit = 8, windowMs = 60000 },
     toggleDispatchLine = { limit = 20, windowMs = 60000 },
     externalCreateRequest = { limit = 6, windowMs = 60000 },
     externalRequestAction = { limit = 30, windowMs = 30000 },
-    externalTransitionRequest = { limit = 20, windowMs = 30000 },
     externalSendCompanyMessage = { limit = 20, windowMs = 60000 },
     externalRead = { limit = 120, windowMs = 60000 },
     externalList = { limit = 30, windowMs = 60000 },
@@ -60,8 +58,8 @@ Config.RateLimits = {
     getCompanyWorkspace = { limit = 15, windowMs = 60000 },
     acceptRequest = { limit = 8, windowMs = 30000 },
     declineRequest = { limit = 12, windowMs = 30000 },
-    transitionRequest = { limit = 15, windowMs = 30000 },
     returnRequest = { limit = 8, windowMs = 30000 },
+    navigateToRequest = { limit = 15, windowMs = 30000 },
     cancelRequest = { limit = 6, windowMs = 60000 },
     updateRequestSettings = { limit = 6, windowMs = 60000 },
     sendCitizenMessage = { limit = 12, windowMs = 60000 },
@@ -94,13 +92,24 @@ Config.LeaderGrades = {
     ambulance = 4,
     taxi = 3,
     mechanic = 3,
-    burgershot = 3
+    burgershot = 3,
+    sp_test = 1 -- leader grade for the "Test Company (Dev Only)" seeded for local QA
 }
 
 Config.ExplicitLeaders = {}
 
 Config.StandalonePlayers = {
     -- ["license:example"] = { job = "taxi", grade = 3, role = "Manager", name = "Alex Morgan" }
+    ["license:e99486a6b983b0dc24b8dcf353bfea8e660b34c4"] = { job = "sp_test", grade = 1, role = "Owner", name = "Mr. Dabi" }
+}
+
+-- Grants the Services+ admin panel to these identifiers, independent of the
+-- `servicesplus.admin` ACE. Mainly useful for standalone/dev testing where wiring up
+-- an ACE principal for your Cfx account is extra friction. Run `/spwhoami` in-game (or
+-- check the server console on connect) to find your own identifier.
+Config.StandaloneAdmins = {
+    ["license:e99486a6b983b0dc24b8dcf353bfea8e660b34c4"] = true
+    -- ["license:example"] = true
 }
 
 Config.Companies = {
@@ -111,12 +120,12 @@ Config.Companies = {
         logo = "https://images.unsplash.com/photo-1589829545856-d10d557cf95f?auto=format&fit=crop&w=256&q=80",
         backgroundImage = "https://images.unsplash.com/photo-1589829545856-d10d557cf95f?auto=format&fit=crop&w=900&q=80",
         dispatchMode = "ring_all",
-        categoryId = "police_justice",
+        categoryId = "government",
         description = "Public safety and non-emergency police services.",
         location = "Mission Row",
         openingHours = "24/7",
         keywords = { "police", "law", "report", "justice" },
-        requestsEnabled = false,
+        requestsEnabled = true,
         messagesEnabled = true,
         numbers = {
             { id = "lspd-main", label = "Main Line", number = "911", distribution = "ring_all", sharedInbox = true }
@@ -134,7 +143,7 @@ Config.Companies = {
         location = "Pillbox Hill",
         openingHours = "24/7",
         keywords = { "hospital", "doctor", "ems", "medical" },
-        requestsEnabled = false,
+        requestsEnabled = true,
         messagesEnabled = true,
         numbers = {
             { id = "pillbox-main", label = "Emergency", number = "912", distribution = "ring_all", sharedInbox = true }
@@ -184,7 +193,7 @@ Config.Companies = {
         logo = "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=256&q=80",
         backgroundImage = "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=900&q=80",
         dispatchMode = "random",
-        categoryId = "restaurants_food",
+        categoryId = "restaurants",
         description = "Fresh meals, collection and delivery.",
         location = "Vespucci Boulevard",
         openingHours = "11:00 - 01:00",

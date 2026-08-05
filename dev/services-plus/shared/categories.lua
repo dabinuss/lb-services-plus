@@ -1,13 +1,12 @@
 ServicesPlus.Categories = {
-    police_justice = { icon = "shield", name = { en = "Police & Justice", de = "Polizei & Justiz" }, keywords = { "police", "justice", "law", "polizei" } },
-    emergency_medical = { icon = "heart-pulse", name = { en = "Emergency Medical", de = "Rettungsdienst" }, keywords = { "ems", "medical", "hospital", "arzt" } },
+    government = { icon = "shield", name = { en = "Government & Public Safety", de = "Behörden" }, keywords = { "police", "doj", "department of justice", "government", "law", "court", "polizei", "justiz", "behörde" } },
+    legal_services = { icon = "gavel", name = { en = "Legal Services", de = "Anwälte" }, keywords = { "lawyer", "attorney", "legal", "anwalt", "recht" } },
+    emergency_medical = { icon = "heart-pulse", name = { en = "Emergency Medical", de = "Rettungsdienst" }, keywords = { "ems", "medical", "hospital", "ambulance", "arzt" } },
     taxi_transport = { icon = "car-taxi-front", name = { en = "Taxi & Transport", de = "Taxi & Transport" }, keywords = { "taxi", "cab", "ride", "fahrt" } },
-    vehicle_services = { icon = "wrench", name = { en = "Vehicle Services", de = "Fahrzeugservice" }, keywords = { "vehicle", "mechanic", "repair", "werkstatt" } },
-    restaurants_food = { icon = "utensils", name = { en = "Restaurants & Food", de = "Restaurants & Essen" }, keywords = { "food", "restaurant", "order", "essen" } },
-    retail = { icon = "shopping-bag", name = { en = "Retail", de = "Einzelhandel" }, keywords = { "shop", "store", "retail", "laden" } },
-    government = { icon = "landmark", name = { en = "Government Services", de = "Behörden" }, keywords = { "government", "city", "public", "behörde" } },
-    real_estate = { icon = "building-2", name = { en = "Real Estate", de = "Immobilien" }, keywords = { "house", "property", "real estate", "immobilien" } },
-    media = { icon = "radio", name = { en = "Media", de = "Medien" }, keywords = { "news", "media", "radio", "nachrichten" } },
-    entertainment = { icon = "music", name = { en = "Entertainment", de = "Unterhaltung" }, keywords = { "club", "music", "event", "unterhaltung" } },
-    other = { icon = "briefcase-business", name = { en = "Other Services", de = "Weitere Dienste" }, keywords = { "service", "business", "other", "dienst" } }
+    vehicle_services = { icon = "wrench", name = { en = "Auto Repair", de = "Werkstatt" }, keywords = { "vehicle", "mechanic", "repair", "towing", "werkstatt" } },
+    restaurants = { icon = "utensils", name = { en = "Restaurants", de = "Restaurants" }, keywords = { "food", "restaurant", "dining", "essen" } },
+    delivery_services = { icon = "package", name = { en = "Delivery Services", de = "Lieferservice" }, keywords = { "delivery", "courier", "shipping", "lieferung" } },
+    news_media = { icon = "newspaper", name = { en = "News & Media", de = "News & Medien" }, keywords = { "news", "media", "radio", "nachrichten" } },
+    community = { icon = "users", name = { en = "Community", de = "Community" }, keywords = { "club", "event", "social", "gemeinschaft" } },
+    real_estate = { icon = "building-2", name = { en = "Real Estate", de = "Immobilien" }, keywords = { "house", "property", "real estate", "immobilien" } }
 }

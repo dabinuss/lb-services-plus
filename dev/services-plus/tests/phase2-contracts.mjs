@@ -20,7 +20,7 @@ for (const module of ["server/calls.lua", "server/inboxes.lua", "server/requests
 const contractMetadata = JSON.parse(await read("shared/api_contracts.json"));
 const actions = [
   "registerIncomingCall", "acceptCall", "declineCall", "endCustomCall", "getRequestOptions", "getCompanyWorkspace",
-  "acceptRequest", "declineRequest", "transitionRequest", "returnRequest", "cancelRequest", "updateRequestSettings",
+  "acceptRequest", "declineRequest", "returnRequest", "cancelRequest", "updateRequestSettings",
   "sendCitizenMessage", "sendEmployeeMessage", "getCitizenInbox", "getConversationMessages", "reactToMessage",
   "adminUpdateCategory", "deleteRequest", "deleteConversation", "deleteMessage"
   , "updateNumberOperations", "toggleDispatchLine"
@@ -81,7 +81,6 @@ assert.match(constants, /occupied = true/);
 assert.match(phoneComponents, /components\.setGallery/);
 assert.doesNotMatch(messageComposer, /attachmentUrl|type="url"/);
 assert.match(requests, /template_disabled/);
-assert.match(requests, /invalid_transition/);
 assert.match(requests, /field\.enabled ~= false/);
 assert.match(requests, /SendNotification/);
 assert.match(requests, /request\.citizen\.updated/);
@@ -104,14 +103,17 @@ assert.match(definitions, /legal_area[\s\S]*criminal_law[\s\S]*civil_law/);
 assert.match(serverApi, /phoneNumber = ServicesPlus\.Bridge\.GetEquippedPhoneNumber\(source\)[\s\S]*settings\.defaultPhone = phoneNumber and tostring\(phoneNumber\) or ""/);
 assert.doesNotMatch(requests, /field\.type == "phone" then required = false/);
 assert.doesNotMatch(requests, /field\.type == "phone" and false/);
-assert.match(serverApi, /RequestDefinitions\.categoryTemplates\[company\.categoryId\][\s\S]*patch\.requestsEnabled = false/);
+assert.match(serverApi, /RequestDefinitions\.categoryTemplates\[company\.categoryId\][\s\S]*number\.requestsEnabled = false/);
 assert.doesNotMatch(requestComposer, /generalTemplates|generalRequests|optgroup/);
 assert.match(requestComposer, /enabledTemplates\.map/);
 assert.match(requestComposer, /initialValues[\s\S]*defaultPhone/);
 assert.match(requests, /customData[\s\S]*requestNotificationAction[\s\S]*action = "accept"/);
 assert.match(clientApp, /handleRequestOfferAction[\s\S]*RequestServer\(action/);
 assert.match(clientApp, /requestNotificationAction[\s\S]*handleRequestOfferAction\(data\.id, data\.action\)/);
-assert.match(clientApp, /ToggleOpen\(true, true\)[\s\S]*OpenApp\(APP_IDENTIFIER\)/);
+// A request offer must never force the phone/app open - it behaves like an incoming
+// call (notification only, actionable only when the company opts in).
+assert.doesNotMatch(clientApp, /ToggleOpen\(true, ?true\)/);
+assert.match(clientApp, /payload\.actionable == true/);
 assert.match(clientApp, /RegisterKeyMapping\("servicesPlusAcceptRequest"[\s\S]*"RETURN"\)/);
 assert.match(clientApp, /RegisterKeyMapping\("servicesPlusDeclineRequest"[\s\S]*"BACK"\)/);
 assert.match(companies, /requestCompetition/);
@@ -140,7 +142,7 @@ for (const label of ["numberLabel", "phoneNumber", "callDistribution", "numberCa
   assert.ok(adminPanel.includes(`t(locale, "${label}")`), `Admin number field is missing label: ${label}`);
 }
 assert.match(adminPanel, /numberCapabilitiesHint/);
-for (const exported of ["GetCompany", "GetCompanyNumbers", "GetCompanyEmployees", "GetRequest", "GetCompanyRequests", "CreateRequest", "AcceptRequest", "DeclineRequest", "ReturnRequest", "TransitionRequest", "SendCompanyMessage"]) {
+for (const exported of ["GetCompany", "GetCompanyNumbers", "GetCompanyEmployees", "GetRequest", "GetCompanyRequests", "CreateRequest", "AcceptRequest", "DeclineRequest", "ReturnRequest", "SendCompanyMessage"]) {
   assert.ok(publicApi.includes(`exports(\"${exported}\"`), `Missing public server export: ${exported}`);
 }
 assert.match(publicApi, /ApiAllowedResources/);

@@ -33,7 +33,6 @@ const workspace: WorkspaceData = {
     createLabel: "Create request",
     templateIds: [],
     templates: [],
-    phases: [],
     navigationOnAccept: "disabled"
   }
 };
@@ -61,14 +60,14 @@ describe("CompanyWorkspace", () => {
       requests: Array.from({ length: 8 }, (_, index) => ({ id: 100 - index, companyId: "downtown-cab", companyName: "Downtown Cab Co.", status: "completed" as const })),
       pagination: { ...workspace.pagination, requests: { nextCursor: 93, hasMore: true } }
     };
-    await act(async () => root.render(<CompanyWorkspace data={pagedWorkspace} employees={employees} selfSource={1} locale="en" busy={false} isLeader={false} canDelete={false} onLoadMore={onLoadMore} onOpenConversation={vi.fn()} onAcceptRequest={vi.fn()} onTransition={vi.fn()} onReturn={vi.fn()} onSaveSettings={vi.fn()} onDeleteRequest={vi.fn()} onDeleteConversation={vi.fn()} onCallEmployee={vi.fn()} onContactEmployee={vi.fn()} />));
+    await act(async () => root.render(<CompanyWorkspace data={pagedWorkspace} employees={employees} selfSource={1} locale="en" busy={false} isLeader={false} canDelete={false} onLoadMore={onLoadMore} onOpenConversation={vi.fn()} onAcceptRequest={vi.fn()} onReturn={vi.fn()} onNavigate={vi.fn()} onSaveSettings={vi.fn()} onDeleteRequest={vi.fn()} onDeleteConversation={vi.fn()} onCallEmployee={vi.fn()} onContactEmployee={vi.fn()} />));
 
     await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="Next page"]')?.click());
     expect(onLoadMore).toHaveBeenCalledWith("requests", 93, undefined);
   });
 
   it("keeps the team in its own tab and paginates long rosters", () => {
-    act(() => root.render(<CompanyWorkspace data={workspace} employees={employees} selfSource={1} locale="en" busy={false} isLeader={false} canDelete={false} onOpenConversation={vi.fn()} onAcceptRequest={vi.fn()} onTransition={vi.fn()} onReturn={vi.fn()} onSaveSettings={vi.fn()} onDeleteRequest={vi.fn()} onDeleteConversation={vi.fn()} onCallEmployee={vi.fn()} onContactEmployee={vi.fn()} />));
+    act(() => root.render(<CompanyWorkspace data={workspace} employees={employees} selfSource={1} locale="en" busy={false} isLeader={false} canDelete={false} onOpenConversation={vi.fn()} onAcceptRequest={vi.fn()} onReturn={vi.fn()} onNavigate={vi.fn()} onSaveSettings={vi.fn()} onDeleteRequest={vi.fn()} onDeleteConversation={vi.fn()} onCallEmployee={vi.fn()} onContactEmployee={vi.fn()} />));
 
     act(() => container.querySelector<HTMLButtonElement>('button[aria-label="Active team"]')?.click());
     expect(container.querySelectorAll(".employee-row")).toHaveLength(8);
@@ -91,7 +90,7 @@ describe("CompanyWorkspace", () => {
       pagination: { ...workspace.pagination, conversations: { nextCursor: cursor, hasMore: true } },
       summary: { unansweredRequests: 0, unreadMessages: 0, unreadByNumber: { main: 0 }, unseenCalls: 0, latestCallId: 0 }
     };
-    await act(async () => root.render(<CompanyWorkspace data={inboxWorkspace} employees={employees} selfSource={1} locale="en" busy={false} isLeader={false} canDelete={false} onLoadMore={onLoadMore} onInboxChange={onInboxChange} onOpenConversation={vi.fn()} onAcceptRequest={vi.fn()} onTransition={vi.fn()} onReturn={vi.fn()} onSaveSettings={vi.fn()} onDeleteRequest={vi.fn()} onDeleteConversation={vi.fn()} onCallEmployee={vi.fn()} onContactEmployee={vi.fn()} />));
+    await act(async () => root.render(<CompanyWorkspace data={inboxWorkspace} employees={employees} selfSource={1} locale="en" busy={false} isLeader={false} canDelete={false} onLoadMore={onLoadMore} onInboxChange={onInboxChange} onOpenConversation={vi.fn()} onAcceptRequest={vi.fn()} onReturn={vi.fn()} onNavigate={vi.fn()} onSaveSettings={vi.fn()} onDeleteRequest={vi.fn()} onDeleteConversation={vi.fn()} onCallEmployee={vi.fn()} onContactEmployee={vi.fn()} />));
 
     act(() => container.querySelector<HTMLButtonElement>('button[aria-label="Shared inbox"]')?.click());
     await act(async () => Array.from(container.querySelectorAll<HTMLButtonElement>(".inbox-number-tabs button")).find((button) => button.textContent?.includes("Main"))?.click());
@@ -108,7 +107,7 @@ describe("CompanyWorkspace", () => {
       calls: [{ id: 10, numberId: "main", status: "completed", created_at: "2026-08-03T10:00:00Z" }]
       , summary: { unansweredRequests: 7, unreadMessages: 4, unreadByNumber: { main: 4 }, unseenCalls: 3, latestCallId: 10 }
     };
-    act(() => root.render(<CompanyWorkspace data={signaledWorkspace} employees={employees} selfSource={1} locale="en" busy={false} isLeader={false} canDelete={false} onOpenConversation={vi.fn()} onAcceptRequest={vi.fn()} onTransition={vi.fn()} onReturn={vi.fn()} onSaveSettings={vi.fn()} onDeleteRequest={vi.fn()} onDeleteConversation={vi.fn()} onCallEmployee={vi.fn()} onContactEmployee={vi.fn()} />));
+    act(() => root.render(<CompanyWorkspace data={signaledWorkspace} employees={employees} selfSource={1} locale="en" busy={false} isLeader={false} canDelete={false} onOpenConversation={vi.fn()} onAcceptRequest={vi.fn()} onReturn={vi.fn()} onNavigate={vi.fn()} onSaveSettings={vi.fn()} onDeleteRequest={vi.fn()} onDeleteConversation={vi.fn()} onCallEmployee={vi.fn()} onContactEmployee={vi.fn()} />));
 
     expect(container.querySelector('button[aria-label="Requests"] i')?.classList.contains("alert")).toBe(true);
     expect(container.querySelector('button[aria-label="Shared inbox"] i')?.classList.contains("alert")).toBe(true);
@@ -125,7 +124,7 @@ describe("CompanyWorkspace", () => {
       ...workspace,
       requests: [{ id: 9, companyId: "downtown-cab", companyName: "Downtown Cab Co.", status: "active", assignee: { name: "Mika Hart", role: "Dispatcher" } }]
     };
-    act(() => root.render(<CompanyWorkspace data={assignedWorkspace} employees={employees} selfSource={1} locale="en" busy={false} isLeader={false} canDelete={false} onOpenConversation={vi.fn()} onAcceptRequest={vi.fn()} onTransition={vi.fn()} onReturn={vi.fn()} onSaveSettings={vi.fn()} onDeleteRequest={vi.fn()} onDeleteConversation={vi.fn()} onCallEmployee={vi.fn()} onContactEmployee={vi.fn()} />));
+    act(() => root.render(<CompanyWorkspace data={assignedWorkspace} employees={employees} selfSource={1} locale="en" busy={false} isLeader={false} canDelete={false} onOpenConversation={vi.fn()} onAcceptRequest={vi.fn()} onReturn={vi.fn()} onNavigate={vi.fn()} onSaveSettings={vi.fn()} onDeleteRequest={vi.fn()} onDeleteConversation={vi.fn()} onCallEmployee={vi.fn()} onContactEmployee={vi.fn()} />));
 
     expect(container.textContent).toContain("Handled by: Mika Hart · Dispatcher");
   });

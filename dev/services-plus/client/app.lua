@@ -59,16 +59,14 @@ RegisterNetEvent("services-plus:client:push", function(message)
         print(("[services-plus] Push message failed: %s"):format(errorMessage or "unknown error"))
     end
     local payload = type(message.payload) == "table" and message.payload or {}
-    if message.type == "request.offer" and type(payload.id) == "number" then
+    -- A request offer must behave like an incoming call: a notification (see
+    -- server/requests.lua's SendNotification) plus the RETURN/BACK keybinds below, never
+    -- a forced phone/app takeover. Only companies that opt into actionable notifications
+    -- get Accept/Decline buttons at all; everyone else just gets informed. The in-app
+    -- "looks like a call" screen (IncomingOffer) still shows itself if the player already
+    -- has the app open - that's normal React state, not something forced from here.
+    if message.type == "request.offer" and type(payload.id) == "number" and payload.actionable == true then
         activeRequestOfferId = payload.id
-        SetTimeout(100, function()
-            if activeRequestOfferId ~= payload.id or GetResourceState("lb-phone") ~= "started" then return end
-            pcall(function()
-                if exports["lb-phone"]:IsDisabled() or exports["lb-phone"]:IsInCall() then return end
-                exports["lb-phone"]:ToggleOpen(true, true)
-                exports["lb-phone"]:OpenApp(APP_IDENTIFIER)
-            end)
-        end)
     elseif message.type == "request.offer.removed" and payload.id == activeRequestOfferId then
         activeRequestOfferId = nil
     elseif message.type == "request.updated" and payload.id == activeRequestOfferId and payload.status ~= "pending" and payload.status ~= "returned" then
