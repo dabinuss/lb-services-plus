@@ -1,0 +1,221 @@
+# Changelog
+
+## 0.7.0-rc1
+
+- Fix the app rendering fullscreen and unfocused instead of embedded in the phone frame: remove the resource's own `ui_page` declaration. LB Phone embeds custom apps through its own iframe and only injects `fetchNui`/`onNuiEvent`/etc. into that iframe's `contentWindow`; declaring `ui_page` on top of that spun up a second, independent NUI overlay that never received the injection and was always rendered on top.
+- Respect LB Phone's `hideCallerId` flag on incoming calls: a citizen calling with a suppressed number is now stored with no caller number and shown to employees as an unknown caller, instead of being masked the same way as a normal (non-anonymous) caller.
+- Respect LB Phone's `anonymous` flag on `newCompanyMessage`: a citizen messaging a business with a hidden number is now shown to employees as an unknown sender instead of a normal masked number. The real number is still stored so the conversation stays grouped and employees can still reply; add migration 013 with the required `services_plus_inbox_conversations.anonymous` column.
+- Fix `lb-phone:newCall` silently dropping calls placed via `createCall({ company = ... })` (no specific number): it was passing the job identifier into a phone-number lookup, which never matched. It now falls back to a job lookup and the company's first enabled, callable number.
+- Fix the company directory showing a filter button for every configured category, even ones with zero companies in them; only categories with at least one company are shown.
+- Add a `Config.StandaloneAdmins` identifier allow-list (checked in `Bridge.IsServerAdmin` alongside the `servicesplus.admin` ACE) and an `/spwhoami` dev command that prints your own identifiers, to make granting yourself the admin panel for local testing easier than wiring up an ACE principal.
+- Fix every company, number, employee-settings and inbox-conversation boolean read from the database always evaluating to `false` regardless of the stored value: oxmysql does not consistently return `TINYINT(1)` columns as the Lua number `1`/`0` (it can hand back a native boolean or a numeric string instead), and the codebase compared them with a bare `value == 1` everywhere. Added `ServicesPlus.ToBool()` and routed every such read through it. This was silently breaking number/company enable toggles, employee dispatch preference and leader flags, and the shared-inbox permission checks.
+- Requests no longer force the phone/app open when a request offer arrives; they behave like incoming calls (a notification, never a takeover). Add a per-company `requestNotificationActionable` setting (default off, migration 014): companies that opt in get Accept/Decline directly in the notification and the full-screen in-app offer, like an incoming call; everyone else just gets informed and has to open the app to act.
+- Remove the in-app incoming request offer screen entirely; an actionable request's Accept/Decline now only ever shows through LB Phone's own notification (and its RETURN/BACK keybinds), nothing renders inside the app itself. Confirmed directly against LB Phone's compiled UI that notification action buttons render as plain text labels, not the colored circular buttons calls get - that visual is specific to LB Phone's own native call screen and has no other trigger.
+- Mask citizen phone numbers shown to company employees (call history and shared-inbox conversations) to their last four characters; a hidden/anonymous caller shows as an unknown number instead of a blank field. The citizen viewing their own conversation and the trusted `services-plus:server:messageReceived` event still receive the full number.
+- Add call distribution mode and derived queue/call duration to `getMyActivity` and `getCompanyWorkspace` call entries, and display them in the personal and company call lists; add migration 012 with the required `services_plus_call_queue.distribution` column.
+- Remove the unused `Company.employeeCount` field from every API response; it was computed and transmitted but never rendered by the frontend.
+- Remove the request-cancellation-reason requirement from the product plan; no cancellation reason is captured or planned.
+- Remove the unused `Config.DatabaseBackedCategories` setting; categories are always configuration-only.
+- Make the `delivery` request template available to both `restaurants_food` and `retail` companies instead of restaurants only; request templates now support multiple categories via `categoryIds`.
+- Fix `adminDeleteCompany` to also soft-delete the company's own numbers (previously only the company row was soft-deleted, leaving its numbers untouched even though the API reference already documented cascading deletion).
+- Add `adminRestoreCompany` and an `AdminState.deletedCompanies` list so administrators can restore a soft-deleted company (and the numbers deleted alongside it) from the admin panel instead of only being able to revive it by re-creating the same `id`.
+- Fix client-authoritative call termination: only the caller or the currently assigned employee may end a company call token; a bystander who was previously offered the call can no longer end it for everyone.
+- Roll back and re-offer a call to other eligible employees instead of ending it outright when server-side assignment or the native LB Phone handoff fails; add an `endCustomCall` `reoffer` flag for the native-handoff-failure path.
+- Stop physically deleting companies and company numbers; `adminDeleteCompany` and number removal now soft-delete (`deleted_at`/`deleted_by`) so call, request and conversation history stays readable, and add migration 011 with the required schema and indexes.
+- Read message locations from the sender's real server-side position instead of trusting client-supplied coordinates; replace the `coords` input field on `sendCitizenMessage`/`sendEmployeeMessage` with an `includeCurrentLocation` flag.
+- Add an optional `clientRequestId` idempotency key to `createRequest`, `sendCitizenMessage` and `sendEmployeeMessage` so a retried NUI call or a double click cannot create a duplicate request or message.
+- Reject action payloads containing fields not declared in their schema and cap every action payload at `Config.MaxActionPayloadBytes`; increment API version from 10 to 11.
+- Add the missing `@testing-library/dom` dev dependency and regenerate the UI lockfile so a clean `npm ci` succeeds.
+- Move messages-enabled, requests-enabled, and request-notification-actionable out of the leader's per-number editor into admin-only company settings (`adminSaveCompany`); remove `updateCompanyOperations` entirely. A leader can now only edit their own numbers' capabilities.
+- Redesign the phone-number capability editor (leader settings and admin panel) as a two-column grid with short one-word checkbox labels (`Calls`, `Inbox`, `Requests`, `Public`, `Number on`) instead of long descriptive text in a misaligned flex layout; rename "Citizen directory" / "Im Bürgerverzeichnis" to "Public" / "Öffentlich".
+- Replace every `window.confirm()` (delete request, delete conversation/message, delete/restore company) with an in-app `ConfirmDialog` modal so confirmations no longer pop a browser-native dialog outside the game.
+- Remove the request phase system entirely. A company now only accepts, declines, or deletes a request - there is no intermediate phase-stepping. The employee who accepted a request can now also delete it themselves (previously only an active dispatcher could); this is how an assignee resolves their own request, since there is no separate "mark as done" step. Removes the `transitionRequest` action, the `TransitionRequest` export, and the dead per-category `phases` config.
+- Restyle the whole app to match LB Phone's own native design language instead of a custom palette: adopt LB Phone's actual color tokens (`#0a84ff` blue for brand/primary actions, `#ff3b30` red for danger, `#32d74b` green and `#ff9d0a` orange for status/action accents, iOS-style greys for text), switch the typeface from Inter to Poppins (loaded the same way LB Phone's own apps do), and recolor leftover green-tinted neutral overlays (company card shading, shadows, message-reaction tint) to true neutral black so nothing clashes with the new blue brand hue. Also shrink `.app-header`'s padding - confirmed against LB Phone's own compiled UI that an opened app's content already sits below the notch/status-bar overlay, so the old generous top padding was never actually needed for that. See `docs/guides/LB_PHONE_DESIGN.md` for the full research behind this.
+- Raise the app's font-size scale toward LB Phone's own (its own apps rarely go below `.75rem`-`.8125rem` for real content; ours went as low as `.48rem`). Every `font-size` value across `styles.css` was remapped with a non-linear floor-raise (bigger bump at the small/illegible end, smaller bump at the already-reasonable large end) rather than a flat multiplier, to close the gap without breaking the existing fixed-size row/grid layouts. Verified with no introduced horizontal overflow or vertical clipping across Directory, Activity, Admin, Portal, and the leader number editor.
+
+## 0.6.0-rc1
+
+- Add stable composite conversation cursors, independent section loading, server-side inbox filters, and authoritative workspace badge summaries.
+- Reject stale UI pagination responses and extend the browser preview beyond 50 records per workspace section.
+- Add aggregated rate-limit rejection telemetry and startup validation for the configured media-domain allow-list.
+- Add schema metadata and pre-handler payload validation for every NUI action; increment API version from 9 to 10.
+- Add schema migration 10 with the company/number/activity inbox index.
+
+## 0.5.0-rc1
+
+- Add independent server cursors and `hasMore` state for company requests, calls, and conversations; the portal incrementally loads only the active list while retaining eight-item UI pages.
+- Rate-limit direct phone-change validation and trusted exports per invoking resource.
+- Restrict message attachments to configured HTTPS upload domains.
+- Make `GetRequest` exclude soft-deleted requests while preserving internal deletion lifecycle events.
+- Remove duplicate app-close signaling and delete the obsolete prototype module from the release resource.
+- Add central API contract metadata, generated contract inventory, and drift tests; increment API version from 8 to 9.
+
+## 0.4.0-rc1
+
+- Complete Phase 4 with one authoritative API reference covering all trusted exports, local events, app actions, push messages, entities, permissions, lifecycle behavior, errors, rate limits, and integration boundaries.
+- Add tested Lua examples for reads, pagination, idempotent request creation, lifecycle actions, event consumption, and external MDT correlation.
+- Standardize specific local request events on the sanitized `RequestIntegration` entity and increment the API version from 7 to 8.
+- Move every resource Markdown document except the root `README.md` into an organized `docs/` hierarchy and add a documentation index.
+- Add automated documentation inventory and link verification for the Phase 4 contract.
+
+## 0.3.0-rc1
+
+- Add Phase 3 installation, configuration, compatibility, database, troubleshooting and release-validation documentation.
+- Guarantee frontend loading and busy states recover from rejected or timed-out NUI requests, including a localized conversation retry state.
+- Bound call queue broadcasts and batch restart call-history cleanup to avoid unbounded reads and per-row updates.
+- Correct the initial-state rate-limit key and add configurable debug, info, warning and error log thresholds.
+- Remove diagnostic prototypes from the production manifest and make startup logging phase-neutral.
+- Add Phase 3 contracts for callback responses, allow-lists, rate limits, API handlers, documentation coverage, query indexes, queue limits and production packaging.
+- Preserve API version 7 while freezing the release-candidate surface for the Phase 4 documentation review.
+
+## 0.2.18-phase2
+
+- Show the assigned employee name and role on active and completed company requests.
+- Persist assignee snapshots through migration 009 while keeping stable identifiers limited to trusted integrations.
+- Add trusted employee reads and validated accept, decline and return request exports.
+- Add a stable sanitized `requestLifecycle` event for MDT, dispatch and business integrations.
+- Keep patrol units, multiple officers and live tracking owned by external systems linked through request IDs.
+
+## 0.2.17-phase2
+
+- Keep the request composer open when loading or submission fails.
+- Replace technical request-creation errors with localized guidance to call the company instead.
+- Add UI coverage for German submission failures and English request-option failures.
+
+## 0.2.16-phase2
+
+- Remove company-level workflow-step selection and always use the complete predefined category workflow.
+- Ignore obsolete stored `phaseIds` and remove phase controls from leader request settings.
+- Remove the taxi pickup location field and always capture server-side GTA coordinates for taxi requests.
+
+## 0.2.15-phase2
+
+- Allow leaders to configure phone fields as required while preserving automatic equipped-number prefilling and server validation.
+- Rename active request phases in the UI to the clearer workflow-steps terminology.
+- Refresh employee inbox unread state after message loading and mirror read behavior in the browser preview.
+
+## 0.2.14-phase2
+
+- Reserve red portal-tab counters for unanswered requests, unread messages and calls not yet viewed in the current app session.
+- Mark loaded calls as seen when the calls tab is opened and highlight only subsequently unseen calls.
+- Render zero counts, seen calls, team totals and empty number-inbox counters with neutral styling.
+
+## 0.2.13-phase2
+
+- Include the server-resolved numeric framework job grade in public on-duty employee state.
+- Sort the active team by leader status and descending grade before status and name.
+- Revalidate and broadcast role, grade and leader changes while an employee remains on duty.
+
+## 0.2.12-phase2
+
+- Move the active employee roster into a dedicated company-portal workspace tab beside requests, inboxes and calls.
+- Add compact pagination to every portal list and team search by employee name or role.
+- Preserve the selected portal tab for the current app session and prioritize operational statuses in the team list.
+
+## 0.2.11-phase2
+
+- Remove administrative line-staffing modes and per-number employee allow-lists.
+- Let active dispatchers select individual enabled numbers for the current duty session, with all lines selected when dispatch starts.
+- Keep enabled shared inboxes available to on-duty company employees independently of dispatch line selection.
+- Add migration 008 to remove obsolete staffing, eligibility and persistent subscription storage.
+
+## 0.2.10-phase2
+
+- Remove general request templates; general contact now belongs exclusively to company messages.
+- Expose requests only for categories with specialized structured templates.
+- Hide citizen request actions and disable admin/leader request toggles when a category has no specialized request definition.
+- Reject request-option loading for categories without specialized templates instead of returning an empty or generic workflow.
+
+## 0.2.9-phase2
+
+- Show category-specific request templates before the general request option.
+- Consolidate appointments, complaints, information and callback requests into one universal free-text general request.
+- Safely discard the removed duplicate general template identifiers from stored company settings.
+
+## 0.2.8-phase2
+
+- Separate universal free-text requests from category-specific structured requests in definitions, citizen selection and leader configuration.
+- Add pickup, roadside/towing assistance, delivery, table reservation, medical transport, property viewing, legal assistance and police request templates with the requested minimal fields.
+- Add server-validated select fields for legal area and urgency.
+- Prefill request phone fields from the currently equipped LB Phone number while keeping the field editable and removable.
+- Filter obsolete stored template identifiers and fall back to valid category defaults after definition updates.
+
+## 0.2.7-phase2
+
+- Rename ambiguous number settings and add localized explanations for every staffing mode and number capability.
+- Move restricted employee eligibility out of request configuration into dedicated line access sections in both the admin editor and company portal.
+- Expose the citizen-directory toggle to company leaders and clarify that it controls citizen access without hiding internal inboxes.
+
+## 0.2.6-phase2
+
+- Make dispatch activation staff every authorized active line by default while allowing per-session line deselection.
+- Keep enabled authorized number inboxes visible and usable independently of active call-line staffing.
+- Add visible localized labels for every phone-number field and capability group in the company admin editor.
+
+## 0.2.5-phase2
+
+- Added granular per-number call, inbox, request, visibility and operational enablement controls.
+- Added persistent employee line subscriptions with separate access authorization and runtime LB Phone custom-number registration.
+- Added explicit number inbox tabs, including empty staffed inboxes and per-number unread counters.
+- Added live citizen request updates and persistent LB Phone status notifications.
+- Added configurable disabled, prompted or automatic GTA waypoint routing when a request is accepted.
+- Added an allow-listed server export API and local lifecycle events for MDT, dispatch and other trusted resources.
+- Added migration 007 for number staffing, request navigation and idempotent external request references.
+
+## 0.2.4-phase2
+
+- Added an administrator-controlled request competition toggle for every category.
+- Allow available employees from different companies in a competitive category to race for requests through the existing atomic assignment contract.
+- Keep duty active while the app is closed and across Services+ restarts for the same connected player and equipped phone.
+- Invalidate duty on explicit logout, disconnect, employment change, phone removal or equipped-number change.
+- Allow active dispatch employees to soft-delete their own company's requests, shared-inbox conversations and individual messages; call history remains immutable.
+- Added migration 006 for audited request, conversation and message soft deletion.
+
+## 0.2.3-phase2
+
+- Added interactive LB Phone request notifications with direct decline (`-`) and accept (`+`) actions.
+- Routed notification actions through the existing validated and rate-limited request API.
+- Clear stale in-app request offers after notification actions or assignment changes.
+- Bring the Services+ request offer on screen and mirror LB Phone's default `ENTER`/`BACKSPACE` call controls with dedicated configurable key mappings.
+- Reworked incoming requests into a full-screen offer view using the company background, logo, category and the three most relevant request fields.
+
+## 0.2.2-phase2
+
+- Added the red manual `occupied` employee status without conflating it with active-work Busy state.
+- Excluded occupied employees from call and request offers while keeping messages available.
+- Added LB Phone notifications for eligible incoming company calls; requests already use the same notification path.
+- Changed incoming call and request actions to circular minus/plus controls.
+
+## 0.2.1-phase2
+
+- Replaced manual attachment URLs with the official LB Phone gallery picker.
+- Added a fixed set of five general and five GTA-themed emojis for message composition.
+- Added persistent, toggleable per-user message reactions with live inbox updates.
+- Added server-side conversation authorization and emoji allowlist validation for reactions.
+
+## 0.2.0-phase2
+
+- Added native multi-number company call routing with ring-all, random and dispatch-only distribution.
+- Added atomic call/request acceptance, per-number queues, queue updates, Busy-state restoration and restart cleanup.
+- Added per-number employee eligibility enforced for calls and shared inboxes.
+- Added shared conversations, read state, company-number replies, attachments and locations.
+- Added extensible category request definitions, company-specific labels/templates/fields/phases and generic forms.
+- Added request offers, assignment, transitions, completion, return, cancellation and recovery.
+- Added personal and company communication histories with cursor-based server pagination.
+- Added citizen and employee communication views and leader configuration controls.
+
+## 0.1.0-phase1
+
+- Added restart-safe LB Phone custom app registration.
+- Added ESX, QBCore, Qbox and standalone framework bridges.
+- Added versioned database schema and company cache.
+- Added company directory, local search, availability and direct calling.
+- Added server-authoritative duty, status, dispatch and single-employee behavior.
+- Added company portal, active employee list and leader company settings.
+- Added optional integration boundaries, API contracts and Phase 1 diagnostics.
+- Added icon-first categorized directory cards in a two-column layout.
+- Added English/German player preference with flag controls.
+- Added personal call/request activity and basic citizen request creation.
+- Added server-authorized company call recording.
+- Added ACE/framework-protected company administration and global settings.
+- Restricted company leaders to operational toggles; identity and phone settings are admin-only.
