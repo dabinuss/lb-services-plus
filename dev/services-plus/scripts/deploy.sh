@@ -13,7 +13,7 @@
 
 set -uo pipefail
 
-REPO="E:/GitHub/LB-Phone Services+"
+REPO="E:/GitHub/lb-services-plus"
 SRC="$REPO/dev/services-plus"
 BUILD="$REPO/build/services-plus"
 LIVE="E:/FiveMServer/txData/FiveMBasicServerCFXDefault_71E096.base/resources/[local]/services-plus"
