@@ -8,6 +8,7 @@ build/
 
 # Agent / AI / IDE generated files (GPT, Gemini, Claude, etc.)
 .gemini/
+.claude/
 .agents/
 .cline/
 .cursor/
@@ -15,7 +16,6 @@ build/
 .cascade/
 .windsurf/
 .aider*
-AGENTS.md
 GEMINI.md
 CLINE.md
 mcp_config.json
