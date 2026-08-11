@@ -153,7 +153,17 @@ RegisterCallback("createRequest", function(source, reply, companyId, requestType
     if not requesterNumber then return reply(false) end
 
     local coords = GetEntityCoords(GetPlayerPed(source))
-    local finalPassengerCount = requestType.passenger_count == 1 and tonumber(passengerCount) or nil
+
+    -- Bounded, whole-number only - a bare tonumber() would accept negative
+    -- values, decimals or an absurd count (plan review round 2 §6).
+    local finalPassengerCount = nil
+    if requestType.passenger_count == 1 then
+        local n = tonumber(passengerCount)
+        if n and n == math.floor(n) and n >= 1 and n <= Config.MaxPassengerCount then
+            finalPassengerCount = n
+        end
+    end
+
     local finalDescription = requestType.description_enabled == 1 and type(description) == "string" and description ~= "" and description:sub(1, 255) or nil
 
     -- Competition needs both the category and the request type to allow it
@@ -241,7 +251,7 @@ RegisterCallback("acceptRequest", function(source, reply, requestId)
         content = ("%s is on the way."):format(requestType.name),
     })
 
-    reply({
+    local activePayload = {
         requestId = requestId,
         typeName = requestType.name,
         companyName = company.name,
@@ -250,7 +260,15 @@ RegisterCallback("acceptRequest", function(source, reply, requestId)
         description = request.description,
         x = request.pos_x,
         y = request.pos_y,
-    })
+    }
+
+    -- The RPC reply only reaches whichever surface (overlay or the in-app
+    -- Requests tab) made this exact call - a separate targeted event to the
+    -- winner is what actually keeps the Sibling-NUI active-request card in
+    -- sync regardless of where Accept was pressed (plan review round 2 §4).
+    TriggerClientEvent("services-plus:client:requestAccepted", source, activePayload)
+
+    reply(activePayload)
 end)
 
 -- Rehydration for the Sibling-NUI overlay (plan review §14): a client

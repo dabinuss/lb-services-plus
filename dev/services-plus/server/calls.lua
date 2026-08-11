@@ -20,13 +20,19 @@
     written up front, so it only ever reflects calls that actually happened.
 ]]
 
--- customerNumber -> { companyId, numberId, expires }. Deliberately holds NO
--- database row yet - a call is only ever logged once lb-phone confirms one
--- actually started (see lb-phone:newCall below). Otherwise a modified client
--- could call resolveCall repeatedly and never place the real call, filling
--- the history table with rows for calls that never happened (plan review §5).
+-- customerNumber -> { companyId, numberId, expectedCompany?, expectedNumber?, expires }.
+-- Deliberately holds NO database row yet - a call is only ever logged once
+-- lb-phone confirms one actually started (see lb-phone:newCall below).
+-- Otherwise a modified client could call resolveCall repeatedly and never
+-- place the real call, filling the history table with rows for calls that
+-- never happened (plan review §5). `expectedCompany`/`expectedNumber` is
+-- what the eventual real call must actually match - without it, a player
+-- could resolveCall for a taxi and then dial someone else entirely inside
+-- the pending window and have THAT call logged as the taxi request
+-- (plan review round 2 §1). There is no in-memory callId map anymore
+-- (`pendingByCallId` used to be here) - see lb_call_id on the calls table
+-- instead, which survives a Services+ restart mid-call (plan review round 2 §2).
 local pendingByNumber = {}
-local pendingByCallId = {} -- callId -> historyId, once a row does exist
 
 ---@param companyId number
 ---@param numberId number
@@ -80,7 +86,13 @@ RegisterCallback("resolveCall", function(source, reply, companyId, numberId)
         target = { number = employeeNumber }
     end
 
-    pendingByNumber[customerNumber] = { companyId = companyId, numberId = numberId, expires = GetGameTimer() + 20000 }
+    pendingByNumber[customerNumber] = {
+        companyId = companyId,
+        numberId = numberId,
+        expectedCompany = target.company,
+        expectedNumber = target.number,
+        expires = GetGameTimer() + 20000,
+    }
 
     reply(target)
 end)
@@ -96,35 +108,35 @@ AddEventHandler("lb-phone:newCall", function(call)
     local pending = pendingByNumber[call.caller.number]
     if not pending then return end
 
+    -- Must match what resolveCall actually resolved - not just "this
+    -- customer number placed *a* call" (plan review round 2 §1).
+    local matches = (pending.expectedCompany and call.company == pending.expectedCompany)
+        or (pending.expectedNumber and call.callee.number == pending.expectedNumber)
+    if not matches then return end
+
     pendingByNumber[call.caller.number] = nil
 
-    local historyId = MySQL.insert.await(
-        "INSERT INTO phone_services_plus_calls (company_id, number_id, customer_number, state) VALUES (?, ?, ?, 'ringing')",
-        { pending.companyId, pending.numberId, call.caller.number }
+    MySQL.insert.await(
+        "INSERT INTO phone_services_plus_calls (company_id, number_id, customer_number, lb_call_id, state) VALUES (?, ?, ?, ?, 'ringing')",
+        { pending.companyId, pending.numberId, call.caller.number, call.callId }
     )
-
-    pendingByCallId[call.callId] = historyId
 end)
 
-AddEventHandler("lb-phone:callAnswered", function(call)
-    local historyId = pendingByCallId[call.callId]
-    if not historyId then return end
+-- callAnswered/callEnded correlate purely via lb_call_id in the database -
+-- no in-memory callId map, so a Services+ restart mid-call doesn't strand
+-- the row at 'ringing' forever (plan review round 2 §2).
 
-    MySQL.update("UPDATE phone_services_plus_calls SET state = 'answered', employee_number = ? WHERE id = ?", {
-        call.callee.number or json.null, historyId,
+AddEventHandler("lb-phone:callAnswered", function(call)
+    MySQL.update("UPDATE phone_services_plus_calls SET state = 'answered', employee_number = ? WHERE lb_call_id = ?", {
+        call.callee.number or json.null, call.callId,
     })
 end)
 
 AddEventHandler("lb-phone:callEnded", function(call)
-    local historyId = pendingByCallId[call.callId]
-    if not historyId then return end
-
-    pendingByCallId[call.callId] = nil
-
     -- Only downgrade to 'missed' if it never got marked 'answered' above.
     MySQL.update(
-        "UPDATE phone_services_plus_calls SET state = IF(state = 'answered', 'answered', 'missed'), ended_at = NOW() WHERE id = ?",
-        { historyId }
+        "UPDATE phone_services_plus_calls SET state = IF(state = 'answered', 'answered', 'missed'), ended_at = NOW() WHERE lb_call_id = ? AND ended_at IS NULL",
+        { call.callId }
     )
 end)
 
@@ -147,8 +159,7 @@ end)
 
 -- Calls that DID start but never got a matching callEnded (server crash,
 -- lb-phone restart mid-call, ...) would otherwise sit at 'ringing' forever.
--- One batched UPDATE, not a query per row - and it self-heals even rows
--- pendingByCallId lost track of across a Services+ restart.
+-- One batched UPDATE, not a query per row.
 CreateThread(function()
     while true do
         Wait(10 * 60000)

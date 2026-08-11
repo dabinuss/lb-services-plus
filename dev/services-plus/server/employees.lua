@@ -5,18 +5,25 @@
     it resets on resource restart / player disconnect and never touches the
     database, matching the "no permanent employee DB next to the framework"
     goal (§56, §65).
+
+    Keyed by `source`, not the framework identifier: this state only ever
+    needs to survive the current connection, and re-deriving an identifier
+    on playerDropped risks the framework having already torn the player
+    down and falling back to a different key than the one it was stored
+    under (plan review round 2 §7). `source` needs no lookup at all and is
+    guaranteed stable for exactly as long as this state is meaningful.
 ]]
 
 Employees = {}
 
--- identifier -> { status = "available"|"pause"|"busy", hotlines = { [numberId] = true } }
+-- source -> { status = "available"|"pause"|"busy", hotlines = { [numberId] = true } }
 local state = {}
 
-local function ensure(identifier)
-    if not state[identifier] then
-        state[identifier] = { status = "available", hotlines = {} }
+local function ensure(source)
+    if not state[source] then
+        state[source] = { status = "available", hotlines = {} }
     end
-    return state[identifier]
+    return state[source]
 end
 
 local function mainNumberId(companyId)
@@ -39,7 +46,7 @@ end
 ---@param source number
 ---@return "available"|"pause"|"busy"
 function Employees.GetStatus(source)
-    return ensure(Framework.GetIdentifier(source)).status
+    return ensure(source).status
 end
 
 ---@param source number
@@ -47,7 +54,7 @@ end
 ---@return boolean
 function Employees.SetStatus(source, status)
     if status ~= "available" and status ~= "pause" and status ~= "busy" then return false end
-    ensure(Framework.GetIdentifier(source)).status = status
+    ensure(source).status = status
     return true
 end
 
@@ -57,14 +64,19 @@ end
 ---@param source number
 ---@param companyId number
 ---@param numberId number
+---@param precomputedOnDutyCount? number pass this in when checking many
+---  employees of the same job at once (plan review round 2 §5) - without it,
+---  each call re-scans that job's whole staff list on its own.
 ---@return boolean
-function Employees.IsHotlineActive(source, companyId, numberId)
+function Employees.IsHotlineActive(source, companyId, numberId, precomputedOnDutyCount)
     local job = Framework.GetJob(source)
-    if job and numberId == mainNumberId(companyId) and onDutyCountForJob(job.name) <= 1 then
-        return true
+
+    if job and numberId == mainNumberId(companyId) then
+        local onDutyCount = precomputedOnDutyCount or onDutyCountForJob(job.name)
+        if onDutyCount <= 1 then return true end
     end
 
-    return ensure(Framework.GetIdentifier(source)).hotlines[numberId] == true
+    return ensure(source).hotlines[numberId] == true
 end
 
 ---@param source number
@@ -72,20 +84,19 @@ end
 ---@return { numberId: number, label: string, active: boolean, locked: boolean }[]
 function Employees.GetHotlineOptions(source, companyId)
     local numbers = Companies.GetNumbers(companyId)
+    local job = Framework.GetJob(source)
+    local onDutyCount = job and onDutyCountForJob(job.name) or 0
     local out = {}
 
     for i = 1, #numbers do
         local n = numbers[i]
-        local active = Employees.IsHotlineActive(source, companyId, n.id)
+        local active = Employees.IsHotlineActive(source, companyId, n.id, onDutyCount)
 
         out[#out + 1] = {
             numberId = n.id,
             label = n.label,
             active = active,
-            locked = n.is_main == 1 and active and (function()
-                local job = Framework.GetJob(source)
-                return job ~= nil and onDutyCountForJob(job.name) <= 1
-            end)(),
+            locked = n.is_main == 1 and active and onDutyCount <= 1,
         }
     end
 
@@ -105,7 +116,7 @@ function Employees.ToggleHotline(source, numberId, active)
         return false, "sole_employee"
     end
 
-    ensure(Framework.GetIdentifier(source)).hotlines[numberId] = active or nil
+    ensure(source).hotlines[numberId] = active or nil
 
     return true
 end
@@ -119,14 +130,15 @@ end
 ---@param companyId number
 ---@param numberId number
 ---@param requireHotline? boolean
+---@param precomputedOnDutyCount? number see IsHotlineActive
 ---@return boolean
-function Employees.IsEligible(source, companyId, numberId, requireHotline)
+function Employees.IsEligible(source, companyId, numberId, requireHotline, precomputedOnDutyCount)
     if not Framework.GetOnDuty(source) then return false end
 
     local status = Employees.GetStatus(source)
     if status == "pause" or status == "busy" then return false end
 
-    return not requireHotline or Employees.IsHotlineActive(source, companyId, numberId)
+    return not requireHotline or Employees.IsHotlineActive(source, companyId, numberId, precomputedOnDutyCount)
 end
 
 --- Everyone eligible to receive a call/request for a given number.
@@ -144,10 +156,19 @@ function Employees.GetEligible(companyId, numberId, requireHotline)
     if not company then return {} end
 
     local staff = Framework.GetPlayersByJob(company.job)
-    local eligible = {}
 
+    -- Computed once for the whole job, not once per employee per hotline
+    -- check - the old per-call onDutyCountForJob() turned this into an
+    -- O(employees^2) pass for a hotline-routed call/request on a big job
+    -- (plan review round 2 §5).
+    local onDutyCount = 0
     for i = 1, #staff do
-        if Employees.IsEligible(staff[i], companyId, numberId, requireHotline) then
+        if Framework.GetOnDuty(staff[i]) then onDutyCount = onDutyCount + 1 end
+    end
+
+    local eligible = {}
+    for i = 1, #staff do
+        if Employees.IsEligible(staff[i], companyId, numberId, requireHotline, onDutyCount) then
             eligible[#eligible + 1] = staff[i]
         end
     end
@@ -163,6 +184,12 @@ function Employees.GetTeam(companyId)
 
     local staff = Framework.GetPlayersByJob(company.job)
     local numbers = Companies.GetNumbers(companyId)
+
+    local onDutyCount = 0
+    for i = 1, #staff do
+        if Framework.GetOnDuty(staff[i]) then onDutyCount = onDutyCount + 1 end
+    end
+
     local team = {}
 
     for i = 1, #staff do
@@ -172,7 +199,7 @@ function Employees.GetTeam(companyId)
             local activeHotlines = {}
 
             for n = 1, #numbers do
-                if Employees.IsHotlineActive(source, companyId, numbers[n].id) then
+                if Employees.IsHotlineActive(source, companyId, numbers[n].id, onDutyCount) then
                     activeHotlines[#activeHotlines + 1] = numbers[n].label
                 end
             end
@@ -193,5 +220,5 @@ function Employees.GetTeam(companyId)
 end
 
 AddEventHandler("playerDropped", function()
-    state[Framework.GetIdentifier(source)] = nil
+    state[source] = nil
 end)

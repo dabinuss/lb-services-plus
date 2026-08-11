@@ -59,8 +59,13 @@ RegisterCallback("bootstrap", function(source, reply)
     })
 end)
 
+-- Replies with the resulting {onDuty, status}, not just true/false, so the
+-- client can decide whether to sync lb-phone's own native company-call
+-- toggle (plan review round 2 §3 - see client/main.lua).
 RegisterCallback("setStatus", function(source, reply, status)
-    reply(Employees.SetStatus(source, status))
+    if not Employees.SetStatus(source, status) then return reply(false) end
+
+    reply({ ok = true, onDuty = Framework.GetOnDuty(source), status = status })
 end)
 
 -- ---------------------------------------------------------------------------
@@ -224,6 +229,7 @@ RegisterCallback("companyLogin", function(source, reply, companyId)
     })
 end)
 
+-- Same {onDuty, status} reply shape as setStatus, same reason.
 RegisterCallback("toggleDuty", function(source, reply, state)
     -- Services+ duty is scoped to being an actual employee of one of our
     -- companies - it must not become a universal duty switch for whatever
@@ -231,7 +237,9 @@ RegisterCallback("toggleDuty", function(source, reply, state)
     local job = Framework.GetJob(source)
     if not job or not Companies.GetByJob(job.name) then return reply(false) end
 
-    reply(Framework.SetDuty(source, state == true))
+    if not Framework.SetDuty(source, state == true) then return reply(false) end
+
+    reply({ ok = true, onDuty = state == true, status = Employees.GetStatus(source) })
 end)
 
 -- ---------------------------------------------------------------------------

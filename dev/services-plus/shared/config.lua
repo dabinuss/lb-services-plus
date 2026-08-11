@@ -49,3 +49,7 @@ Config.PageSize = {
     requests = 25,
     calls = 25,
 }
+
+-- Highest passenger count a request may claim (server-validated, see
+-- server/requests.lua).
+Config.MaxPassengerCount = 20

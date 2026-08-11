@@ -77,6 +77,43 @@ were never in scope.
 - New messages now push into an already-open conversation via
   `SendCustomAppMessage` instead of only updating on next reopen.
 
+**Second hardening pass** (deeper look at calls, the overlay, and a couple
+of smaller correctness/perf items):
+
+- Call history could previously be attributed to the wrong call: `resolveCall`
+  only tracked the customer's number, so dialing something else entirely
+  within the 20s pending window could get logged as the resolved request.
+  The pending state now also records the exact expected target
+  (`company`/number) and `lb-phone:newCall` only consumes it on a real match.
+- Call `answered`/`ended` tracking no longer depends on an in-memory
+  `callId -> row` map that a Services+ restart mid-call would lose (leaving
+  an actually-answered call to time out as "missed" an hour later). A new
+  `lb_call_id` column correlates directly in the database instead - restart-safe.
+- "All" call routing for a company's main number rings through lb-phone's
+  own native company-call system, which has no idea about Services+'s own
+  Busy/Pause/off-duty state. `client/main.lua` now keeps lb-phone's
+  (global, per-player) `ToggleCompanyCalls` in sync with it - a deliberate,
+  documented trade-off given lb-phone exposes no finer-grained hook.
+- Accepting a request from the in-app Requests tab used to leave the
+  Sibling-NUI overlay's own pending/active state out of sync (and could
+  leave a stale pending card on the accepting player's own screen). The
+  server now sends a targeted `requestAccepted` event to the winner after
+  any successful accept, and the overlay's active-card state always comes
+  from that event regardless of which UI triggered the accept.
+- `Employees.GetEligible`/`GetTeam` had a leftover O(employees²) path for
+  hotline/duty-count checks on a big job (each employee re-scanning the
+  whole job's duty count). Computed once per call now, not once per employee.
+- `createRequest`'s passenger count is now bounded (whole number,
+  `1..Config.MaxPassengerCount`) instead of accepting whatever `tonumber()`
+  parsed.
+- `Employees` runtime state is now keyed by `source` instead of the
+  framework identifier - re-deriving an identifier on `playerDropped` risked
+  the framework returning a different fallback than the state was stored
+  under.
+- `MAX_PAGE` lowered from 10000 to 200 (still generous, no longer allows a
+  quarter-million-row OFFSET), and fixed an off-by-one in `isAdminWrite()`
+  that was rate-limiting every `admin:get*` read as if it were a write.
+
 ## Setup
 
 1. Import [`sql/install.sql`](sql/install.sql) (`CREATE TABLE IF NOT EXISTS` /

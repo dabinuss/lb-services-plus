@@ -31,6 +31,44 @@ local function showNext()
     sendToOverlay("requestNotification", { payload = payload })
 end
 
+local function stopDistanceUpdates()
+    distanceThread = nil
+end
+
+local function startDistanceUpdates()
+    local thisThread = {}
+    distanceThread = thisThread
+
+    CreateThread(function()
+        while distanceThread == thisThread and active do
+            local coords = GetEntityCoords(PlayerPedId())
+            local distance = #(vector2(coords.x, coords.y) - vector2(active.x, active.y))
+
+            sendToOverlay("updateDistance", { distance = distance })
+            Wait(2000)
+        end
+    end)
+end
+
+--- Single place that transitions to the active-request card, used by the
+--- server-pushed accept confirmation, the "ready" rehydration, and nothing
+--- else - accept itself no longer sets `active` locally (see overlayAction
+--- below), so this always reflects the server's word regardless of whether
+--- Accept was pressed here or from the in-app Requests tab (plan review
+--- round 2 §4).
+local function showActive(payload)
+    shown = nil
+    shownPayload = nil
+    active = payload
+
+    if type(payload.x) == "number" and type(payload.y) == "number" then
+        SetNewWaypoint(payload.x, payload.y)
+    end
+
+    sendToOverlay("showActive", { payload = payload })
+    startDistanceUpdates()
+end
+
 RegisterNetEvent("services-plus:client:requestNotification", function(payload)
     if shown == payload.requestId or active ~= nil and active.requestId == payload.requestId then return end
 
@@ -51,24 +89,12 @@ RegisterNetEvent("services-plus:client:requestClaimed", function(requestId)
     end
 end)
 
-local function stopDistanceUpdates()
-    distanceThread = nil
-end
-
-local function startDistanceUpdates()
-    local thisThread = {}
-    distanceThread = thisThread
-
-    CreateThread(function()
-        while distanceThread == thisThread and active do
-            local coords = GetEntityCoords(PlayerPedId())
-            local distance = #(vector2(coords.x, coords.y) - vector2(active.x, active.y))
-
-            sendToOverlay("updateDistance", { distance = distance })
-            Wait(2000)
-        end
-    end)
-end
+-- Sent by the server right after ANY successful accept of a request this
+-- player ended up winning - whether Accept was pressed here in the overlay
+-- or in the in-app Requests tab (plan review round 2 §4).
+RegisterNetEvent("services-plus:client:requestAccepted", function(payload)
+    showActive(payload)
+end)
 
 RegisterNUICallback("overlayAction", function(data, cb)
     local action = data.action
@@ -86,26 +112,19 @@ RegisterNUICallback("overlayAction", function(data, cb)
     if action == "accept" then
         local ok, result = ServerCallback("acceptRequest", requestId)
 
-        if ok and result then
-            shown = nil
-            shownPayload = nil
-            active = result
-
-            if type(result.x) == "number" and type(result.y) == "number" then
-                SetNewWaypoint(result.x, result.y)
-            end
-
-            sendToOverlay("showActive", { payload = result })
-            startDistanceUpdates()
-        else
+        if not (ok and result) then
             if shown == requestId then
                 shown = nil
                 shownPayload = nil
             end
             sendToOverlay("dismiss", { requestId = requestId })
+            showNext()
         end
+        -- Success path intentionally does nothing else here - the server's
+        -- services-plus:client:requestAccepted event (fired right after a
+        -- successful accept) is what calls showActive(), so acceptance
+        -- always renders the same way no matter which UI triggered it.
 
-        showNext()
         return cb(ok and result ~= false)
     end
 
@@ -141,9 +160,7 @@ RegisterNUICallback("ready", function(_, cb)
         local ok, result = ServerCallback("getActiveRequest")
 
         if ok and result then
-            active = result
-            sendToOverlay("showActive", { payload = active })
-            startDistanceUpdates()
+            showActive(result)
         end
     end
 

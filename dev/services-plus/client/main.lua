@@ -62,6 +62,28 @@ local function bridge(action, ...)
     return ok and result or false
 end
 
+-- Keeps lb-phone's own (global, per-player) company-call reception toggle
+-- in sync with Services+ duty/status. "All" call routing for a company's
+-- main number rings via lb-phone's native company-job call system (see
+-- server/calls.lua's doc comment), which has no idea about Services+'s own
+-- Busy/Pause state - ToggleCompanyCalls is the only integration point
+-- lb-phone exposes for that (plan review round 2 §3). This is deliberately
+-- only ever called right after the player's own setStatus/toggleDuty
+-- action, computed from that exact result, so it can't silently stomp some
+-- unrelated reason company calls were toggled off - it just always sets
+-- lb-phone's toggle to match what Services+ itself just set.
+--
+-- Trade-off worth knowing: ToggleCompanyCalls is global per player, not
+-- scoped to a single job/company - a player also employed at a *native*
+-- lb-phone company will have its calls paused too while Busy/Pause/off-duty
+-- here. There is no finer-grained native hook to avoid that.
+local function syncNativeCompanyCalls(result)
+    if type(result) ~= "table" then return end
+
+    local shouldReceive = result.onDuty == true and result.status == "available"
+    pcall(function() exports["lb-phone"]:ToggleCompanyCalls(shouldReceive) end)
+end
+
 RegisterNUICallback("bootstrap", function(_, cb)
     cb(bridge("bootstrap"))
 end)
@@ -71,7 +93,9 @@ RegisterNUICallback("companyLogin", function(data, cb)
 end)
 
 RegisterNUICallback("toggleDuty", function(data, cb)
-    cb(bridge("toggleDuty", data.onDuty))
+    local result = bridge("toggleDuty", data.onDuty)
+    syncNativeCompanyCalls(result)
+    cb(result)
 end)
 
 RegisterNUICallback("openConversation", function(data, cb)
@@ -111,7 +135,9 @@ end)
 -- ------------------------------------------------- employees / team / hotlines
 
 RegisterNUICallback("setStatus", function(data, cb)
-    cb(bridge("setStatus", data.status))
+    local result = bridge("setStatus", data.status)
+    syncNativeCompanyCalls(result)
+    cb(result)
 end)
 
 RegisterNUICallback("getHotlines", function(_, cb)

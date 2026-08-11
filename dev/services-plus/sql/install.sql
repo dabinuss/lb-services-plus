@@ -108,6 +108,11 @@ CREATE TABLE IF NOT EXISTS `phone_services_plus_calls` (
     `company_id` INT UNSIGNED NOT NULL,
     `number_id` INT UNSIGNED NOT NULL,
 
+    -- lb-phone's own call id, so callAnswered/callEnded can update this row
+    -- straight from the database instead of an in-memory callId->row map
+    -- that a Services+ restart mid-call would lose (plan review round 2 §2).
+    `lb_call_id` BIGINT UNSIGNED DEFAULT NULL,
+
     `customer_number` VARCHAR(15) NOT NULL,
     `employee_number` VARCHAR(15) DEFAULT NULL,
     `state` VARCHAR(10) NOT NULL DEFAULT 'ringing', -- ringing | answered | missed
@@ -219,8 +224,10 @@ ALTER TABLE `phone_services_plus_messages`
     ADD INDEX IF NOT EXISTS `channel_created` (`channel_id`, `created_at`);
 
 ALTER TABLE `phone_services_plus_calls`
+    ADD COLUMN IF NOT EXISTS `lb_call_id` BIGINT UNSIGNED DEFAULT NULL AFTER `number_id`,
     ADD INDEX IF NOT EXISTS `company_created` (`company_id`, `created_at`),
-    ADD INDEX IF NOT EXISTS `customer_created` (`customer_number`, `created_at`);
+    ADD INDEX IF NOT EXISTS `customer_created` (`customer_number`, `created_at`),
+    ADD INDEX IF NOT EXISTS `lb_call_id` (`lb_call_id`);
 
 ALTER TABLE `phone_services_plus_requests`
     ADD INDEX IF NOT EXISTS `company_status_created` (`company_id`, `status`, `created_at`),

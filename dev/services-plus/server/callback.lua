@@ -59,7 +59,10 @@ local function consume(bucket, limit)
 end
 
 local function isAdminWrite(name)
-    return name:sub(1, 6) == "admin:" and name:sub(1, 10) ~= "admin:get"
+    -- "admin:get" is 9 chars - sub(1, 10) here would compare a 10-char
+    -- slice against a 9-char literal and never match, silently rate-limiting
+    -- every admin:get* read as if it were a write (plan review round 2 §8).
+    return name:sub(1, 6) == "admin:" and name:sub(1, 9) ~= "admin:get"
 end
 
 ---@param source number
