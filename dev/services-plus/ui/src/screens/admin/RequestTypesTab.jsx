@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { fetchNui } from '../../lib/nui.js'
 import Sheet from '../../components/Sheet.jsx'
 import ConfirmButton from '../../components/ConfirmButton.jsx'
+import Switch from '../../components/Switch.jsx'
 
 const EMPTY = {
   categoryId: '', name: '', icon: '', description: '',
@@ -110,39 +111,23 @@ export default function RequestTypesTab() {
             value={editing.description}
             onChange={(e) => setEditing({ ...editing, description: e.target.value })}
           />
-          <label className="hotline-row">
-            <input
-              type="checkbox"
-              checked={editing.passengerCount}
-              onChange={(e) => setEditing({ ...editing, passengerCount: e.target.checked })}
-            />
-            Ask for passenger count
-          </label>
-          <label className="hotline-row">
-            <input
-              type="checkbox"
-              checked={editing.descriptionEnabled}
-              onChange={(e) => setEditing({ ...editing, descriptionEnabled: e.target.checked })}
-            />
-            Allow an optional note
-          </label>
-          <label className="hotline-row">
-            <input
-              type="checkbox"
-              checked={editing.competitionEnabled}
-              onChange={(e) => setEditing({ ...editing, competitionEnabled: e.target.checked })}
-            />
-            Competition (broadcast to every company in the category)
-          </label>
+          <div className="hotline-row">
+            <span>Ask for passenger count</span>
+            <Switch checked={editing.passengerCount} onChange={(next) => setEditing({ ...editing, passengerCount: next })} />
+          </div>
+          <div className="hotline-row">
+            <span>Allow an optional note</span>
+            <Switch checked={editing.descriptionEnabled} onChange={(next) => setEditing({ ...editing, descriptionEnabled: next })} />
+          </div>
+          <div className="hotline-row">
+            <span>Competition (broadcast to every company in the category)</span>
+            <Switch checked={editing.competitionEnabled} onChange={(next) => setEditing({ ...editing, competitionEnabled: next })} />
+          </div>
           {editing.id && (
-            <label className="hotline-row">
-              <input
-                type="checkbox"
-                checked={editing.enabled}
-                onChange={(e) => setEditing({ ...editing, enabled: e.target.checked })}
-              />
-              Enabled
-            </label>
+            <div className="hotline-row">
+              <span>Enabled</span>
+              <Switch checked={editing.enabled} onChange={(next) => setEditing({ ...editing, enabled: next })} />
+            </div>
           )}
           <button className="login-button" onClick={save}>
             Save

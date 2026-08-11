@@ -129,8 +129,8 @@ let fixtureHotlines = [
 ]
 
 const fixtureTeam = [
-  { name: 'Dabi', gradeLabel: 'Boss', status: 'available', hotlines: ['Main Hotline'] },
-  { name: 'John', gradeLabel: 'Worker', status: 'busy', hotlines: ['Main Hotline', 'Workshop'] },
+  { name: 'Dabi', gradeLabel: 'Boss', status: 'available', hotlines: ['Main Hotline'], phoneNumber: '5559001' },
+  { name: 'John', gradeLabel: 'Worker', status: 'busy', hotlines: ['Main Hotline', 'Workshop'], phoneNumber: '5559002' },
 ]
 
 let fixtureSettings = {

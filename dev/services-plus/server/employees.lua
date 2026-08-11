@@ -295,6 +295,10 @@ function Employees.GetTeam(companyId)
                 gradeLabel = job.gradeLabel,
                 status = Employees.GetStatus(source),
                 hotlines = activeHotlines,
+                -- Lets colleagues call each other directly from the merged
+                -- Home/Team view (plan review UX follow-up) - a plain
+                -- native call, not routed through company call handling.
+                phoneNumber = Framework.GetPhoneNumber(source),
             }
         end
     end

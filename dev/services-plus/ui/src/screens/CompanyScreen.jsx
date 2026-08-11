@@ -39,6 +39,7 @@ export default function CompanyScreen({ employee, companies, session, onLogin, o
     <CompanyDashboard
       session={session}
       employee={employee}
+      company={company}
       onLogout={onLogout}
       onOpenConversation={onOpenConversation}
     />

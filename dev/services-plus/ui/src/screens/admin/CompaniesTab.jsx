@@ -2,15 +2,16 @@ import { useEffect, useState } from 'react'
 import { fetchNui } from '../../lib/nui.js'
 import Sheet from '../../components/Sheet.jsx'
 import ConfirmButton from '../../components/ConfirmButton.jsx'
+import Switch from '../../components/Switch.jsx'
 
 const EMPTY = { job: '', name: '', categoryId: '', icon: '', background: '', bossGrade: 100, mainNumber: '' }
 
 function CeilingToggle({ label, allowed, onToggle }) {
   return (
-    <label className="hotline-row">
-      <input type="checkbox" checked={allowed} onChange={onToggle} />
-      {label}
-    </label>
+    <div className="hotline-row">
+      <span>{label}</span>
+      <Switch checked={allowed} onChange={onToggle} />
+    </div>
   )
 }
 
@@ -232,10 +233,10 @@ export default function CompaniesTab() {
             />
           )}
           {editing.id && (
-            <label className="hotline-row">
-              <input type="checkbox" checked={editing.enabled} onChange={(e) => setEditing({ ...editing, enabled: e.target.checked })} />
-              Enabled
-            </label>
+            <div className="hotline-row">
+              <span>Enabled</span>
+              <Switch checked={editing.enabled} onChange={(next) => setEditing({ ...editing, enabled: next })} />
+            </div>
           )}
           <button className="login-button" onClick={save}>
             Save

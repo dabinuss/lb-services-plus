@@ -3,6 +3,7 @@ import { fetchNui } from '../../lib/nui.js'
 import Sheet from '../../components/Sheet.jsx'
 import ConfirmButton from '../../components/ConfirmButton.jsx'
 import CategoryIcon from '../../components/CategoryIcon.jsx'
+import Switch from '../../components/Switch.jsx'
 
 const EMPTY = { key: '', name: '', icon: '', sort: 0, competitionAllowed: false }
 
@@ -93,14 +94,13 @@ export default function CategoriesTab() {
             value={editing.sort}
             onChange={(e) => setEditing({ ...editing, sort: Number(e.target.value) })}
           />
-          <label className="hotline-row">
-            <input
-              type="checkbox"
+          <div className="hotline-row">
+            <span>Allow competition requests</span>
+            <Switch
               checked={editing.competitionAllowed}
-              onChange={(e) => setEditing({ ...editing, competitionAllowed: e.target.checked })}
+              onChange={(next) => setEditing({ ...editing, competitionAllowed: next })}
             />
-            Allow competition requests
-          </label>
+          </div>
           <button className="login-button" onClick={save}>
             Save
           </button>

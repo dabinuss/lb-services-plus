@@ -124,6 +124,7 @@
   width: 2.3rem;
   height: 2.3rem;
   padding: 0;
+  border-radius: 0.7rem; /* rounded square, not a circle, unlike the text-pill chips elsewhere */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -284,7 +285,7 @@
 .company-icon.small {
   width: 2.3rem;
   height: 2.3rem;
-  border-radius: 999px;
+  border-radius: 0.55rem;
 }
 
 .company-icon img {
@@ -309,7 +310,7 @@
 .icon-button {
   width: 2.2rem;
   height: 2.2rem;
-  border-radius: 999px;
+  border-radius: 0.6rem;
   background: var(--background-highlight);
   display: flex;
   align-items: center;
@@ -321,11 +322,25 @@
   background: var(--success);
 }
 
+.icon-button.logout {
+  /* Same themed tile as every other icon-button (--background-highlight
+     already reads fine over a blurred photo header - see .company-logo)
+     instead of a fixed white fill that looked out of place in dark mode -
+     just the glyph itself picks up --danger to read as the exit action it is. */
+  position: relative;
+  z-index: 1;
+  color: var(--danger);
+  font-size: 1.15rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
 .icon-button.subtle {
   background: transparent;
   color: var(--text-tertiary);
   width: 1.6rem;
   height: 1.6rem;
+  border-radius: 0.4rem;
   font-size: 0.8rem;
 }
 
@@ -404,7 +419,7 @@
 .conversation-icon {
   width: 1.9rem;
   height: 1.9rem;
-  border-radius: 999px;
+  border-radius: 0.45rem;
   object-fit: cover;
 }
 
@@ -466,7 +481,7 @@
 .send-button {
   width: 2.2rem;
   height: 2.2rem;
-  border-radius: 999px;
+  border-radius: 0.6rem;
   background: var(--accent);
   color: #fff;
   flex-shrink: 0;
@@ -518,28 +533,76 @@
 }
 
 .dashboard-header {
+  position: relative;
+  overflow: hidden;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 0.6rem;
-  padding: 1rem 0;
-  border-bottom: 1px solid var(--separator);
+  padding: 0.8rem 0.9rem;
+  border-radius: 0.9rem;
   margin-bottom: 0.8rem;
 }
 
-.dashboard-company {
-  font-size: 1.2rem;
+.dashboard-header:not(.has-bg) {
+  background: var(--background-secondary);
+}
+
+.dashboard-header-bg {
+  position: absolute;
+  inset: -20%;
+  background-size: cover;
+  background-position: center;
+  filter: blur(18px);
+  transform: scale(1.15); /* hides the blur's soft edge past the header's own bounds */
+}
+
+.dashboard-header-scrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0.2));
+}
+
+.dashboard-header-info {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  min-width: 0;
+}
+
+.dashboard-logo {
+  width: 2.6rem;
+  height: 2.6rem;
+  border-radius: 0.6rem;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: var(--background-highlight);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-weight: 700;
 }
 
-.dashboard-employee {
-  font-size: 0.85rem;
-  margin-top: 0.3rem;
+.dashboard-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
-.dashboard-grade {
-  font-size: 0.75rem;
-  color: var(--text-secondary);
+.dashboard-company {
+  font-size: 1.15rem;
+  font-weight: 700;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboard-header.has-bg .dashboard-company {
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
 }
 
 .dashboard-row {
@@ -554,6 +617,75 @@
 .dashboard-label {
   font-size: 0.85rem;
   font-weight: 500;
+}
+
+.dashboard-row-sub {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin-top: 0.15rem;
+}
+
+/* One card grouping duty + status (mirrors .company-card's banner + actions
+   row on the Services overview - see .company-actions-row/.company-action). */
+.duty-card {
+  background: var(--background-secondary);
+  border-radius: 0.8rem;
+  overflow: hidden;
+}
+
+.duty-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.7rem 0.9rem;
+}
+
+/* Edge-to-edge actions row, exactly like .company-actions-row/.company-action
+   below - flush with the card's own edges and divided by borders, not
+   floating chips with their own padding/gaps inside it. */
+.duty-card-actions {
+  display: flex;
+  border-top: 1px solid var(--separator);
+}
+
+.duty-card-actions .status-pill {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  border-radius: 0;
+  background: transparent;
+  padding: 0.5rem 0;
+  color: var(--text-tertiary);
+}
+
+.duty-card-actions .status-pill + .status-pill {
+  border-left: 1px solid var(--separator);
+}
+
+.status-pill-icon {
+  font-size: 0.7em;
+  opacity: 0.7; /* subtle - a hint next to the label, not a second focal point */
+}
+
+/* Same specificity (4 classes) as .status-pill.<key>.active's own
+   background rule below, so source order can't let that win back over the
+   flat/transparent look this row needs - only the text color should
+   change per status here, never a filled background. */
+.duty-card-actions .status-pill.available.active {
+  background: transparent;
+  color: var(--success);
+}
+
+.duty-card-actions .status-pill.pause.active {
+  background: transparent;
+  color: var(--warning);
+}
+
+.duty-card-actions .status-pill.busy.active {
+  background: transparent;
+  color: var(--danger);
 }
 
 .toggle {
@@ -582,6 +714,28 @@
 
 .toggle.on .toggle-knob {
   transform: translateX(1.1rem);
+}
+
+.toggle:disabled {
+  opacity: 0.5;
+}
+
+/* Compact variant (the Switch component's default) for inline rows -
+   hotlines, per-number/company/category/request-type toggles - anywhere a
+   native checkbox would otherwise have gone. */
+.toggle.small {
+  width: 2.1rem;
+  height: 1.2rem;
+  flex-shrink: 0;
+}
+
+.toggle.small .toggle-knob {
+  width: 0.9rem;
+  height: 0.9rem;
+}
+
+.toggle.small.on .toggle-knob {
+  transform: translateX(0.9rem);
 }
 
 /* ---------------------------------------------------------------- sheet */
@@ -651,9 +805,28 @@
 
 /* ------------------------------------------------------- company dashboard */
 
-.subtab-row {
-  padding-bottom: 0.6rem;
+/* Segmented control, not a row of separate floating pills - one grouped,
+   centered track (Admin/Company/Settings/Activity sub-tabs all use this),
+   unlike .category-row.icon-only's scrollable list of independent chips. */
+.category-row.subtab-row {
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 auto 0.6rem;
+  padding: 0.2rem;
+  gap: 0.15rem;
+  background: var(--background-highlight);
+  border-radius: 0.8rem;
+  overflow-x: visible;
   flex-shrink: 0;
+}
+
+.category-row.subtab-row .category-chip {
+  background: transparent;
+  border-radius: 0.6rem;
+}
+
+.category-row.subtab-row .category-chip.active {
+  background: var(--accent);
 }
 
 .dashboard-body {
@@ -744,6 +917,7 @@
 .hotline-row {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 0.5rem;
   background: var(--background-secondary);
   border-radius: 0.6rem;
@@ -855,10 +1029,19 @@
 .team-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 0.5rem;
   background: var(--background-secondary);
   border-radius: 0.8rem;
   padding: 0.6rem 0.8rem;
+}
+
+.team-row-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
 }
 
 .team-name {

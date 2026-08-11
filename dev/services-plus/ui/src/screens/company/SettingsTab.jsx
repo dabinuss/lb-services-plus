@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { fetchNui } from '../../lib/nui.js'
+import Switch from '../../components/Switch.jsx'
 
 const ROUTING_OPTIONS = [
   { key: 'all', label: 'All' },
@@ -46,9 +47,7 @@ export default function SettingsTab() {
       ].map(([key, label]) => (
         <div className="dashboard-row" key={key}>
           <div className="dashboard-label">{label}</div>
-          <button className={`toggle${settings[key] ? ' on' : ''}`} onClick={() => save({ [key]: !settings[key] })}>
-            <span className="toggle-knob" />
-          </button>
+          <Switch checked={settings[key]} onChange={(next) => save({ [key]: next })} small={false} />
         </div>
       ))}
 
@@ -86,33 +85,30 @@ export default function SettingsTab() {
               {n.label} {n.isMain && <span className="hint">(main)</span>}
             </div>
             <div className="number-toggles">
-              <label className="hotline-row">
-                <input
-                  type="checkbox"
+              <div className="hotline-row">
+                <span>Calls</span>
+                <Switch
                   checked={n.callsEnabled}
                   disabled={n.isMain}
-                  onChange={() => saveNumber(n.id, { callsEnabled: !n.callsEnabled, messagesEnabled: n.messagesEnabled, mailboxEnabled: n.mailboxEnabled })}
+                  onChange={(next) => saveNumber(n.id, { callsEnabled: next, messagesEnabled: n.messagesEnabled, mailboxEnabled: n.mailboxEnabled })}
                 />
-                Calls
-              </label>
-              <label className="hotline-row">
-                <input
-                  type="checkbox"
+              </div>
+              <div className="hotline-row">
+                <span>Messages</span>
+                <Switch
                   checked={n.messagesEnabled}
                   disabled={n.isMain}
-                  onChange={() => saveNumber(n.id, { callsEnabled: n.callsEnabled, messagesEnabled: !n.messagesEnabled, mailboxEnabled: n.mailboxEnabled })}
+                  onChange={(next) => saveNumber(n.id, { callsEnabled: n.callsEnabled, messagesEnabled: next, mailboxEnabled: n.mailboxEnabled })}
                 />
-                Messages
-              </label>
-              <label className="hotline-row">
-                <input
-                  type="checkbox"
+              </div>
+              <div className="hotline-row">
+                <span>Mailbox</span>
+                <Switch
                   checked={n.mailboxEnabled}
                   disabled={n.isMain}
-                  onChange={() => saveNumber(n.id, { callsEnabled: n.callsEnabled, messagesEnabled: n.messagesEnabled, mailboxEnabled: !n.mailboxEnabled })}
+                  onChange={(next) => saveNumber(n.id, { callsEnabled: n.callsEnabled, messagesEnabled: n.messagesEnabled, mailboxEnabled: next })}
                 />
-                Mailbox
-              </label>
+              </div>
             </div>
           </div>
         ))}
