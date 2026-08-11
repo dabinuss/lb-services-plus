@@ -9,18 +9,35 @@ function timeAgo(iso) {
   return `${Math.floor(seconds / 86400)}d`
 }
 
+// Mirrors Config.PageSize.activity in shared/config.lua - a page shorter
+// than this means there's nothing left to load (plan §68, plan review
+// round 3 §11).
+const PAGE_SIZE = 25
+
 // Own conversations (plan §39-41).
 export default function MessagesTab({ onOpen }) {
   const [entries, setEntries] = useState(null)
+  const [hasMore, setHasMore] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
 
-  const load = () => {
-    fetchNui('getActivity', { page: 0 }).then((result) => result && setEntries(result))
+  const loadPage = (page) => {
+    if (page > 0) setLoadingMore(true)
+
+    fetchNui('getActivity', { page }).then((result) => {
+      setLoadingMore(false)
+      if (!result) return
+
+      setEntries((prev) => (page === 0 ? result : [...(prev || []), ...result]))
+      setHasMore(result.length === PAGE_SIZE)
+    })
   }
 
-  useEffect(load, [])
+  useEffect(() => loadPage(0), [])
+
+  const loadMore = () => loadPage(Math.floor((entries?.length || 0) / PAGE_SIZE))
 
   const archive = async (entry) => {
-    if (await fetchNui('archiveConversation', { channelId: entry.channel_id })) load()
+    if (await fetchNui('archiveConversation', { channelId: entry.channel_id })) loadPage(0)
   }
 
   return (
@@ -58,6 +75,12 @@ export default function MessagesTab({ onOpen }) {
           </div>
         ))}
       </div>
+
+      {hasMore && (
+        <button className="sheet-option" onClick={loadMore} disabled={loadingMore}>
+          {loadingMore ? 'Loading…' : 'Load more'}
+        </button>
+      )}
     </div>
   )
 }

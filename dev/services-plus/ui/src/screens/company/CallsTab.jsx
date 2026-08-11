@@ -3,14 +3,32 @@ import { fetchNui, createCall } from '../../lib/nui.js'
 
 const STATE_LABEL = { ringing: 'Ringing', answered: 'Answered', missed: 'Missed' }
 
+// Mirrors Config.PageSize.calls in shared/config.lua - a page shorter than
+// this means there's nothing left to load (plan §68, plan review round 3 §11).
+const PAGE_SIZE = 25
+
 // Call history (plan §38): a plain log, populated passively from lb-phone's
 // own call events (see server/calls.lua) - Services+ never places calls.
 export default function CallsTab() {
   const [calls, setCalls] = useState(null)
+  const [hasMore, setHasMore] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
 
-  useEffect(() => {
-    fetchNui('getCallHistory', { page: 0 }).then((r) => r && setCalls(r))
-  }, [])
+  const loadPage = (page) => {
+    if (page > 0) setLoadingMore(true)
+
+    fetchNui('getCallHistory', { page }).then((r) => {
+      setLoadingMore(false)
+      if (!r) return
+
+      setCalls((prev) => (page === 0 ? r : [...(prev || []), ...r]))
+      setHasMore(r.length === PAGE_SIZE)
+    })
+  }
+
+  useEffect(() => loadPage(0), [])
+
+  const loadMore = () => loadPage(Math.floor((calls?.length || 0) / PAGE_SIZE))
 
   return (
     <div className="tab-panel">
@@ -32,6 +50,12 @@ export default function CallsTab() {
           </div>
         ))}
       </div>
+
+      {hasMore && (
+        <button className="sheet-option" onClick={loadMore} disabled={loadingMore}>
+          {loadingMore ? 'Loading…' : 'Load more'}
+        </button>
+      )}
     </div>
   )
 }

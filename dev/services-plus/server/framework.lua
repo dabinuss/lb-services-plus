@@ -361,6 +361,16 @@ AddEventHandler("esx:setJob", function(source) Framework.GetJob(source) end)
 AddEventHandler("QBCore:Server:PlayerLoaded", function(player)
     if player and player.PlayerData then Framework.GetJob(player.PlayerData.source) end
 end)
+-- Belt-and-suspenders for Qbox: current qbx_core fires the same
+-- "QBCore:Server:PlayerLoaded" above, but this also catches it on setups
+-- where that isn't the case (plan review round 3 §1) - inert otherwise.
+AddEventHandler("QBCore:Server:OnPlayerLoaded", function(player)
+    if player and player.PlayerData then
+        Framework.GetJob(player.PlayerData.source)
+    else
+        Framework.GetJob(source)
+    end
+end)
 AddEventHandler("QBCore:Server:OnPlayerUpdated", function(source, key)
     if key == "job" then Framework.GetJob(source) end
 end)
@@ -368,11 +378,21 @@ AddEventHandler("QBCore:Server:OnJobUpdate", function(source) Framework.GetJob(s
 
 AddEventHandler("playerDropped", function() JobIndex.Remove(source) end)
 
+-- Initial build, then a slow periodic re-sync as a framework-agnostic
+-- safety net (plan review round 3 §1): the exact "player finished loading"
+-- event name varies across framework forks/versions, so rather than bet
+-- everything on guessing it right, this guarantees the index self-heals
+-- for anyone it missed within at most 2 minutes - a 600-player GetPlayers()
+-- scan every 2 minutes is negligible, it's just not a per-transaction cost.
 CreateThread(function()
     Wait(2000) -- let the framework finish starting up first
 
-    local players = GetPlayers()
-    for i = 1, #players do
-        Framework.GetJob(tonumber(players[i]))
+    while true do
+        local players = GetPlayers()
+        for i = 1, #players do
+            Framework.GetJob(tonumber(players[i]))
+        end
+
+        Wait(120000)
     end
 end)

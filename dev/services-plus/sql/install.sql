@@ -155,6 +155,13 @@ CREATE TABLE IF NOT EXISTS `phone_services_plus_request_types` (
     `description_enabled` TINYINT(1) NOT NULL DEFAULT 0,
     `competition_enabled` TINYINT(1) NOT NULL DEFAULT 0,
 
+    -- Soft-delete only (plan review round 3 §9): request_type_id on
+    -- phone_services_plus_requests is ON DELETE CASCADE, so a physical
+    -- delete here would take the type's entire request history - open,
+    -- active and historical alike - down with it. "Deleting" a type from
+    -- the admin area just clears this instead.
+    `enabled` TINYINT(1) NOT NULL DEFAULT 1,
+
     PRIMARY KEY (`id`),
     FOREIGN KEY (`category_id`) REFERENCES `phone_services_plus_categories`(`id`) ON DELETE SET NULL
 ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -233,3 +240,9 @@ ALTER TABLE `phone_services_plus_requests`
     ADD INDEX IF NOT EXISTS `company_status_created` (`company_id`, `status`, `created_at`),
     ADD INDEX IF NOT EXISTS `requester_created` (`requester_number`, `created_at`),
     ADD INDEX IF NOT EXISTS `employee_status` (`employee_identifier`, `status`);
+
+-- ---------------------------------------------------------------------------
+-- Round 3 review migration. Safe to re-run.
+-- ---------------------------------------------------------------------------
+ALTER TABLE `phone_services_plus_request_types`
+    ADD COLUMN IF NOT EXISTS `enabled` TINYINT(1) NOT NULL DEFAULT 1 AFTER `competition_enabled`;

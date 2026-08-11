@@ -96,6 +96,21 @@ RegisterNetEvent("services-plus:client:requestAccepted", function(payload)
     showActive(payload)
 end)
 
+-- Sent by the server right after ANY successful complete/cancel of a
+-- request this player had active - whether that happened here in the
+-- overlay, the in-app Requests tab, or (for cancel) the customer's own app
+-- (plan review round 3 §2). Single place that clears the active card so it
+-- can never linger on a surface the completing/cancelling action didn't
+-- itself touch.
+RegisterNetEvent("services-plus:client:requestEnded", function(requestId)
+    if active and active.requestId == requestId then
+        active = nil
+        stopDistanceUpdates()
+        sendToOverlay("clearActive", {})
+        showNext()
+    end
+end)
+
 RegisterNUICallback("overlayAction", function(data, cb)
     local action = data.action
     local requestId = data.requestId
@@ -130,13 +145,9 @@ RegisterNUICallback("overlayAction", function(data, cb)
 
     if action == "complete" or action == "cancel" then
         local ok, result = ServerCallback(action == "complete" and "completeRequest" or "cancelRequest", requestId)
-
-        if ok and result and active and active.requestId == requestId then
-            active = nil
-            stopDistanceUpdates()
-            sendToOverlay("clearActive", {})
-            showNext()
-        end
+        -- Success path intentionally does nothing else here - the server's
+        -- services-plus:client:requestEnded event (fired right after) is
+        -- what clears `active`, same reasoning as the accept branch above.
 
         return cb(ok and result == true)
     end

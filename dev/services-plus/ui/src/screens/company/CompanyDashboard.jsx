@@ -17,16 +17,21 @@ const TABS = [
 ]
 
 // Everything past the fake-login (plan §19, §35-38, §20-24, §33-34).
-export default function CompanyDashboard({ session, employee, onOpenConversation }) {
+export default function CompanyDashboard({ session, employee, onLogout, onOpenConversation }) {
   const [tab, setTab] = useState('home')
   const tabs = TABS.filter((t) => !t.bossOnly || session.employee.isBoss)
 
   return (
     <div className="screen company-screen">
       <div className="dashboard-header">
-        <div className="dashboard-company">{session.company.name}</div>
-        <div className="dashboard-employee">{session.employee.name}</div>
-        <div className="dashboard-grade">{session.employee.gradeLabel}</div>
+        <div className="dashboard-header-info">
+          <div className="dashboard-company">{session.company.name}</div>
+          <div className="dashboard-employee">{session.employee.name}</div>
+          <div className="dashboard-grade">{session.employee.gradeLabel}</div>
+        </div>
+        <button className="icon-button subtle" onClick={onLogout} aria-label="Logout">
+          ⏻
+        </button>
       </div>
 
       <div className="category-row subtab-row">
@@ -42,7 +47,14 @@ export default function CompanyDashboard({ session, employee, onOpenConversation
       </div>
 
       <div className="dashboard-body">
-        {tab === 'home' && <DashboardHome companyId={employee.companyId} initialOnDuty={employee.onDuty} initialStatus={employee.status} />}
+        {tab === 'home' && (
+          <DashboardHome
+            companyId={employee.companyId}
+            initialOnDuty={employee.onDuty}
+            initialStatus={employee.status}
+            onLogout={onLogout}
+          />
+        )}
         {tab === 'requests' && <RequestsTab />}
         {tab === 'team' && <TeamTab />}
         {tab === 'messages' && <MessagesTab onOpenConversation={onOpenConversation} />}

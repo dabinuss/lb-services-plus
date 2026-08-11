@@ -8,7 +8,7 @@ const STATUSES = [
 ]
 
 // Duty, status and hotlines (plan §19-23).
-export default function DashboardHome({ initialOnDuty, initialStatus }) {
+export default function DashboardHome({ initialOnDuty, initialStatus, onLogout }) {
   const [onDuty, setOnDuty] = useState(initialOnDuty)
   const [status, setStatus] = useState(initialStatus)
   const [hotlines, setHotlines] = useState(null)
@@ -18,9 +18,19 @@ export default function DashboardHome({ initialOnDuty, initialStatus }) {
     fetchNui('getHotlines').then((result) => result && setHotlines(result))
   }, [])
 
+  // Going off-duty ends the fake-login session, not just the duty flag -
+  // "offline" is one of the only three things allowed to log the player
+  // out (explicit logout, going off-duty, switching to a different phone
+  // number).
   const toggleDuty = async () => {
     const next = !onDuty
-    if (await fetchNui('toggleDuty', { onDuty: next })) setOnDuty(next)
+    if (!(await fetchNui('toggleDuty', { onDuty: next }))) return
+
+    if (next) {
+      setOnDuty(true)
+    } else {
+      onLogout()
+    }
   }
 
   const changeStatus = async (next) => {

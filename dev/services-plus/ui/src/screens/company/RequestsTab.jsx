@@ -1,31 +1,51 @@
 import { useEffect, useState } from 'react'
 import { fetchNui } from '../../lib/nui.js'
 
+// Mirrors Config.PageSize.requests in shared/config.lua - a page shorter
+// than this means there's nothing left to load (plan §68, plan review
+// round 3 §11).
+const PAGE_SIZE = 25
+
 // Employee-side request queue (plan §36, §45, §47). Open requests can be
 // accepted by anyone eligible; only the employee who accepted one can
 // complete or cancel it.
 export default function RequestsTab() {
   const [requests, setRequests] = useState(null)
+  const [hasMore, setHasMore] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
 
-  const load = () => fetchNui('getCompanyRequests', { page: 0 }).then((r) => r && setRequests(r))
+  const loadPage = (page) => {
+    if (page > 0) setLoadingMore(true)
 
-  useEffect(() => {
-    load()
-  }, [])
+    fetchNui('getCompanyRequests', { page }).then((r) => {
+      setLoadingMore(false)
+      if (!r) return
+
+      setRequests((prev) => (page === 0 ? r : [...(prev || []), ...r]))
+      setHasMore(r.length === PAGE_SIZE)
+    })
+  }
+
+  useEffect(() => loadPage(0), [])
+
+  // Any action can reorder or drop rows (open-first sort, status changes),
+  // so a refresh after one always restarts from page 0 rather than trying
+  // to patch the loaded pages in place.
+  const loadMore = () => loadPage(Math.floor((requests?.length || 0) / PAGE_SIZE))
 
   const accept = async (request) => {
     const result = await fetchNui('acceptRequest', { requestId: request.id })
     if (!result) return
     if (result.x && result.y) fetchNui('setWaypoint', { x: result.x, y: result.y })
-    load()
+    loadPage(0)
   }
 
   const complete = async (request) => {
-    if (await fetchNui('completeRequest', { requestId: request.id })) load()
+    if (await fetchNui('completeRequest', { requestId: request.id })) loadPage(0)
   }
 
   const cancel = async (request) => {
-    if (await fetchNui('cancelRequest', { requestId: request.id })) load()
+    if (await fetchNui('cancelRequest', { requestId: request.id })) loadPage(0)
   }
 
   return (
@@ -66,6 +86,12 @@ export default function RequestsTab() {
           </div>
         ))}
       </div>
+
+      {hasMore && (
+        <button className="sheet-option" onClick={loadMore} disabled={loadingMore}>
+          {loadingMore ? 'Loading…' : 'Load more'}
+        </button>
+      )}
     </div>
   )
 }

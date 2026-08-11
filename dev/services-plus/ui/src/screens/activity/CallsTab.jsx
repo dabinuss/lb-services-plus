@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { fetchNui } from '../../lib/nui.js'
+import { fetchNui, createCall } from '../../lib/nui.js'
 
 function timeAgo(iso) {
   const seconds = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
@@ -11,14 +11,42 @@ function timeAgo(iso) {
 
 const STATE_LABEL = { ringing: 'Calling…', answered: 'Call', missed: 'Missed call' }
 
+// Mirrors Config.PageSize.calls in shared/config.lua - a page shorter than
+// this means there's nothing left to load (plan §68, plan review round 3 §11).
+const PAGE_SIZE = 25
+
 // Own call history (plan §38-41) - read-only, logged passively from
 // lb-phone's own call events (see server/calls.lua).
 export default function CallsTab() {
   const [entries, setEntries] = useState(null)
+  const [hasMore, setHasMore] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
 
-  useEffect(() => {
-    fetchNui('getMyCalls', { page: 0 }).then((result) => result && setEntries(result))
-  }, [])
+  const loadPage = (page) => {
+    if (page > 0) setLoadingMore(true)
+
+    fetchNui('getMyCalls', { page }).then((result) => {
+      setLoadingMore(false)
+      if (!result) return
+
+      setEntries((prev) => (page === 0 ? result : [...(prev || []), ...result]))
+      setHasMore(result.length === PAGE_SIZE)
+    })
+  }
+
+  useEffect(() => loadPage(0), [])
+
+  const loadMore = () => loadPage(Math.floor((entries?.length || 0) / PAGE_SIZE))
+
+  // Re-resolves and places a fresh call the same way ServicesScreen's own
+  // Call button does (plan §39-41 wants "call the company again" here) -
+  // resolveCall re-validates calls_enabled/routing server-side, so a number
+  // disabled since this call happened just quietly does nothing.
+  const callBack = async (entry) => {
+    const target = await fetchNui('resolveCall', { companyId: entry.company_id, numberId: entry.number_id })
+    if (!target) return
+    createCall(target.company ? { company: target.company } : { number: target.number })
+  }
 
   return (
     <div className="tab-panel">
@@ -27,7 +55,7 @@ export default function CallsTab() {
 
       <div className="activity-list">
         {entries?.map((entry) => (
-          <div key={entry.id} className="activity-row">
+          <div key={entry.id} className="activity-row" onClick={() => callBack(entry)}>
             <div className="company-icon small">
               {entry.company_icon ? <img src={entry.company_icon} alt="" /> : <span>{entry.company_name?.[0] || '?'}</span>}
             </div>
@@ -37,10 +65,26 @@ export default function CallsTab() {
             </div>
             <div className="activity-meta">
               <span className="activity-time">{timeAgo(entry.created_at)}</span>
+              <button
+                className="icon-button subtle"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  callBack(entry)
+                }}
+                aria-label="Call back"
+              >
+                📞
+              </button>
             </div>
           </div>
         ))}
       </div>
+
+      {hasMore && (
+        <button className="sheet-option" onClick={loadMore} disabled={loadingMore}>
+          {loadingMore ? 'Loading…' : 'Load more'}
+        </button>
+      )}
     </div>
   )
 }

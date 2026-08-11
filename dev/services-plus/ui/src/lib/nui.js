@@ -6,6 +6,12 @@
 
 export const devMode = !window.invokeNative
 
+// Mirrors Config.PageSize.* in shared/config.lua (all 25 there too) - lets
+// devMode actually exercise "Load more" instead of always handing back
+// every fixture row regardless of `page`.
+const FIXTURE_PAGE_SIZE = 25
+const paginate = (list, page) => list.slice((page || 0) * FIXTURE_PAGE_SIZE, ((page || 0) + 1) * FIXTURE_PAGE_SIZE)
+
 const fixtures = {
   bootstrap: {
     categories: [
@@ -111,6 +117,7 @@ let fixtureRequests = [
 const fixtureCalls = [
   {
     id: 1, customer_number: '5559876', employee_number: null, state: 'missed', label: 'Main Hotline',
+    company_id: 3, number_id: 3,
     company_name: 'Downtown Cab Co.', company_icon: 'https://cdn-icons-png.flaticon.com/128/10281/10281554.png',
     created_at: new Date(Date.now() - 3600000).toISOString(),
   },
@@ -160,7 +167,7 @@ let fixtureAdminCompanies = [
 let fixtureAdminRequestTypes = [
   {
     id: 2, category_id: 3, name: 'Taxi Pickup', icon: 'taxi', description: 'Request a ride.',
-    passenger_count: 1, description_enabled: 1, competition_enabled: 1,
+    passenger_count: 1, description_enabled: 1, competition_enabled: 1, enabled: 1,
   },
 ]
 
@@ -187,14 +194,14 @@ async function fetchNuiFixture(action, data) {
       return message
     }
     case 'getActivity':
-      return fixtureActivity
+      return paginate(fixtureActivity, data.page)
     case 'archiveConversation':
       return true
     case 'resolveCall':
       return data.numberId === 3 ? { company: 'mechanic' } : { number: '5551234' }
     case 'getCallHistory':
     case 'getMyCalls':
-      return fixtureCalls
+      return paginate(fixtureCalls, data.page)
     case 'getHotlines':
       return fixtureHotlines
     case 'toggleHotline':
@@ -203,7 +210,7 @@ async function fetchNuiFixture(action, data) {
     case 'getTeam':
       return fixtureTeam
     case 'getCompanyConversations':
-      return [{ channel_id: 1, contact_number: '5550100', last_message: 'Hey, is anyone there?', label: 'Main Hotline' }]
+      return paginate([{ channel_id: 1, contact_number: '5550100', last_message: 'Hey, is anyone there?', label: 'Main Hotline' }], data.page)
     case 'getCompanySettings':
       return fixtureSettings
     case 'updateCompanySettings':
@@ -212,7 +219,15 @@ async function fetchNuiFixture(action, data) {
     case 'updateNumberSettings':
       fixtureSettings = {
         ...fixtureSettings,
-        numbers: fixtureSettings.numbers.map((n) => (n.id === data.numberId ? { ...n, ...data.settings } : n)),
+        numbers: fixtureSettings.numbers.map((n) => {
+          if (n.id !== data.numberId) return n
+          const next = { ...n, ...data.settings }
+          // Mirrors the server: Mailbox OFF also forces Messages OFF, main
+          // number's mailbox can never be turned off (server/main.lua).
+          next.mailboxEnabled = n.isMain || next.mailboxEnabled
+          next.messagesEnabled = next.mailboxEnabled && (n.isMain || next.messagesEnabled)
+          return next
+        }),
       }
       return true
     case 'getRequestTypes':
@@ -229,9 +244,12 @@ async function fetchNuiFixture(action, data) {
       fixtureRequests = fixtureRequests.map((r) => (r.id === data.requestId ? { ...r, status: 'cancelled' } : r))
       return true
     case 'getCompanyRequests':
-      return fixtureRequests
+      return paginate(fixtureRequests, data.page)
     case 'getMyRequests':
-      return fixtureRequests.map((r) => ({ ...r, company_name: 'Downtown Cab Co.', company_icon: fixtures.bootstrap.companies[2].icon }))
+      return paginate(
+        fixtureRequests.map((r) => ({ ...r, company_name: 'Downtown Cab Co.', company_icon: fixtures.bootstrap.companies[2].icon })),
+        data.page,
+      )
     case 'setWaypoint':
       console.log('[dev] setWaypoint', data)
       return true
@@ -301,19 +319,26 @@ async function fetchNuiFixture(action, data) {
         ...fixtureAdminRequestTypes,
         {
           id: fixtureAdminRequestTypes.length + 1, category_id: data.categoryId, passenger_count: data.passengerCount ? 1 : 0,
-          description_enabled: data.descriptionEnabled ? 1 : 0, competition_enabled: data.competitionEnabled ? 1 : 0, ...data,
+          description_enabled: data.descriptionEnabled ? 1 : 0, competition_enabled: data.competitionEnabled ? 1 : 0,
+          enabled: 1, ...data,
         },
       ]
       return true
     case 'admin:updateRequestType':
       fixtureAdminRequestTypes = fixtureAdminRequestTypes.map((t) =>
         t.id === data.id
-          ? { ...t, ...data, category_id: data.categoryId, passenger_count: data.passengerCount ? 1 : 0, description_enabled: data.descriptionEnabled ? 1 : 0, competition_enabled: data.competitionEnabled ? 1 : 0 }
+          ? {
+              ...t, ...data, category_id: data.categoryId, passenger_count: data.passengerCount ? 1 : 0,
+              description_enabled: data.descriptionEnabled ? 1 : 0, competition_enabled: data.competitionEnabled ? 1 : 0,
+              enabled: data.enabled !== false ? 1 : 0,
+            }
           : t,
       )
       return true
     case 'admin:deleteRequestType':
-      fixtureAdminRequestTypes = fixtureAdminRequestTypes.filter((t) => t.id !== data.id)
+      // Mirrors the server: soft-delete only (plan review round 3 §9), so
+      // request history for this type isn't wiped along with it.
+      fixtureAdminRequestTypes = fixtureAdminRequestTypes.map((t) => (t.id === data.id ? { ...t, enabled: 0 } : t))
       return true
 
     default:

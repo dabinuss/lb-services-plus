@@ -28,6 +28,12 @@ export default function SettingsTab() {
     const nextNumbers = settings.numbers.map((n) => (n.id === numberId ? { ...n, ...patch } : n))
     setSettings({ ...settings, numbers: nextNumbers })
     await fetchNui('updateNumberSettings', { numberId, settings: patch })
+
+    // The server can derive a different outcome than the patch alone would
+    // suggest (Mailbox OFF forces Messages OFF too) - re-fetch instead of
+    // trusting the optimistic merge above so the toggles never silently
+    // drift from what's actually saved.
+    fetchNui('getCompanySettings').then((r) => r && setSettings(r))
   }
 
   return (
@@ -102,6 +108,7 @@ export default function SettingsTab() {
                 <input
                   type="checkbox"
                   checked={n.mailboxEnabled}
+                  disabled={n.isMain}
                   onChange={() => saveNumber(n.id, { callsEnabled: n.callsEnabled, messagesEnabled: n.messagesEnabled, mailboxEnabled: !n.mailboxEnabled })}
                 />
                 Mailbox

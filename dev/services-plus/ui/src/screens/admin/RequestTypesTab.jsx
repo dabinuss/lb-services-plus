@@ -5,7 +5,7 @@ import ConfirmButton from '../../components/ConfirmButton.jsx'
 
 const EMPTY = {
   categoryId: '', name: '', icon: '', description: '',
-  passengerCount: false, descriptionEnabled: false, competitionEnabled: false,
+  passengerCount: false, descriptionEnabled: false, competitionEnabled: false, enabled: true,
 }
 
 // Request type CRUD (plan §55). Location is always automatic (plan §14) -
@@ -32,7 +32,9 @@ export default function RequestTypesTab() {
     }
   }
 
-  const remove = async (id) => {
+  // Soft-delete only server-side (plan review round 3 §9) - this disables
+  // the type instead of removing it, so its request history survives.
+  const disable = async (id) => {
     if (await fetchNui('admin:deleteRequestType', { id })) load()
   }
 
@@ -51,7 +53,7 @@ export default function RequestTypesTab() {
               <div className="admin-row-title">{t.name}</div>
               <div className="admin-row-meta">
                 {categoryName(t.category_id)} · {t.competition_enabled ? 'competition' : 'exclusive'}
-                {t.passenger_count ? ' · passengers' : ''}
+                {t.passenger_count ? ' · passengers' : ''} · {t.enabled ? 'enabled' : 'disabled'}
               </div>
             </div>
             <div className="admin-row-actions">
@@ -62,12 +64,15 @@ export default function RequestTypesTab() {
                     id: t.id, categoryId: t.category_id || '', name: t.name, icon: t.icon || '',
                     description: t.description || '', passengerCount: t.passenger_count === 1,
                     descriptionEnabled: t.description_enabled === 1, competitionEnabled: t.competition_enabled === 1,
+                    enabled: t.enabled === 1,
                   })
                 }
               >
                 Edit
               </button>
-              <ConfirmButton onConfirm={() => remove(t.id)} />
+              {t.enabled === 1 && (
+                <ConfirmButton onConfirm={() => disable(t.id)}>Disable</ConfirmButton>
+              )}
             </div>
           </div>
         ))}
@@ -129,6 +134,16 @@ export default function RequestTypesTab() {
             />
             Competition (broadcast to every company in the category)
           </label>
+          {editing.id && (
+            <label className="hotline-row">
+              <input
+                type="checkbox"
+                checked={editing.enabled}
+                onChange={(e) => setEditing({ ...editing, enabled: e.target.checked })}
+              />
+              Enabled
+            </label>
+          )}
           <button className="login-button" onClick={save}>
             Save
           </button>

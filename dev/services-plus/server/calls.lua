@@ -183,7 +183,7 @@ RegisterCallback("getCallHistory", function(source, reply, page)
         FROM phone_services_plus_calls c
         JOIN phone_services_plus_numbers n ON n.id = c.number_id
         WHERE c.company_id = ?
-        ORDER BY c.created_at DESC
+        ORDER BY c.created_at DESC, c.id DESC
         LIMIT ?, ?
     ]], { company.id, ClampPage(page) * Config.PageSize.calls, Config.PageSize.calls })
 
@@ -198,11 +198,12 @@ RegisterCallback("getMyCalls", function(source, reply, page)
     if not number then return reply({}) end
 
     local rows = MySQL.query.await([[
-        SELECT c.id, c.state, c.created_at, co.name AS company_name, co.icon AS company_icon
+        SELECT c.id, c.state, c.created_at, c.company_id, c.number_id,
+               co.name AS company_name, co.icon AS company_icon
         FROM phone_services_plus_calls c
         JOIN phone_services_plus_companies co ON co.id = c.company_id
         WHERE c.customer_number = ?
-        ORDER BY c.created_at DESC
+        ORDER BY c.created_at DESC, c.id DESC
         LIMIT ?, ?
     ]], { number, ClampPage(page) * Config.PageSize.calls, Config.PageSize.calls })
 

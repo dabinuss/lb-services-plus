@@ -64,7 +64,19 @@ end
 ---@param categoryId number
 ---@return table[]
 function Requests.GetTypesForCategory(categoryId)
-    return typesByCategory[categoryId] or {}
+    -- typesByCategory holds every row, disabled ones included - GetType(id)
+    -- below still needs to resolve those for requests that were already
+    -- created before a type got disabled (plan review round 3 §9). This is
+    -- the one place that specifically offers types for *new* requests, so
+    -- it's the one place that filters them out.
+    local all = typesByCategory[categoryId] or {}
+    local out = {}
+
+    for i = 1, #all do
+        if all[i].enabled == 1 then out[#out + 1] = all[i] end
+    end
+
+    return out
 end
 
 -- requestId -> { sources, createdAt }. `sources` is who got a Sibling-NUI
@@ -161,6 +173,13 @@ RegisterCallback("createRequest", function(source, reply, companyId, requestType
         local n = tonumber(passengerCount)
         if n and n == math.floor(n) and n >= 1 and n <= Config.MaxPassengerCount then
             finalPassengerCount = n
+        else
+            -- A required field silently failing validation used to still
+            -- create the request, just with SQL NULL where the count
+            -- should be (plan review round 3 §6) - a manipulated -5, empty,
+            -- or 999999 all went through unnoticed instead of being
+            -- rejected outright.
+            return reply(false)
         end
     end
 
@@ -296,16 +315,49 @@ RegisterCallback("completeRequest", function(source, reply, requestId)
         "UPDATE phone_services_plus_requests SET status = 'completed' WHERE id = ? AND employee_identifier = ? AND status = 'active'",
         { requestId, Framework.GetIdentifier(source) }
     )
+
+    -- Whichever surface (overlay or in-app Requests tab) this came from,
+    -- push the same event so the Sibling-NUI overlay clears its active card
+    -- too regardless of which one Complete was actually pressed on (plan
+    -- review round 3 §2, mirrors the requestAccepted pattern above).
+    if affected > 0 then
+        TriggerClientEvent("services-plus:client:requestEnded", source, requestId)
+    end
+
     reply(affected > 0)
 end)
 
 RegisterCallback("cancelRequest", function(source, reply, requestId)
+    -- Grabbed before the update so a customer-initiated cancel can still
+    -- resolve who the request was assigned to (source here is the customer,
+    -- not the employee, in that case).
+    local row = MySQL.single.await(
+        "SELECT employee_identifier, company_id FROM phone_services_plus_requests WHERE id = ?", { requestId }
+    )
+
     local affected = MySQL.update.await(
         "UPDATE phone_services_plus_requests SET status = 'cancelled' WHERE id = ? AND status IN ('open', 'active') AND (requester_number = ? OR employee_identifier = ?)",
         { requestId, Framework.GetPhoneNumber(source), Framework.GetIdentifier(source) }
     )
 
-    if affected > 0 then clearNotifications(requestId) end
+    if affected > 0 then
+        clearNotifications(requestId)
+
+        -- The assigned employee's overlay/active card needs clearing even
+        -- when a *customer* is the one who cancelled - `source` alone only
+        -- covers the employee's own surfaces when they cancel their own
+        -- accepted request (plan review round 3 §2).
+        if row and row.employee_identifier then
+            local company = row.company_id and Companies.GetById(row.company_id)
+            local employeeSource = company and Employees.FindSourceByIdentifier(company.job, row.employee_identifier)
+
+            if employeeSource then
+                TriggerClientEvent("services-plus:client:requestEnded", employeeSource, requestId)
+            end
+        end
+
+        TriggerClientEvent("services-plus:client:requestEnded", source, requestId)
+    end
 
     reply(affected > 0)
 end)
@@ -322,7 +374,7 @@ RegisterCallback("getCompanyRequests", function(source, reply, page)
         FROM phone_services_plus_requests r
         JOIN phone_services_plus_request_types t ON t.id = r.request_type_id
         WHERE r.company_id = ? OR (r.company_id IS NULL AND t.category_id = ? AND r.status = 'open')
-        ORDER BY (r.status = 'open') DESC, r.created_at DESC
+        ORDER BY (r.status = 'open') DESC, r.created_at DESC, r.id DESC
         LIMIT ?, ?
     ]], { company.id, company.category_id, ClampPage(page) * Config.PageSize.requests, Config.PageSize.requests })
 
@@ -339,13 +391,14 @@ RegisterCallback("getMyRequests", function(source, reply, page)
     if not number then return reply({}) end
 
     local rows = MySQL.query.await([[
-        SELECT r.id, r.status, r.created_at, t.name AS type_name, t.icon AS type_icon,
+        SELECT r.id, r.status, r.created_at, r.description, r.passenger_count,
+               t.name AS type_name, t.icon AS type_icon,
                c.name AS company_name, c.icon AS company_icon
         FROM phone_services_plus_requests r
         JOIN phone_services_plus_request_types t ON t.id = r.request_type_id
         LEFT JOIN phone_services_plus_companies c ON c.id = r.company_id
         WHERE r.requester_number = ?
-        ORDER BY r.created_at DESC
+        ORDER BY r.created_at DESC, r.id DESC
         LIMIT ?, ?
     ]], { number, ClampPage(page) * Config.PageSize.requests, Config.PageSize.requests })
 

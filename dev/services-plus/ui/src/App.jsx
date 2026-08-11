@@ -23,6 +23,11 @@ export default function App() {
   const [theme, setTheme] = useState('light')
   const [tab, setTab] = useState('services')
   const [bootstrap, setBootstrap] = useState(null)
+  // Lifted out of CompanyScreen so switching away to another tab and back
+  // doesn't unmount-and-lose it - the fake-login should only ever end via
+  // an explicit logout, going off-duty, or a real reload (switching to a
+  // different phone number), never just from leaving the Company tab.
+  const [companySession, setCompanySession] = useState(null)
   const [conversation, setConversation] = useState(null)
   const [numberPicker, setNumberPicker] = useState(null) // { mode: 'call'|'message', company, numbers }
   const [requestSheet, setRequestSheet] = useState(null) // { company }
@@ -112,6 +117,9 @@ export default function App() {
         <CompanyScreen
           employee={bootstrap.employee}
           companies={bootstrap.companies}
+          session={companySession}
+          onLogin={setCompanySession}
+          onLogout={() => setCompanySession(null)}
           onOpenConversation={setConversation}
         />
       )}

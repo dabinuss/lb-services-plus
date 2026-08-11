@@ -101,20 +101,34 @@ adminCallback("admin:createCompany", function(_, reply, data)
     local existing = MySQL.scalar.await("SELECT id FROM phone_services_plus_companies WHERE job = ?", { data.job })
     if existing then return reply(false) end
 
-    local companyId = MySQL.insert.await([[
-        INSERT INTO phone_services_plus_companies (job, name, category_id, icon, background, boss_grade, call_routing, request_routing)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    ]], {
-        data.job, data.name, data.categoryId or json.null, data.icon or json.null, data.background or json.null,
-        tonumber(data.bossGrade) or 100, Config.DefaultCallRouting, Config.DefaultRequestRouting,
+    -- One transaction (plan review round 3 §8, matches this project's own
+    -- rule on grouped writes): the company row and its mandatory Main
+    -- number either both land or neither does. Previously a UNIQUE-number
+    -- collision on the second insert alone could leave a company behind
+    -- with no Main Phone Number at all - something the plan requires every
+    -- company to have. LAST_INSERT_ID() picks up the first insert's id
+    -- within the same transaction/connection, no need to thread it through
+    -- manually.
+    local success = MySQL.transaction.await({
+        {
+            [[
+                INSERT INTO phone_services_plus_companies (job, name, category_id, icon, background, boss_grade, call_routing, request_routing)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ]],
+            {
+                data.job, data.name, data.categoryId or json.null, data.icon or json.null, data.background or json.null,
+                tonumber(data.bossGrade) or 100, Config.DefaultCallRouting, Config.DefaultRequestRouting,
+            },
+        },
+        {
+            "INSERT INTO phone_services_plus_numbers (company_id, label, number, is_main) VALUES (LAST_INSERT_ID(), 'Main', ?, 1)",
+            { data.mainNumber },
+        },
     })
 
-    if not companyId then return reply(false) end
+    if not success then return reply(false) end
 
-    MySQL.insert.await(
-        "INSERT INTO phone_services_plus_numbers (company_id, label, number, is_main) VALUES (?, 'Main', ?, 1)",
-        { companyId, data.mainNumber }
-    )
+    local companyId = MySQL.scalar.await("SELECT id FROM phone_services_plus_companies WHERE job = ?", { data.job })
 
     Companies.Reload()
     reply({ id = companyId })
@@ -232,12 +246,13 @@ end)
 
 adminCallback("admin:updateRequestType", function(_, reply, data)
     local params = requestTypeParams(data)
+    params[#params + 1] = data.enabled ~= false and 1 or 0
     params[#params + 1] = data.id
 
     MySQL.update.await([[
         UPDATE phone_services_plus_request_types SET
             category_id = ?, name = ?, icon = ?, description = ?, location_mode = ?,
-            passenger_count = ?, description_enabled = ?, competition_enabled = ?
+            passenger_count = ?, description_enabled = ?, competition_enabled = ?, enabled = ?
         WHERE id = ?
     ]], params)
 
@@ -245,8 +260,15 @@ adminCallback("admin:updateRequestType", function(_, reply, data)
     reply(true)
 end)
 
+-- Soft-delete only (plan review round 3 §9): request_type_id on
+-- phone_services_plus_requests is ON DELETE CASCADE, so physically
+-- deleting a type here used to take its entire request history - open,
+-- active, and completed alike - down with it. Disabling instead just hides
+-- it from Requests.GetTypesForCategory (new requests), while historical
+-- rows and Requests.GetType(id) for already-open ones keep working exactly
+-- as before.
 adminCallback("admin:deleteRequestType", function(_, reply, data)
-    MySQL.update.await("DELETE FROM phone_services_plus_request_types WHERE id = ?", { data.id })
+    MySQL.update.await("UPDATE phone_services_plus_request_types SET enabled = 0 WHERE id = ?", { data.id })
     Requests.Reload()
     reply(true)
 end)

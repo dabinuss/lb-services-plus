@@ -106,6 +106,15 @@ function Companies.GetNumbers(companyId)
     return numbersByCompany[companyId] or {}
 end
 
+---@return table[]
+function Companies.GetAll()
+    local list = {}
+    for _, company in pairs(companiesById) do
+        list[#list + 1] = company
+    end
+    return list
+end
+
 ---@param categoryId number
 ---@return table[]
 function Companies.GetByCategory(categoryId)

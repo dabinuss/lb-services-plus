@@ -4,10 +4,12 @@ import CompanyDashboard from './company/CompanyDashboard.jsx'
 
 // Company area (plan §17-19): fake-login is purely cosmetic, the server
 // re-checks employment regardless. Everything past login is phase 2 -
-// CompanyDashboard and its tabs.
-export default function CompanyScreen({ employee, companies, onOpenConversation }) {
+// CompanyDashboard and its tabs. `session` is owned by App.jsx, not here -
+// it needs to survive this component unmounting when the user switches to
+// another bottom-nav tab and back (stays logged in until logout, going
+// off-duty, or a real reload/phone switch - never just from leaving this tab).
+export default function CompanyScreen({ employee, companies, session, onLogin, onLogout, onOpenConversation }) {
   const [loggingIn, setLoggingIn] = useState(false)
-  const [session, setSession] = useState(null)
 
   const company = companies.find((c) => c.id === employee.companyId)
 
@@ -16,7 +18,7 @@ export default function CompanyScreen({ employee, companies, onOpenConversation 
     await new Promise((r) => setTimeout(r, 900))
     const result = await fetchNui('companyLogin', { companyId: employee.companyId })
     setLoggingIn(false)
-    if (result) setSession(result)
+    if (result) onLogin(result)
   }
 
   if (!session) {
@@ -37,6 +39,7 @@ export default function CompanyScreen({ employee, companies, onOpenConversation 
     <CompanyDashboard
       session={session}
       employee={employee}
+      onLogout={onLogout}
       onOpenConversation={onOpenConversation}
     />
   )

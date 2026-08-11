@@ -43,6 +43,30 @@ local function onDutyCountForJob(job)
     return count
 end
 
+--- How many on-duty employees of `job` (other than `excludeSource`) have
+--- `numberId` *genuinely* stored as active - not the sole-employee virtual
+--- force below, the real per-employee flag. Used to stop the main-hotline
+--- guarantee from being a paper rule: without this, "at least 2 on duty"
+--- alone was treated as "someone's covering it", even when neither of them
+--- ever actually turned it on (plan review round 3 §3).
+---@param job string
+---@param numberId number
+---@param excludeSource? number
+---@return number
+local function realHolderCount(job, numberId, excludeSource)
+    local staff = Framework.GetPlayersByJob(job)
+    local count = 0
+
+    for i = 1, #staff do
+        local s = staff[i]
+        if s ~= excludeSource and Framework.GetOnDuty(s) and state[s] and state[s].hotlines[numberId] == true then
+            count = count + 1
+        end
+    end
+
+    return count
+end
+
 ---@param source number
 ---@return "available"|"pause"|"busy"
 function Employees.GetStatus(source)
@@ -92,11 +116,17 @@ function Employees.GetHotlineOptions(source, companyId)
         local n = numbers[i]
         local active = Employees.IsHotlineActive(source, companyId, n.id, onDutyCount)
 
+        -- Mirrors ToggleHotline's own block condition (plan review round 3
+        -- §3) so the UI greys this out whenever turning it off would
+        -- actually be rejected, not just in the onDutyCount <= 1 case.
+        local locked = n.is_main == 1 and active
+            and (onDutyCount <= 1 or realHolderCount(job.name, n.id, source) == 0)
+
         out[#out + 1] = {
             numberId = n.id,
             label = n.label,
             active = active,
-            locked = n.is_main == 1 and active and onDutyCount <= 1,
+            locked = locked,
         }
     end
 
@@ -112,13 +142,68 @@ function Employees.ToggleHotline(source, numberId, active)
     local company = job and Companies.GetByJob(job.name)
     if not company then return false, "not_employee" end
 
-    if not active and numberId == mainNumberId(company.id) and onDutyCountForJob(job.name) <= 1 then
-        return false, "sole_employee"
+    if not active and numberId == mainNumberId(company.id) then
+        -- Blocking this needs more than "someone else happens to be on
+        -- duty" (plan review round 3 §3) - it has to be someone who
+        -- actually has Main active, or two employees who never touched the
+        -- toggle could each turn "the other one must have it" off in turn
+        -- and leave zero real dispatchers.
+        if onDutyCountForJob(job.name) <= 1 or realHolderCount(job.name, numberId, source) == 0 then
+            return false, "sole_employee"
+        end
     end
 
     ensure(source).hotlines[numberId] = active or nil
 
     return true
+end
+
+--- Keeps the sole-employee Main Hotline guarantee (plan §21) a real, stored
+--- fact instead of one only computed on demand: whenever exactly one
+--- employee of `job` is on duty, their Main flag is materialized as true so
+--- it survives the moment a second employee joins (who never had to touch
+--- the toggle either) - see ToggleHotline above and IsHotlineActive's own
+--- still-virtual force below, which this keeps in sync with (plan review
+--- round 3 §3).
+---@param job string
+function Employees.SyncMainHotline(job)
+    local company = Companies.GetByJob(job)
+    local mainId = company and mainNumberId(company.id)
+    if not mainId then return end
+
+    local staff = Framework.GetPlayersByJob(job)
+    local sole, count = nil, 0
+
+    for i = 1, #staff do
+        if Framework.GetOnDuty(staff[i]) then
+            count = count + 1
+            sole = staff[i]
+        end
+    end
+
+    if count == 1 then
+        ensure(sole).hotlines[mainId] = true
+    end
+end
+
+--- Finds the currently-connected source for a stable identifier, scoped to
+--- one job so this stays a lookup over a handful of people instead of a
+--- 600-player scan (uses the same job index as everything else). Needed
+--- when an event about a request has to reach whichever employee it's
+--- assigned to, not just whoever triggered the RPC (plan review round 3 §2).
+---@param job string
+---@param identifier string
+---@return number? source
+function Employees.FindSourceByIdentifier(job, identifier)
+    local staff = Framework.GetPlayersByJob(job)
+
+    for i = 1, #staff do
+        if Framework.GetIdentifier(staff[i]) == identifier then
+            return staff[i]
+        end
+    end
+
+    return nil
 end
 
 --- Whether `source` alone is eligible for a call/request on `numberId`: on
@@ -221,4 +306,25 @@ end
 
 AddEventHandler("playerDropped", function()
     state[source] = nil
+end)
+
+-- Belt-and-suspenders self-heal for the sole-employee Main Hotline
+-- guarantee (plan §21, plan review round 3 §3). The toggleDuty callback
+-- (see main.lua) materializes it immediately for the common case, but a
+-- disconnect while on duty has no equally reliable hook - by the time
+-- playerDropped fires, the framework's own player object is often already
+-- gone, so there's nothing there to reliably re-derive "which job just
+-- lost its only covered dispatcher" from. This closes that gap (and any
+-- other missed transition) within at most 30s instead of leaving Main
+-- silently uncovered until someone happens to toggle duty again - the
+-- same reasoning as the JobIndex self-heal in framework.lua.
+CreateThread(function()
+    while true do
+        Wait(30000)
+
+        local companies = Companies.GetAll()
+        for i = 1, #companies do
+            Employees.SyncMainHotline(companies[i].job)
+        end
+    end
 end)

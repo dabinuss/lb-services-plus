@@ -44,13 +44,28 @@ CreateThread(function()
         Wait(500)
     end
 
+    -- lb-phone's own recommendation: give it a moment after reporting
+    -- "started" to finish its own boot before registering against it
+    -- (plan review round 3 §12).
+    Wait(500)
     registerApp()
 end)
 
 -- lb-phone forgets dynamically-registered apps across its own restarts.
 AddEventHandler("onResourceStart", function(resource)
     if resource == "lb-phone" then
+        Wait(500)
         registerApp()
+    end
+end)
+
+-- Symmetric cleanup (plan review round 3 §12): without this, restarting
+-- just services-plus (not lb-phone) leaves a stale AddCustomApp
+-- registration behind - lb-phone has no other way to find out this app is
+-- gone until its own next restart.
+AddEventHandler("onResourceStop", function(resource)
+    if resource == resourceName then
+        pcall(function() exports["lb-phone"]:RemoveCustomApp(Config.App.identifier) end)
     end
 end)
 
@@ -67,25 +82,64 @@ end
 -- main number rings via lb-phone's native company-job call system (see
 -- server/calls.lua's doc comment), which has no idea about Services+'s own
 -- Busy/Pause state - ToggleCompanyCalls is the only integration point
--- lb-phone exposes for that (plan review round 2 §3). This is deliberately
--- only ever called right after the player's own setStatus/toggleDuty
--- action, computed from that exact result, so it can't silently stomp some
--- unrelated reason company calls were toggled off - it just always sets
--- lb-phone's toggle to match what Services+ itself just set.
+-- lb-phone exposes for that (plan review round 2 §3). Only ever called
+-- right after the player's own setStatus/toggleDuty action (computed from
+-- that exact result) or on bootstrap - never speculatively.
 --
 -- Trade-off worth knowing: ToggleCompanyCalls is global per player, not
 -- scoped to a single job/company - a player also employed at a *native*
 -- lb-phone company will have its calls paused too while Busy/Pause/off-duty
 -- here. There is no finer-grained native hook to avoid that.
-local function syncNativeCompanyCalls(result)
+--
+-- nil = Services+ isn't currently holding calls off. Non-nil = the native
+-- state the player actually had *before* Services+ forced it off, to be
+-- restored verbatim instead of hard-setting `true` (plan review round 3
+-- §10) - lb-phone's toggle is a player preference, not a Services+-owned
+-- flag, so a player who deliberately turned company calls off, then went
+-- Busy and back Available in Services+, must not have them silently
+-- switched back on.
+local priorNativeCompanyCalls = nil
+
+-- Only the very first bootstrap after this script started is allowed to
+-- fall back to a hard `true` below - later app-opens with nothing left to
+-- restore mean the player is simply still available with nothing Services+
+-- ever touched, and must not have their own lb-phone toggle overridden
+-- just for reopening the app (plan review round 3 §10).
+local hasSyncedOnce = false
+
+---@param result table
+---@param isBootstrap? boolean
+local function syncNativeCompanyCalls(result, isBootstrap)
     if type(result) ~= "table" then return end
 
     local shouldReceive = result.onDuty == true and result.status == "available"
-    pcall(function() exports["lb-phone"]:ToggleCompanyCalls(shouldReceive) end)
+
+    pcall(function()
+        if shouldReceive then
+            if priorNativeCompanyCalls ~= nil then
+                exports["lb-phone"]:ToggleCompanyCalls(priorNativeCompanyCalls)
+                priorNativeCompanyCalls = nil
+            elseif isBootstrap and not hasSyncedOnce then
+                -- Nothing to restore on the very first sync - most likely a
+                -- fresh client state (a services-plus restart while Busy
+                -- left the native toggle off with no memory of what it was
+                -- before). Rather than leave calls silently stuck off
+                -- forever, resync to the straightforward default once.
+                exports["lb-phone"]:ToggleCompanyCalls(true)
+            end
+        elseif priorNativeCompanyCalls == nil then
+            priorNativeCompanyCalls = exports["lb-phone"]:GetCompanyCallsStatus()
+            exports["lb-phone"]:ToggleCompanyCalls(false)
+        end
+    end)
+
+    if isBootstrap then hasSyncedOnce = true end
 end
 
 RegisterNUICallback("bootstrap", function(_, cb)
-    cb(bridge("bootstrap"))
+    local result = bridge("bootstrap")
+    if result and result.employee then syncNativeCompanyCalls(result.employee, true) end
+    cb(result)
 end)
 
 RegisterNUICallback("companyLogin", function(data, cb)

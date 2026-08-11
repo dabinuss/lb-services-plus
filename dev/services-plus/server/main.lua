@@ -110,7 +110,7 @@ RegisterCallback("getCompanyConversations", function(source, reply, page)
         FROM phone_services_plus_channels c
         JOIN phone_services_plus_numbers n ON n.id = c.number_id
         WHERE n.company_id = ? AND n.mailbox_enabled = 1 AND c.archived_by_company = 0
-        ORDER BY c.updated_at DESC
+        ORDER BY c.updated_at DESC, c.id DESC
         LIMIT ?, ?
     ]], { company.id, ClampPage(page) * Config.PageSize.messages, Config.PageSize.messages })
 
@@ -192,13 +192,21 @@ RegisterCallback("updateNumberSettings", function(source, reply, numberId, setti
     end
     if not number then return reply(false) end
 
-    -- the main number's calls/messages can never be fully disabled (plan §8)
+    -- the main number's calls/messages/mailbox can never be fully disabled
+    -- (plan §8) - mailbox included, otherwise Main would fall into the same
+    -- "messages enabled but invisible to the company" hole as below.
     local callsEnabled = number.is_main == 1 or (settings.callsEnabled == true)
-    local messagesEnabled = number.is_main == 1 or (settings.messagesEnabled == true)
+    local mailboxEnabled = number.is_main == 1 or (settings.mailboxEnabled == true)
+
+    -- Mailbox OFF must mean Messages OFF for this number (plan review round
+    -- 3 §4): messages_enabled alone used to let a customer keep sending
+    -- into a channel no employee mailbox would ever surface, a silent
+    -- black hole instead of an honest "can't message this number".
+    local messagesEnabled = mailboxEnabled and (number.is_main == 1 or settings.messagesEnabled == true)
 
     MySQL.update.await(
         "UPDATE phone_services_plus_numbers SET calls_enabled = ?, messages_enabled = ?, mailbox_enabled = ? WHERE id = ?",
-        { callsEnabled and 1 or 0, messagesEnabled and 1 or 0, settings.mailboxEnabled and 1 or 0, numberId }
+        { callsEnabled and 1 or 0, messagesEnabled and 1 or 0, mailboxEnabled and 1 or 0, numberId }
     )
 
     Companies.Reload()
@@ -239,6 +247,11 @@ RegisterCallback("toggleDuty", function(source, reply, state)
 
     if not Framework.SetDuty(source, state == true) then return reply(false) end
 
+    -- Materialize the sole-employee Main Hotline guarantee immediately on
+    -- both directions of a duty change - going on duty alone, or leaving
+    -- someone else newly alone by going off duty (plan review round 3 §3).
+    Employees.SyncMainHotline(job.name)
+
     reply({ ok = true, onDuty = state == true, status = Employees.GetStatus(source) })
 end)
 
@@ -247,7 +260,11 @@ end)
 -- ---------------------------------------------------------------------------
 RegisterCallback("openConversation", function(source, reply, numberId, page)
     local number = MySQL.single.await("SELECT * FROM phone_services_plus_numbers WHERE id = ?", { numberId })
-    if not number or number.messages_enabled ~= 1 then return reply(false) end
+    -- Mailbox OFF means Messages OFF for this number too (plan review round
+    -- 3 §4) - checked here as well, not just enforced at write-time in
+    -- updateNumberSettings, so it also holds for any row written before
+    -- that rule existed.
+    if not number or number.messages_enabled ~= 1 or number.mailbox_enabled ~= 1 then return reply(false) end
 
     -- Companies.GetById only ever holds enabled=1 companies, so this also
     -- covers a disabled company rejecting new conversations (plan review).
@@ -261,7 +278,7 @@ RegisterCallback("openConversation", function(source, reply, numberId, page)
     if not channel then return reply(false) end
 
     local messages = MySQL.query.await(
-        "SELECT id, sender, content, created_at FROM phone_services_plus_messages WHERE channel_id = ? ORDER BY created_at DESC LIMIT ?, ?",
+        "SELECT id, sender, content, created_at FROM phone_services_plus_messages WHERE channel_id = ? ORDER BY created_at DESC, id DESC LIMIT ?, ?",
         { channel.id, ClampPage(page) * Config.PageSize.messages, Config.PageSize.messages }
     )
 
@@ -277,7 +294,7 @@ RegisterCallback("sendMessage", function(source, reply, channelId, content)
     if not channel then return reply(false) end
 
     local number = MySQL.single.await("SELECT * FROM phone_services_plus_numbers WHERE id = ?", { channel.number_id })
-    if not number or number.messages_enabled ~= 1 then return reply(false) end
+    if not number or number.messages_enabled ~= 1 or number.mailbox_enabled ~= 1 then return reply(false) end
 
     local company = Companies.GetById(number.company_id)
     if not company or company.messages_enabled ~= 1 then return reply(false) end
@@ -354,7 +371,7 @@ RegisterCallback("getMessages", function(source, reply, channelId, page)
     if not owns then return reply(false) end
 
     local messages = MySQL.query.await(
-        "SELECT id, sender, content, created_at FROM phone_services_plus_messages WHERE channel_id = ? ORDER BY created_at DESC LIMIT ?, ?",
+        "SELECT id, sender, content, created_at FROM phone_services_plus_messages WHERE channel_id = ? ORDER BY created_at DESC, id DESC LIMIT ?, ?",
         { channelId, ClampPage(page) * Config.PageSize.messages, Config.PageSize.messages }
     )
 
@@ -373,7 +390,7 @@ RegisterCallback("getActivity", function(source, reply, page)
         FROM phone_services_plus_channels c
         JOIN phone_services_plus_numbers n ON n.id = c.number_id
         WHERE c.contact_number = ? AND c.archived_by_contact = 0
-        ORDER BY c.updated_at DESC
+        ORDER BY c.updated_at DESC, c.id DESC
         LIMIT ?, ?
     ]], { contactNumber, ClampPage(page) * Config.PageSize.activity, Config.PageSize.activity })
 

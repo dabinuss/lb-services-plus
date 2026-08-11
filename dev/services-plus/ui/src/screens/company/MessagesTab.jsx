@@ -1,14 +1,33 @@
 import { useEffect, useState } from 'react'
 import { fetchNui } from '../../lib/nui.js'
 
+// Mirrors Config.PageSize.messages in shared/config.lua - a page shorter
+// than this means there's nothing left to load (plan §68, plan review
+// round 3 §11).
+const PAGE_SIZE = 25
+
 // Employee-side inbox (plan §37), grouped implicitly by number label since
 // each mailbox-enabled number gets its own conversations.
 export default function MessagesTab({ onOpenConversation }) {
   const [conversations, setConversations] = useState(null)
+  const [hasMore, setHasMore] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
 
-  useEffect(() => {
-    fetchNui('getCompanyConversations', { page: 0 }).then((r) => r && setConversations(r))
-  }, [])
+  const loadPage = (page) => {
+    if (page > 0) setLoadingMore(true)
+
+    fetchNui('getCompanyConversations', { page }).then((r) => {
+      setLoadingMore(false)
+      if (!r) return
+
+      setConversations((prev) => (page === 0 ? r : [...(prev || []), ...r]))
+      setHasMore(r.length === PAGE_SIZE)
+    })
+  }
+
+  useEffect(() => loadPage(0), [])
+
+  const loadMore = () => loadPage(Math.floor((conversations?.length || 0) / PAGE_SIZE))
 
   return (
     <div className="tab-panel">
@@ -32,6 +51,12 @@ export default function MessagesTab({ onOpenConversation }) {
           </div>
         ))}
       </div>
+
+      {hasMore && (
+        <button className="sheet-option" onClick={loadMore} disabled={loadingMore}>
+          {loadingMore ? 'Loading…' : 'Load more'}
+        </button>
+      )}
     </div>
   )
 }
