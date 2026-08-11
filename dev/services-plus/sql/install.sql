@@ -75,6 +75,11 @@ CREATE TABLE IF NOT EXISTS `phone_services_plus_channels` (
     `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     PRIMARY KEY (`id`),
+    -- One channel per (number, contact) - closes the race where two
+    -- concurrent openConversation calls could otherwise create two channels
+    -- for the same pair (plan review §7). getOrCreateChannel() relies on
+    -- this via INSERT IGNORE.
+    UNIQUE KEY `number_contact` (`number_id`, `contact_number`),
     FOREIGN KEY (`number_id`) REFERENCES `phone_services_plus_numbers`(`id`) ON DELETE CASCADE
 ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -180,3 +185,44 @@ ALTER TABLE `phone_services_plus_companies`
     ADD COLUMN IF NOT EXISTS `admin_calls_allowed` TINYINT(1) NOT NULL DEFAULT 1 AFTER `requests_enabled`,
     ADD COLUMN IF NOT EXISTS `admin_messages_allowed` TINYINT(1) NOT NULL DEFAULT 1 AFTER `admin_calls_allowed`,
     ADD COLUMN IF NOT EXISTS `admin_requests_allowed` TINYINT(1) NOT NULL DEFAULT 1 AFTER `admin_messages_allowed`;
+
+-- ---------------------------------------------------------------------------
+-- Post-review hardening migration. Safe to re-run. Requires MariaDB
+-- 10.0.2+ for "ADD ... IF NOT EXISTS" (MySQL 8.0.29+ only covers ADD COLUMN,
+-- not ADD INDEX/KEY - on plain MySQL, drop the "IF NOT EXISTS" here if it
+-- errors and just run this block once).
+-- ---------------------------------------------------------------------------
+
+-- De-duplicate any channels created before the UNIQUE constraint below
+-- existed (a race in getOrCreateChannel could produce two channels for the
+-- same number+contact pair) - keeps the oldest one, reassigns its messages.
+UPDATE `phone_services_plus_messages` m
+    JOIN `phone_services_plus_channels` dup ON dup.id = m.channel_id
+    JOIN `phone_services_plus_channels` keep
+        ON keep.number_id = dup.number_id
+        AND keep.contact_number = dup.contact_number
+        AND keep.id < dup.id
+SET m.channel_id = keep.id;
+
+DELETE dup FROM `phone_services_plus_channels` dup
+    JOIN `phone_services_plus_channels` keep
+        ON keep.number_id = dup.number_id
+        AND keep.contact_number = dup.contact_number
+        AND keep.id < dup.id;
+
+ALTER TABLE `phone_services_plus_channels`
+    ADD UNIQUE KEY IF NOT EXISTS `number_contact` (`number_id`, `contact_number`),
+    ADD INDEX IF NOT EXISTS `contact_archived_updated` (`contact_number`, `archived_by_contact`, `updated_at`),
+    ADD INDEX IF NOT EXISTS `number_archived_updated` (`number_id`, `archived_by_company`, `updated_at`);
+
+ALTER TABLE `phone_services_plus_messages`
+    ADD INDEX IF NOT EXISTS `channel_created` (`channel_id`, `created_at`);
+
+ALTER TABLE `phone_services_plus_calls`
+    ADD INDEX IF NOT EXISTS `company_created` (`company_id`, `created_at`),
+    ADD INDEX IF NOT EXISTS `customer_created` (`customer_number`, `created_at`);
+
+ALTER TABLE `phone_services_plus_requests`
+    ADD INDEX IF NOT EXISTS `company_status_created` (`company_id`, `status`, `created_at`),
+    ADD INDEX IF NOT EXISTS `requester_created` (`requester_number`, `created_at`),
+    ADD INDEX IF NOT EXISTS `employee_status` (`employee_identifier`, `status`);

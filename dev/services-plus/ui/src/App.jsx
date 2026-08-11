@@ -8,7 +8,7 @@ import ActivityScreen from './screens/ActivityScreen.jsx'
 import CompanyScreen from './screens/CompanyScreen.jsx'
 import AdminScreen from './screens/AdminScreen.jsx'
 import ConversationScreen from './screens/ConversationScreen.jsx'
-import { fetchNui, getSettings, onSettingsChange, createCall, devMode } from './lib/nui.js'
+import { fetchNui, getSettings, onSettingsChange, onNuiEvent, createCall, devMode } from './lib/nui.js'
 
 import './App.css'
 
@@ -26,6 +26,7 @@ export default function App() {
   const [conversation, setConversation] = useState(null)
   const [numberPicker, setNumberPicker] = useState(null) // { mode: 'call'|'message', company, numbers }
   const [requestSheet, setRequestSheet] = useState(null) // { company }
+  const [incomingMessage, setIncomingMessage] = useState(null)
 
   useEffect(() => {
     if (devMode) {
@@ -42,6 +43,13 @@ export default function App() {
 
   useEffect(() => {
     fetchNui('bootstrap').then(setBootstrap)
+  }, [])
+
+  // Realtime delta for an already-open conversation (plan review §15) -
+  // the actual merge-into-open-conversation happens in ConversationScreen,
+  // this just routes the push to whichever one (if any) is currently open.
+  useEffect(() => {
+    onNuiEvent('newMessage', (data) => setIncomingMessage(data))
   }, [])
 
   const visibleTabs = TABS.filter((t) => !t.requires || bootstrap?.[t.requires])
@@ -132,7 +140,12 @@ export default function App() {
       )}
 
       {conversation && (
-        <ConversationScreen target={conversation} myNumber={bootstrap?.myNumber} onClose={() => setConversation(null)} />
+        <ConversationScreen
+          target={conversation}
+          myNumber={bootstrap?.myNumber}
+          incoming={incomingMessage}
+          onClose={() => setConversation(null)}
+        />
       )}
 
       {numberPicker && (

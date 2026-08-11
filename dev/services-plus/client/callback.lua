@@ -7,6 +7,11 @@
 local pending = {}
 local nextRequestId = 0
 
+-- A resource restart, a dropped response, or a server-side error the
+-- callback never explicitly replies to would otherwise leave the calling
+-- NUI request (and whatever `await`-ed it) hanging forever (plan review §13).
+local TIMEOUT_MS = 10000
+
 RegisterNetEvent("services-plus:client:callbackResponse", function(requestId, ok, ...)
     local promiseObj = pending[requestId]
     if not promiseObj then return end
@@ -25,6 +30,15 @@ function ServerCallback(name, ...)
     pending[requestId] = promiseObj
 
     TriggerServerEvent("services-plus:server:callback", name, requestId, ...)
+
+    CreateThread(function()
+        Wait(TIMEOUT_MS)
+
+        if pending[requestId] then
+            pending[requestId] = nil
+            promiseObj:resolve({ false, "timeout" })
+        end
+    end)
 
     local result = Citizen.Await(promiseObj)
     return table.unpack(result)

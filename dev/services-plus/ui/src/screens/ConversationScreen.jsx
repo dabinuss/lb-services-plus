@@ -5,7 +5,7 @@ import { fetchNui } from '../lib/nui.js'
 // (numberId, no channel yet) or by reopening an Activity entry (channelId
 // already known). Behaviour intentionally mirrors native LB-Phone messaging
 // (plan §37).
-export default function ConversationScreen({ target, myNumber, onClose }) {
+export default function ConversationScreen({ target, myNumber, incoming, onClose }) {
   const [channelId, setChannelId] = useState(target.channelId ?? null)
   const [messages, setMessages] = useState(null)
   const [text, setText] = useState('')
@@ -21,6 +21,17 @@ export default function ConversationScreen({ target, myNumber, onClose }) {
       setMessages([...result.messages].reverse())
     })
   }, [target])
+
+  // Realtime delta (plan review §15): a message sent by the other side while
+  // this exact conversation is open lands here instead of waiting for a
+  // reopen. Own sent messages are appended locally by send() already, and
+  // the server only ever relays to the *other* party, so no duplicates.
+  useEffect(() => {
+    if (incoming && channelId && incoming.channelId === channelId) {
+      setMessages((prev) => (prev?.some((m) => m.id === incoming.message.id) ? prev : [...(prev || []), incoming.message]))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [incoming])
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight })

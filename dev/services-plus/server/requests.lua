@@ -67,11 +67,14 @@ function Requests.GetTypesForCategory(categoryId)
     return typesByCategory[categoryId] or {}
 end
 
--- requestId -> sources that got a Sibling-NUI notification for it, so an
--- accept from any one of them (or from the in-app Requests tab) can tell the
--- others to dismiss theirs (plan §45.3). Ephemeral - cleared once the
--- request leaves 'open'.
+-- requestId -> { sources, createdAt }. `sources` is who got a Sibling-NUI
+-- notification for it, so an accept from any one of them (or from the
+-- in-app Requests tab) can tell the others to dismiss theirs (plan §45.3).
+-- Ephemeral - cleared once the request leaves 'open', or by the pure-RAM TTL
+-- sweep below for requests nobody ever acted on (plan review §2: no DB
+-- query per entry, `createdAt` is enough to expire this purely in memory).
 local notifiedSources = {}
+local OPEN_REQUEST_TTL_MS = 30 * 60000
 
 --- Notifies every eligible employee for `company`'s request routing mode via
 --- the Sibling-NUI request card (plan §42-44) and returns how many were
@@ -105,11 +108,15 @@ local function distribute(company, requestType, request)
         y = request.y,
     }
 
-    notifiedSources[request.id] = notifiedSources[request.id] or {}
+    local entry = notifiedSources[request.id]
+    if not entry then
+        entry = { sources = {}, createdAt = GetGameTimer() }
+        notifiedSources[request.id] = entry
+    end
 
     for i = 1, #eligible do
         TriggerClientEvent("services-plus:client:requestNotification", eligible[i], payload)
-        table.insert(notifiedSources[request.id], eligible[i])
+        table.insert(entry.sources, eligible[i])
     end
 
     return #eligible
@@ -120,13 +127,13 @@ end
 ---@param requestId number
 ---@param except number? a source to skip (the one who just accepted it)
 local function clearNotifications(requestId, except)
-    local sources = notifiedSources[requestId]
+    local entry = notifiedSources[requestId]
     notifiedSources[requestId] = nil
-    if not sources then return end
+    if not entry then return end
 
-    for i = 1, #sources do
-        if sources[i] ~= except then
-            TriggerClientEvent("services-plus:client:requestClaimed", sources[i], requestId)
+    for i = 1, #entry.sources do
+        if entry.sources[i] ~= except then
+            TriggerClientEvent("services-plus:client:requestClaimed", entry.sources[i], requestId)
         end
     end
 end
@@ -205,6 +212,16 @@ RegisterCallback("acceptRequest", function(source, reply, requestId)
         or (request.company_id == nil and requestType.category_id == company.category_id)
     if not allowed then return reply(false) end
 
+    -- Re-check the exact same eligibility distribute() used (plan review
+    -- §9) - duty, pause/busy and hotline can all have changed since the
+    -- notification went out, and a direct RPC call must not be able to skip
+    -- them just because the client never actually received one.
+    local mainNumber = Companies.GetMainNumber(company.id)
+    local requireHotline = company.request_routing == "hotline"
+    if not mainNumber or not Employees.IsEligible(source, company.id, mainNumber.id, requireHotline) then
+        return reply(false)
+    end
+
     local identifier = Framework.GetIdentifier(source)
 
     -- Atomic first-accept-wins (plan §15): the WHERE status = 'open' means
@@ -234,6 +251,26 @@ RegisterCallback("acceptRequest", function(source, reply, requestId)
         x = request.pos_x,
         y = request.pos_y,
     })
+end)
+
+-- Rehydration for the Sibling-NUI overlay (plan review §14): a client
+-- resource restart loses `active` from memory even though the request is
+-- still 'active' in the database, so the overlay asks for it back on load.
+RegisterCallback("getActiveRequest", function(source, reply)
+    local identifier = Framework.GetIdentifier(source)
+
+    local request = MySQL.single.await([[
+        SELECT r.id AS requestId, r.pos_x AS x, r.pos_y AS y, r.passenger_count AS passengerCount, r.description,
+               t.name AS typeName, c.name AS companyName, c.icon AS companyIcon
+        FROM phone_services_plus_requests r
+        JOIN phone_services_plus_request_types t ON t.id = r.request_type_id
+        LEFT JOIN phone_services_plus_companies c ON c.id = r.company_id
+        WHERE r.employee_identifier = ? AND r.status = 'active'
+        ORDER BY r.updated_at DESC
+        LIMIT 1
+    ]], { identifier })
+
+    reply(request)
 end)
 
 RegisterCallback("completeRequest", function(source, reply, requestId)
@@ -269,7 +306,7 @@ RegisterCallback("getCompanyRequests", function(source, reply, page)
         WHERE r.company_id = ? OR (r.company_id IS NULL AND t.category_id = ? AND r.status = 'open')
         ORDER BY (r.status = 'open') DESC, r.created_at DESC
         LIMIT ?, ?
-    ]], { company.id, company.category_id, (page or 0) * Config.PageSize.requests, Config.PageSize.requests })
+    ]], { company.id, company.category_id, ClampPage(page) * Config.PageSize.requests, Config.PageSize.requests })
 
     rows = rows or {}
     for i = 1, #rows do
@@ -292,7 +329,7 @@ RegisterCallback("getMyRequests", function(source, reply, page)
         WHERE r.requester_number = ?
         ORDER BY r.created_at DESC
         LIMIT ?, ?
-    ]], { number, (page or 0) * Config.PageSize.requests, Config.PageSize.requests })
+    ]], { number, ClampPage(page) * Config.PageSize.requests, Config.PageSize.requests })
 
     reply(rows or {})
 end)
@@ -303,16 +340,31 @@ CreateThread(function()
 end)
 
 -- Safety net for requests nobody ever accepted or cancelled (player went
--- offline, etc.) - without this, notifiedSources would grow forever.
+-- offline, the request type doesn't get picked up, ...). Two independent,
+-- constant-cost operations - never a query per tracked request (plan review
+-- §2): a pure in-memory sweep over `notifiedSources` to stop tracking and
+-- tell clients to dismiss, and one single batched UPDATE to actually expire
+-- the stale rows in the database (which also self-heals any request that
+-- lost its RAM tracking entirely, e.g. across a resource restart).
+CreateThread(function()
+    while true do
+        Wait(60000)
+
+        local now = GetGameTimer()
+        for requestId, entry in pairs(notifiedSources) do
+            if now - entry.createdAt > OPEN_REQUEST_TTL_MS then
+                clearNotifications(requestId)
+            end
+        end
+    end
+end)
+
 CreateThread(function()
     while true do
         Wait(5 * 60000)
 
-        for requestId in pairs(notifiedSources) do
-            local status = MySQL.scalar.await("SELECT status FROM phone_services_plus_requests WHERE id = ?", { requestId })
-            if status ~= "open" then
-                clearNotifications(requestId)
-            end
-        end
+        MySQL.update(
+            "UPDATE phone_services_plus_requests SET status = 'cancelled' WHERE status = 'open' AND created_at < NOW() - INTERVAL 30 MINUTE"
+        )
     end
 end)

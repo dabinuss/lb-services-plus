@@ -110,12 +110,31 @@ function Employees.ToggleHotline(source, numberId, active)
     return true
 end
 
---- Everyone eligible to receive a call/request for a given number: on duty,
---- not paused/busy. `requireHotline` additionally filters to staff who
---- activated that specific number - always true for secondary numbers
---- (that's the entire point of a hotline), optional for the main number
---- (a "random" main-number call/request should consider everyone on duty,
---- not just whoever ticked the main-hotline box).
+--- Whether `source` alone is eligible for a call/request on `numberId`: on
+--- duty, not paused/busy, and - if required - has that number's hotline
+--- active. The single-source version of GetEligible() below, and also what
+--- acceptRequest() re-checks against so a direct RPC call can't accept a
+--- request the caller was never actually notified about (plan review §9).
+---@param source number
+---@param companyId number
+---@param numberId number
+---@param requireHotline? boolean
+---@return boolean
+function Employees.IsEligible(source, companyId, numberId, requireHotline)
+    if not Framework.GetOnDuty(source) then return false end
+
+    local status = Employees.GetStatus(source)
+    if status == "pause" or status == "busy" then return false end
+
+    return not requireHotline or Employees.IsHotlineActive(source, companyId, numberId)
+end
+
+--- Everyone eligible to receive a call/request for a given number.
+--- `requireHotline` additionally filters to staff who activated that
+--- specific number - always true for secondary numbers (that's the entire
+--- point of a hotline), optional for the main number (a "random" main-number
+--- call/request should consider everyone on duty, not just whoever ticked
+--- the main-hotline box).
 ---@param companyId number
 ---@param numberId number
 ---@param requireHotline? boolean
@@ -128,15 +147,8 @@ function Employees.GetEligible(companyId, numberId, requireHotline)
     local eligible = {}
 
     for i = 1, #staff do
-        local source = staff[i]
-
-        if Framework.GetOnDuty(source) then
-            local status = Employees.GetStatus(source)
-            local hotlineOk = not requireHotline or Employees.IsHotlineActive(source, companyId, numberId)
-
-            if status ~= "pause" and status ~= "busy" and hotlineOk then
-                eligible[#eligible + 1] = source
-            end
+        if Employees.IsEligible(staff[i], companyId, numberId, requireHotline) then
+            eligible[#eligible + 1] = staff[i]
         end
     end
 

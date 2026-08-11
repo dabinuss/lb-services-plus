@@ -44,12 +44,47 @@ Everything in the plan is implemented except: Skill/priority routing,
 round-robin, and other systems the plan explicitly excludes (§71) - those
 were never in scope.
 
+**Post-review hardening pass** (600+ player scale + security):
+
+- `server/framework.lua`'s `JobIndex`: `Framework.GetPlayersByJob()` used to
+  scan every online player on every availability/eligibility check. It's now
+  a maintained `job -> sources` index (framework job/duty events + a
+  self-healing side effect of `Framework.GetJob()`), so a 600-player server
+  costs a lookup over the handful of actual employees, not a full scan.
+- Server-side rate limiting (`server/callback.lua`): a token bucket per
+  player, global plus tighter per-action limits for `sendMessage`,
+  `createRequest`, `resolveCall`, admin writes, etc. - the NUI callback
+  NetEvent previously trusted whatever action name a client sent, with no
+  limit at all.
+- Fixed an authorization gap in `archiveConversation` (no employment check -
+  any client with a guessed `channelId` could mark a company chat archived)
+  and in `resolveCall` (a DB row was written before any real call happened,
+  letting a modified client spam the call history table).
+- `notifiedSources` cleanup and the pending-call sweep no longer run a
+  database query per tracked item in a loop - both are pure in-memory TTL
+  sweeps now, backed by a single batched `UPDATE` instead.
+- Added the composite indexes messages/channels/calls/requests actually
+  query by, a `UNIQUE(number_id, contact_number)` constraint (closes a
+  double-channel race), company `messages_enabled`/`enabled` enforcement,
+  a re-check of duty/status/hotline in `acceptRequest` (not just job/
+  category), a client-side callback timeout, and no longer forwarding raw
+  server error text to the client.
+- Fixed `Standalone.GetJob` reading `company.bossGrade` (always nil) instead
+  of `company.boss_grade` - a standalone-assigned boss was never recognized
+  as one. `Framework.IsBoss` (using the company's configurable `boss_grade`)
+  is now used everywhere instead of the framework-native `job.isBoss`
+  heuristic, including for ESX/QB/QBX.
+- New messages now push into an already-open conversation via
+  `SendCustomAppMessage` instead of only updating on next reopen.
+
 ## Setup
 
 1. Import [`sql/install.sql`](sql/install.sql) (`CREATE TABLE IF NOT EXISTS` /
    `ADD COLUMN IF NOT EXISTS` throughout, so re-running it after an update is
    always safe - needs MySQL 8.0.29+ / MariaDB 10.0.2+ for the phase 3
-   migration block at the bottom).
+   migration block at the bottom, and MariaDB for the post-review hardening
+   block's `ADD INDEX IF NOT EXISTS`/`ADD UNIQUE KEY IF NOT EXISTS` - on
+   plain MySQL, drop the `IF NOT EXISTS` there and run it once).
 2. `cd ui && npm install && npm run build`.
 3. Make sure `resources/services-plus` on your dev server is a **junction**
    pointing at this `dev/services-plus` folder, not a copy - see the repo

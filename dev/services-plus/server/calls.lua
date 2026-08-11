@@ -20,8 +20,13 @@
     written up front, so it only ever reflects calls that actually happened.
 ]]
 
-local pendingByNumber = {} -- customerNumber -> { historyId, expires }
-local pendingByCallId = {} -- callId -> historyId
+-- customerNumber -> { companyId, numberId, expires }. Deliberately holds NO
+-- database row yet - a call is only ever logged once lb-phone confirms one
+-- actually started (see lb-phone:newCall below). Otherwise a modified client
+-- could call resolveCall repeatedly and never place the real call, filling
+-- the history table with rows for calls that never happened (plan review §5).
+local pendingByNumber = {}
+local pendingByCallId = {} -- callId -> historyId, once a row does exist
 
 ---@param companyId number
 ---@param numberId number
@@ -49,6 +54,14 @@ RegisterCallback("resolveCall", function(source, reply, companyId, numberId)
     local customerNumber = Framework.GetPhoneNumber(source)
     if not customerNumber then return reply(false) end
 
+    -- One in-flight resolve per customer number at a time - also closes the
+    -- "call resolveCall in a loop, never actually call" spam vector, on top
+    -- of the general rate limit (server/callback.lua).
+    local existing = pendingByNumber[customerNumber]
+    if existing and existing.expires > GetGameTimer() then
+        return reply(false)
+    end
+
     local isMain = number.is_main == 1
     local target
 
@@ -67,19 +80,16 @@ RegisterCallback("resolveCall", function(source, reply, companyId, numberId)
         target = { number = employeeNumber }
     end
 
-    local historyId = MySQL.insert.await(
-        "INSERT INTO phone_services_plus_calls (company_id, number_id, customer_number, state) VALUES (?, ?, ?, 'ringing')",
-        { companyId, numberId, customerNumber }
-    )
-
-    pendingByNumber[customerNumber] = { historyId = historyId, expires = GetGameTimer() + 20000 }
+    pendingByNumber[customerNumber] = { companyId = companyId, numberId = numberId, expires = GetGameTimer() + 20000 }
 
     reply(target)
 end)
 
 -- ---------------------------------------------------------------------------
 -- Passive call logging via lb-phone's own events (see server/calls.lua doc
--- comment above for why Services+ doesn't place calls itself).
+-- comment above for why Services+ doesn't place calls itself). The history
+-- row is only ever created here, once lb-phone confirms a call genuinely
+-- started - never speculatively at resolveCall time.
 -- ---------------------------------------------------------------------------
 
 AddEventHandler("lb-phone:newCall", function(call)
@@ -87,7 +97,13 @@ AddEventHandler("lb-phone:newCall", function(call)
     if not pending then return end
 
     pendingByNumber[call.caller.number] = nil
-    pendingByCallId[call.callId] = pending.historyId
+
+    local historyId = MySQL.insert.await(
+        "INSERT INTO phone_services_plus_calls (company_id, number_id, customer_number, state) VALUES (?, ?, ?, 'ringing')",
+        { pending.companyId, pending.numberId, call.caller.number }
+    )
+
+    pendingByCallId[call.callId] = historyId
 end)
 
 AddEventHandler("lb-phone:callAnswered", function(call)
@@ -112,8 +128,10 @@ AddEventHandler("lb-phone:callEnded", function(call)
     )
 end)
 
--- Calls that never actually started (createCall failed, player disconnected
--- mid-dial, ...) would otherwise sit at 'ringing' forever.
+-- Resolved-but-never-placed calls (client dropped the app before dialing,
+-- or lied about it) would otherwise sit in pendingByNumber forever. No
+-- database row exists for these yet, so this is a pure in-memory sweep -
+-- not a single query involved (plan review §2's "no DB call in a loop").
 CreateThread(function()
     while true do
         Wait(15000)
@@ -121,10 +139,23 @@ CreateThread(function()
         local now = GetGameTimer()
         for number, pending in pairs(pendingByNumber) do
             if pending.expires < now then
-                MySQL.update("UPDATE phone_services_plus_calls SET state = 'missed', ended_at = NOW() WHERE id = ? AND state = 'ringing'", { pending.historyId })
                 pendingByNumber[number] = nil
             end
         end
+    end
+end)
+
+-- Calls that DID start but never got a matching callEnded (server crash,
+-- lb-phone restart mid-call, ...) would otherwise sit at 'ringing' forever.
+-- One batched UPDATE, not a query per row - and it self-heals even rows
+-- pendingByCallId lost track of across a Services+ restart.
+CreateThread(function()
+    while true do
+        Wait(10 * 60000)
+
+        MySQL.update(
+            "UPDATE phone_services_plus_calls SET state = 'missed', ended_at = NOW() WHERE state = 'ringing' AND created_at < NOW() - INTERVAL 1 HOUR"
+        )
     end
 end)
 
@@ -143,7 +174,7 @@ RegisterCallback("getCallHistory", function(source, reply, page)
         WHERE c.company_id = ?
         ORDER BY c.created_at DESC
         LIMIT ?, ?
-    ]], { company.id, (page or 0) * Config.PageSize.calls, Config.PageSize.calls })
+    ]], { company.id, ClampPage(page) * Config.PageSize.calls, Config.PageSize.calls })
 
     reply(rows or {})
 end)
@@ -162,7 +193,7 @@ RegisterCallback("getMyCalls", function(source, reply, page)
         WHERE c.customer_number = ?
         ORDER BY c.created_at DESC
         LIMIT ?, ?
-    ]], { number, (page or 0) * Config.PageSize.calls, Config.PageSize.calls })
+    ]], { number, ClampPage(page) * Config.PageSize.calls, Config.PageSize.calls })
 
     reply(rows or {})
 end)

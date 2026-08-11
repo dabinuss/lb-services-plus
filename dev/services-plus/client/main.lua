@@ -28,6 +28,17 @@ local function registerApp()
     end
 end
 
+-- Realtime delta for an already-open conversation (plan review §15).
+-- SendCustomAppMessage is a client-only export - it always targets the
+-- caller's own NUI - so the server just tells this one client to relay it.
+RegisterNetEvent("services-plus:client:newMessage", function(payload)
+    exports["lb-phone"]:SendCustomAppMessage(Config.App.identifier, {
+        type = "newMessage",
+        channelId = payload.channelId,
+        message = payload,
+    })
+end)
+
 CreateThread(function()
     while GetResourceState("lb-phone") ~= "started" do
         Wait(500)

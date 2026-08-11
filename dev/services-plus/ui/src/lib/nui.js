@@ -341,6 +341,18 @@ export function onSettingsChange(cb) {
   window.onSettingsChange(cb)
 }
 
+/**
+ * Live push from the server via client/main.lua's SendCustomAppMessage relay
+ * (plan review §15) - e.g. a new message landing in an already-open
+ * conversation, without waiting for the user to reopen it.
+ * @param {string} event
+ * @param {(data: any) => void} cb
+ */
+export function onNuiEvent(event, cb) {
+  if (devMode || !window.onNuiEvent) return
+  window.onNuiEvent(event, cb)
+}
+
 /** @param {{ company?: string, number?: string, videoCall?: boolean, hideNumber?: boolean }} options */
 export function createCall(options) {
   if (devMode || !window.createCall) {

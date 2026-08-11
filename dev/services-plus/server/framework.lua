@@ -11,7 +11,7 @@
         label      = "Police",       -- display label
         grade      = 4,               -- numeric grade
         gradeLabel = "Chief",         -- display label for the grade
-        isBoss     = true,            -- boss/management grade for this job
+        isBoss     = true,            -- framework-native boss heuristic (fallback only - see Framework.IsBoss)
     }
 ]]
 
@@ -48,52 +48,111 @@ CreateThread(function()
     print(("[services-plus] framework adapter: %s"):format(Framework.name))
 end)
 
+-- ---------------------------------------------------------------------------
+-- Job index (perf §63-64): a 600-player server cannot afford to call
+-- GetPlayers() + Framework.GetJob() for every player on every availability
+-- check, call, or request - that turns one app bootstrap into thousands of
+-- framework lookups. This keeps a maintained `job -> sources` index instead,
+-- so GetPlayersByJob() is a plain table read.
+--
+-- Kept fresh three ways: an initial one-time build over currently-connected
+-- players at resource start, framework job/duty-change events (best effort -
+-- harmless if a given framework doesn't fire a particular one), and as a
+-- side effect of Framework.GetJob() itself, so any normal call anywhere in
+-- the app self-heals the index for that one player regardless of events.
+-- ---------------------------------------------------------------------------
+local JobIndex = { byJob = {}, bySource = {} }
+
+function JobIndex.Set(source, job)
+    if JobIndex.bySource[source] == job then return end
+
+    local old = JobIndex.bySource[source]
+    if old and JobIndex.byJob[old] then
+        JobIndex.byJob[old][source] = nil
+    end
+
+    JobIndex.bySource[source] = job
+
+    if job then
+        JobIndex.byJob[job] = JobIndex.byJob[job] or {}
+        JobIndex.byJob[job][source] = true
+    end
+end
+
+function JobIndex.Remove(source)
+    JobIndex.Set(source, nil)
+end
+
+---@param job string
+---@return number[]
+function JobIndex.Get(job)
+    local sources = {}
+    local bucket = JobIndex.byJob[job]
+
+    if bucket then
+        for source in pairs(bucket) do
+            sources[#sources + 1] = source
+        end
+    end
+
+    return sources
+end
+
 ---@param source number
 ---@return { name: string, label: string, grade: number, gradeLabel: string, isBoss: boolean }?
 function Framework.GetJob(source)
+    local result
+
     if Framework.name == "esx" then
         local xPlayer = esxObject and esxObject.GetPlayerFromId(source)
-        if not xPlayer then return nil end
 
-        local job = xPlayer.getJob and xPlayer.getJob() or xPlayer.job
+        if xPlayer then
+            local job = xPlayer.getJob and xPlayer.getJob() or xPlayer.job
 
-        return {
-            name = job.name,
-            label = job.label,
-            grade = job.grade,
-            gradeLabel = job.grade_label or job.grade_name or tostring(job.grade),
-            isBoss = job.grade_name == "boss" or job.grade == 100 or (type(job.grade) == "number" and job.grade >= 100),
-        }
+            result = {
+                name = job.name,
+                label = job.label,
+                grade = job.grade,
+                gradeLabel = job.grade_label or job.grade_name or tostring(job.grade),
+                isBoss = job.grade_name == "boss" or job.grade == 100 or (type(job.grade) == "number" and job.grade >= 100),
+            }
+        end
     elseif Framework.name == "qb" then
         local Player = qbObject and qbObject.Functions.GetPlayer(source)
-        if not Player then return nil end
 
-        local job = Player.PlayerData.job
+        if Player then
+            local job = Player.PlayerData.job
 
-        return {
-            name = job.name,
-            label = job.label,
-            grade = job.grade.level,
-            gradeLabel = job.grade.name,
-            isBoss = job.isboss == true,
-        }
+            result = {
+                name = job.name,
+                label = job.label,
+                grade = job.grade.level,
+                gradeLabel = job.grade.name,
+                isBoss = job.isboss == true,
+            }
+        end
     elseif Framework.name == "qbx" then
         local ok, player = pcall(function() return exports.qbx_core:GetPlayer(source) end)
-        if not ok or not player then return nil end
 
-        local job = player.PlayerData.job
+        if ok and player then
+            local job = player.PlayerData.job
 
-        return {
-            name = job.name,
-            label = job.label,
-            grade = job.grade.level,
-            gradeLabel = job.grade.name,
-            isBoss = job.isboss == true,
-        }
+            result = {
+                name = job.name,
+                label = job.label,
+                grade = job.grade.level,
+                gradeLabel = job.grade.name,
+                isBoss = job.isboss == true,
+            }
+        end
+    else
+        -- Standalone: Services+ keeps its own minimal job table.
+        result = Standalone.GetJob(source)
     end
 
-    -- Standalone: Services+ keeps its own minimal job table.
-    return Standalone.GetJob(source)
+    JobIndex.Set(source, result and result.name or nil)
+
+    return result
 end
 
 ---@param source number
@@ -146,19 +205,7 @@ end
 ---@param job string
 ---@return number[] sources of every online player currently on that job
 function Framework.GetPlayersByJob(job)
-    local sources = {}
-    local players = GetPlayers()
-
-    for i = 1, #players do
-        local src = tonumber(players[i])
-        local jobData = Framework.GetJob(src)
-
-        if jobData and jobData.name == job then
-            sources[#sources + 1] = src
-        end
-    end
-
-    return sources
+    return JobIndex.Get(job)
 end
 
 --- Sets a player's job/grade (plan §56-57: admin assigns a company leader by
@@ -169,27 +216,37 @@ end
 ---@param grade number
 ---@return boolean
 function Framework.SetJob(source, job, grade)
+    local ok
+
     if Framework.name == "esx" then
         local xPlayer = esxObject and esxObject.GetPlayerFromId(source)
-        if not xPlayer then return false end
-        xPlayer.setJob(job, grade)
-        return true
+        if xPlayer then
+            xPlayer.setJob(job, grade)
+            ok = true
+        end
     elseif Framework.name == "qb" then
         local Player = qbObject and qbObject.Functions.GetPlayer(source)
-        if not Player then return false end
-        return Player.Functions.SetJob(job, grade) ~= false
+        ok = Player ~= nil and Player.Functions.SetJob(job, grade) ~= false
     elseif Framework.name == "qbx" then
-        local ok, player = pcall(function() return exports.qbx_core:GetPlayer(source) end)
-        if not ok or not player then return false end
-        return player.Functions.SetJob(job, grade) ~= false
+        local success, player = pcall(function() return exports.qbx_core:GetPlayer(source) end)
+        ok = success and player ~= nil and player.Functions.SetJob(job, grade) ~= false
+    else
+        ok = Standalone.SetJob(source, job, grade)
     end
 
-    return Standalone.SetJob(source, job, grade)
+    if ok then JobIndex.Set(source, job) end -- don't wait for the framework's own event to fire
+
+    return ok == true
 end
 
+--- The authoritative "is this player the boss of `job`" check. Unlike the
+--- framework-native `Framework.GetJob(source).isBoss` heuristic, this always
+--- goes through the company's own configurable `boss_grade` when one is
+--- given - that field is admin-editable (plan §56) and should actually mean
+--- something for every framework, not just standalone.
 ---@param source number
 ---@param job string
----@param minGrade? number
+---@param minGrade? number falls back to the framework's own boss flag if omitted
 ---@return boolean
 function Framework.IsBoss(source, job, minGrade)
     local jobData = Framework.GetJob(source)
@@ -256,14 +313,13 @@ function Standalone.GetJob(source)
     end
 
     local company = Companies.GetByJob(job.name)
-    local gradeLabel = company and company.grades and company.grades[job.grade] or ("Grade " .. job.grade)
 
     return {
         name = job.name,
         label = company and company.name or job.name,
         grade = job.grade,
-        gradeLabel = gradeLabel,
-        isBoss = company and job.grade >= (company.bossGrade or 999) or false,
+        gradeLabel = "Grade " .. job.grade,
+        isBoss = company ~= nil and job.grade >= (company.boss_grade or 999),
     }
 end
 
@@ -290,5 +346,33 @@ CreateThread(function()
 
     for i = 1, #rows do
         Standalone.jobs[rows[i].identifier] = { name = rows[i].job, grade = rows[i].grade }
+    end
+end)
+
+-- ---------------------------------------------------------------------------
+-- Job index maintenance: framework job/duty-change events (best effort -
+-- listeners for events an inactive framework never fires are simply inert),
+-- disconnect cleanup, and the one-time initial build.
+-- ---------------------------------------------------------------------------
+
+AddEventHandler("esx:playerLoaded", function(playerId) Framework.GetJob(playerId) end)
+AddEventHandler("esx:setJob", function(source) Framework.GetJob(source) end)
+
+AddEventHandler("QBCore:Server:PlayerLoaded", function(player)
+    if player and player.PlayerData then Framework.GetJob(player.PlayerData.source) end
+end)
+AddEventHandler("QBCore:Server:OnPlayerUpdated", function(source, key)
+    if key == "job" then Framework.GetJob(source) end
+end)
+AddEventHandler("QBCore:Server:OnJobUpdate", function(source) Framework.GetJob(source) end)
+
+AddEventHandler("playerDropped", function() JobIndex.Remove(source) end)
+
+CreateThread(function()
+    Wait(2000) -- let the framework finish starting up first
+
+    local players = GetPlayers()
+    for i = 1, #players do
+        Framework.GetJob(tonumber(players[i]))
     end
 end)

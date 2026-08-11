@@ -5,6 +5,10 @@
     (plan §62).
 ]]
 
+--- Race-safe enough for this app's scale: a duplicate INSERT can only ever
+--- happen if two requests for the very same (number, contact) land within
+--- the same tick, and the UNIQUE constraint (see sql/install.sql) turns that
+--- into a harmless duplicate-key error we just recover from with a re-SELECT.
 local function getOrCreateChannel(numberId, contactNumber)
     local channel = MySQL.single.await(
         "SELECT * FROM phone_services_plus_channels WHERE number_id = ? AND contact_number = ?",
@@ -14,9 +18,17 @@ local function getOrCreateChannel(numberId, contactNumber)
     if channel then return channel end
 
     local id = MySQL.insert.await(
-        "INSERT INTO phone_services_plus_channels (number_id, contact_number) VALUES (?, ?)",
+        "INSERT IGNORE INTO phone_services_plus_channels (number_id, contact_number) VALUES (?, ?)",
         { numberId, contactNumber }
     )
+
+    if not id or id == 0 then
+        -- Someone else's concurrent request won the INSERT - read theirs back.
+        return MySQL.single.await(
+            "SELECT * FROM phone_services_plus_channels WHERE number_id = ? AND contact_number = ?",
+            { numberId, contactNumber }
+        )
+    end
 
     return { id = id, number_id = numberId, contact_number = contactNumber, last_message = nil }
 end
@@ -40,7 +52,7 @@ RegisterCallback("bootstrap", function(source, reply)
             jobLabel = job.label,
             grade = job.grade,
             gradeLabel = job.gradeLabel,
-            isBoss = job.isBoss,
+            isBoss = Framework.IsBoss(source, job.name, company.boss_grade),
             onDuty = Framework.GetOnDuty(source),
             status = Employees.GetStatus(source),
         } or nil,
@@ -95,7 +107,7 @@ RegisterCallback("getCompanyConversations", function(source, reply, page)
         WHERE n.company_id = ? AND n.mailbox_enabled = 1 AND c.archived_by_company = 0
         ORDER BY c.updated_at DESC
         LIMIT ?, ?
-    ]], { company.id, (page or 0) * Config.PageSize.messages, Config.PageSize.messages })
+    ]], { company.id, ClampPage(page) * Config.PageSize.messages, Config.PageSize.messages })
 
     reply(rows or {})
 end)
@@ -108,7 +120,7 @@ end)
 RegisterCallback("getCompanySettings", function(source, reply)
     local job = Framework.GetJob(source)
     local company = job and Companies.GetByJob(job.name)
-    if not company or not job.isBoss then return reply(false) end
+    if not company or not Framework.IsBoss(source, job.name, company.boss_grade) then return reply(false) end
 
     local numbers = Companies.GetNumbers(company.id)
     local numberList = {}
@@ -143,7 +155,7 @@ local ROUTING_MODES = { all = true, random = true, hotline = true }
 RegisterCallback("updateCompanySettings", function(source, reply, settings)
     local job = Framework.GetJob(source)
     local company = job and Companies.GetByJob(job.name)
-    if not company or not job.isBoss then return reply(false) end
+    if not company or not Framework.IsBoss(source, job.name, company.boss_grade) then return reply(false) end
 
     local callRouting = ROUTING_MODES[settings.callRouting] and settings.callRouting or company.call_routing
     local requestRouting = ROUTING_MODES[settings.requestRouting] and settings.requestRouting or company.request_routing
@@ -166,7 +178,7 @@ end)
 RegisterCallback("updateNumberSettings", function(source, reply, numberId, settings)
     local job = Framework.GetJob(source)
     local company = job and Companies.GetByJob(job.name)
-    if not company or not job.isBoss then return reply(false) end
+    if not company or not Framework.IsBoss(source, job.name, company.boss_grade) then return reply(false) end
 
     local number
     local numbers = Companies.GetNumbers(company.id)
@@ -206,13 +218,19 @@ RegisterCallback("companyLogin", function(source, reply, companyId)
             name = Framework.GetPlayerName(source),
             grade = job.grade,
             gradeLabel = job.gradeLabel,
-            isBoss = job.isBoss,
+            isBoss = Framework.IsBoss(source, job.name, company.boss_grade),
             onDuty = Framework.GetOnDuty(source),
         },
     })
 end)
 
 RegisterCallback("toggleDuty", function(source, reply, state)
+    -- Services+ duty is scoped to being an actual employee of one of our
+    -- companies - it must not become a universal duty switch for whatever
+    -- job the player happens to hold (that flips QB/QBX's real job.onduty).
+    local job = Framework.GetJob(source)
+    if not job or not Companies.GetByJob(job.name) then return reply(false) end
+
     reply(Framework.SetDuty(source, state == true))
 end)
 
@@ -223,14 +241,20 @@ RegisterCallback("openConversation", function(source, reply, numberId, page)
     local number = MySQL.single.await("SELECT * FROM phone_services_plus_numbers WHERE id = ?", { numberId })
     if not number or number.messages_enabled ~= 1 then return reply(false) end
 
+    -- Companies.GetById only ever holds enabled=1 companies, so this also
+    -- covers a disabled company rejecting new conversations (plan review).
+    local company = Companies.GetById(number.company_id)
+    if not company or company.messages_enabled ~= 1 then return reply(false) end
+
     local contactNumber = Framework.GetPhoneNumber(source)
     if not contactNumber then return reply(false) end
 
     local channel = getOrCreateChannel(numberId, contactNumber)
+    if not channel then return reply(false) end
 
     local messages = MySQL.query.await(
         "SELECT id, sender, content, created_at FROM phone_services_plus_messages WHERE channel_id = ? ORDER BY created_at DESC LIMIT ?, ?",
-        { channel.id, (page or 0) * Config.PageSize.messages, Config.PageSize.messages }
+        { channel.id, ClampPage(page) * Config.PageSize.messages, Config.PageSize.messages }
     )
 
     reply({ channelId = channel.id, contactNumber = contactNumber, messages = messages or {} })
@@ -247,15 +271,17 @@ RegisterCallback("sendMessage", function(source, reply, channelId, content)
     local number = MySQL.single.await("SELECT * FROM phone_services_plus_numbers WHERE id = ?", { channel.number_id })
     if not number or number.messages_enabled ~= 1 then return reply(false) end
 
+    local company = Companies.GetById(number.company_id)
+    if not company or company.messages_enabled ~= 1 then return reply(false) end
+
     local senderNumber = Framework.GetPhoneNumber(source)
     local isEmployee = senderNumber ~= channel.contact_number
 
     if isEmployee then
         -- must actually be an employee of the owning company to reply as the company
-        local company = Companies.GetById(number.company_id)
         local job = Framework.GetJob(source)
 
-        if not company or not job or job.name ~= company.job then
+        if not job or job.name ~= company.job then
             return reply(false)
         end
     end
@@ -269,27 +295,36 @@ RegisterCallback("sendMessage", function(source, reply, channelId, content)
 
     local payload = { channelId = channelId, id = messageId, sender = senderNumber, content = content }
 
+    -- Push straight into an already-open conversation (plan review §15).
+    -- SendCustomAppMessage only exists as a CLIENT export (it targets the
+    -- caller's own NUI, no destination source) - the server just tells the
+    -- right client(s) to do that locally, see client/main.lua.
     if isEmployee then
+        local ok, contactSource = pcall(function() return exports["lb-phone"]:GetSourceFromNumber(channel.contact_number) end)
+
+        if ok and contactSource then
+            TriggerClientEvent("services-plus:client:newMessage", contactSource, payload)
+        end
+
         exports["lb-phone"]:SendNotification(channel.contact_number, {
             app = Config.App.name,
-            title = Companies.GetById(number.company_id).name,
+            title = company.name,
             content = content,
         })
     else
-        local company = Companies.GetById(number.company_id)
-        if company then
-            local staff = Framework.GetPlayersByJob(company.job)
+        local staff = Framework.GetPlayersByJob(company.job)
 
-            for i = 1, #staff do
-                if Framework.GetOnDuty(staff[i]) then
-                    local staffNumber = Framework.GetPhoneNumber(staff[i])
-                    if staffNumber then
-                        exports["lb-phone"]:SendNotification(staffNumber, {
-                            app = Config.App.name,
-                            title = ("%s (%s)"):format(company.name, number.label),
-                            content = content,
-                        })
-                    end
+        for i = 1, #staff do
+            if Framework.GetOnDuty(staff[i]) then
+                local staffNumber = Framework.GetPhoneNumber(staff[i])
+                if staffNumber then
+                    TriggerClientEvent("services-plus:client:newMessage", staff[i], payload)
+
+                    exports["lb-phone"]:SendNotification(staffNumber, {
+                        app = Config.App.name,
+                        title = ("%s (%s)"):format(company.name, number.label),
+                        content = content,
+                    })
                 end
             end
         end
@@ -312,7 +347,7 @@ RegisterCallback("getMessages", function(source, reply, channelId, page)
 
     local messages = MySQL.query.await(
         "SELECT id, sender, content, created_at FROM phone_services_plus_messages WHERE channel_id = ? ORDER BY created_at DESC LIMIT ?, ?",
-        { channelId, (page or 0) * Config.PageSize.messages, Config.PageSize.messages }
+        { channelId, ClampPage(page) * Config.PageSize.messages, Config.PageSize.messages }
     )
 
     reply({ channelId = channelId, contactNumber = channel.contact_number, messages = messages or {} })
@@ -332,7 +367,7 @@ RegisterCallback("getActivity", function(source, reply, page)
         WHERE c.contact_number = ? AND c.archived_by_contact = 0
         ORDER BY c.updated_at DESC
         LIMIT ?, ?
-    ]], { contactNumber, (page or 0) * Config.PageSize.activity, Config.PageSize.activity })
+    ]], { contactNumber, ClampPage(page) * Config.PageSize.activity, Config.PageSize.activity })
 
     for i = 1, #(rows or {}) do
         local company = Companies.GetById(rows[i].company_id)
@@ -342,15 +377,25 @@ RegisterCallback("getActivity", function(source, reply, page)
     reply(rows or {})
 end)
 
+-- Same ownership rule as getMessages (plan review §4): either the contact
+-- themselves, or an actual current employee of the number's company - never
+-- just "not the contact".
 RegisterCallback("archiveConversation", function(source, reply, channelId)
     if not Config.AllowConversationDelete then return reply(false) end
 
     local channel = MySQL.single.await("SELECT * FROM phone_services_plus_channels WHERE id = ?", { channelId })
     if not channel then return reply(false) end
 
-    local contactNumber = Framework.GetPhoneNumber(source)
-    local column = contactNumber == channel.contact_number and "archived_by_contact" or "archived_by_company"
+    local number = MySQL.single.await("SELECT company_id FROM phone_services_plus_numbers WHERE id = ?", { channel.number_id })
+    local company = number and Companies.GetById(number.company_id)
+    local job = Framework.GetJob(source)
 
+    local isContact = Framework.GetPhoneNumber(source) == channel.contact_number
+    local isEmployee = company ~= nil and job ~= nil and job.name == company.job
+
+    if not isContact and not isEmployee then return reply(false) end
+
+    local column = isContact and "archived_by_contact" or "archived_by_company"
     MySQL.update("UPDATE phone_services_plus_channels SET " .. column .. " = 1 WHERE id = ?", { channelId })
     reply(true)
 end)

@@ -12,7 +12,8 @@
 
 local queue = {} -- pending request notifications, oldest first
 local shown = nil -- requestId currently displayed as a *pending* notification
-local active = nil -- { requestId, x, y } currently displayed as the *active* card
+local shownPayload = nil -- its full payload, kept so a NUI reload can re-show it exactly (plan review §14)
+local active = nil -- the full accept reply currently displayed as the *active* card
 local distanceThread = nil
 
 local function sendToOverlay(action, data)
@@ -26,6 +27,7 @@ local function showNext()
 
     local payload = table.remove(queue, 1)
     shown = payload.requestId
+    shownPayload = payload
     sendToOverlay("requestNotification", { payload = payload })
 end
 
@@ -43,6 +45,7 @@ RegisterNetEvent("services-plus:client:requestClaimed", function(requestId)
 
     if shown == requestId then
         shown = nil
+        shownPayload = nil
         sendToOverlay("dismiss", { requestId = requestId })
         showNext()
     end
@@ -72,7 +75,10 @@ RegisterNUICallback("overlayAction", function(data, cb)
     local requestId = data.requestId
 
     if action == "decline" then
-        if shown == requestId then shown = nil end
+        if shown == requestId then
+            shown = nil
+            shownPayload = nil
+        end
         showNext()
         return cb(true)
     end
@@ -82,6 +88,7 @@ RegisterNUICallback("overlayAction", function(data, cb)
 
         if ok and result then
             shown = nil
+            shownPayload = nil
             active = result
 
             if type(result.x) == "number" and type(result.y) == "number" then
@@ -91,7 +98,10 @@ RegisterNUICallback("overlayAction", function(data, cb)
             sendToOverlay("showActive", { payload = result })
             startDistanceUpdates()
         else
-            if shown == requestId then shown = nil end
+            if shown == requestId then
+                shown = nil
+                shownPayload = nil
+            end
             sendToOverlay("dismiss", { requestId = requestId })
         end
 
@@ -121,12 +131,20 @@ end)
 RegisterNUICallback("ready", function(_, cb)
     if active then
         sendToOverlay("showActive", { payload = active })
-    elseif shown then
-        -- the original payload isn't kept around; simplest correct recovery
-        -- is to just drop it and let the next distribution (or the in-app
-        -- Requests tab) pick it back up.
-        shown = nil
-        showNext()
+        startDistanceUpdates()
+    elseif shownPayload then
+        sendToOverlay("requestNotification", { payload = shownPayload })
+    else
+        -- Neither is tracked locally - most likely this client resource
+        -- itself just (re)started while the player had an active request.
+        -- The database still knows even though our in-memory state doesn't.
+        local ok, result = ServerCallback("getActiveRequest")
+
+        if ok and result then
+            active = result
+            sendToOverlay("showActive", { payload = active })
+            startDistanceUpdates()
+        end
     end
 
     cb(true)
