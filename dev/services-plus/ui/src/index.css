@@ -1,0 +1,51 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  width: 100%;
+}
+
+body {
+  font-family: 'Poppins', sans-serif;
+  overflow: hidden;
+  user-select: none;
+}
+
+button,
+input {
+  font-family: inherit;
+}
+
+button {
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+
+::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+/* Centers the app at native phone proportions when previewed in a normal
+   browser tab (npm run dev). In-game the phone's own frame provides this. */
+.dev-wrapper {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+
+  width: 23.4375rem;
+  height: 50.625rem;
+  max-height: 100vh;
+
+  border-radius: 2.5rem;
+  overflow: hidden;
+  box-shadow: 0 0 0 0.6rem #1c1c1e, 0 1rem 3rem rgba(0, 0, 0, 0.5);
+}

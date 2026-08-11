@@ -1,0 +1,30 @@
+/* Native-leaning light/dark tokens (plan §70). Toggled via data-theme on the
+   app root, same convention as lb-phone's own app template. */
+:root {
+  --accent: #0a84ff;
+  --danger: #ff453a;
+  --success: #30d158;
+  --warning: #ff9f0a;
+}
+
+[data-theme='light'] {
+  --background-primary: #f2f2f7;
+  --background-secondary: #ffffff;
+  --background-highlight: rgb(220, 220, 220);
+  --separator: rgba(60, 60, 67, 0.15);
+
+  --text-primary: #000000;
+  --text-secondary: #6b6b70;
+  --text-tertiary: #a5a5aa;
+}
+
+[data-theme='dark'] {
+  --background-primary: #000000;
+  --background-secondary: #121214;
+  --background-highlight: rgb(28, 28, 30);
+  --separator: rgba(84, 84, 88, 0.4);
+
+  --text-primary: #f2f2f7;
+  --text-secondary: #9a9a9e;
+  --text-tertiary: #6f6f6f;
+}

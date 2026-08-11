@@ -1,0 +1,13 @@
+.frame-notch {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+
+  width: 40%;
+  height: 1.7rem;
+
+  background: #1c1c1e;
+  border-radius: 0 0 1rem 1rem;
+  z-index: 100;
+}
