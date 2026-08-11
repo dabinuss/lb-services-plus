@@ -18,6 +18,12 @@ export default function ServicesScreen({ companies, categories, onCall, onMessag
     })
   }, [companies, search, activeCategory])
 
+  const categoryNames = useMemo(() => {
+    const map = new Map()
+    categories.forEach((cat) => map.set(cat.id, cat.name))
+    return map
+  }, [categories])
+
   return (
     <div className="screen services-screen">
       <div className="screen-header">Services</div>
@@ -29,20 +35,28 @@ export default function ServicesScreen({ companies, categories, onCall, onMessag
         onChange={(e) => setSearch(e.target.value)}
       />
 
-      <div className="category-row">
+      {/* Icon-only (plan review: text pills ran out of room / overflowed the
+          screen's safe interaction area) - `icon-only` scopes this sizing to
+          just this row, the same .category-chip class is reused as a plain
+          text pill for sub-tab navigation elsewhere (Admin, Company, Settings). */}
+      <div className="category-row icon-only">
         <button
           className={`category-chip${activeCategory === null ? ' active' : ''}`}
           onClick={() => setActiveCategory(null)}
+          aria-label="All"
+          title="All"
         >
-          All
+          🏢
         </button>
         {categories.map((cat) => (
           <button
             key={cat.id}
             className={`category-chip${activeCategory === cat.id ? ' active' : ''}`}
             onClick={() => setActiveCategory(activeCategory === cat.id ? null : cat.id)}
+            aria-label={cat.name}
+            title={cat.name}
           >
-            <CategoryIcon icon={cat.icon} /> {cat.name}
+            <CategoryIcon icon={cat.icon} />
           </button>
         ))}
       </div>
@@ -53,6 +67,7 @@ export default function ServicesScreen({ companies, categories, onCall, onMessag
           <CompanyCard
             key={company.id}
             company={company}
+            categoryName={categoryNames.get(company.categoryId)}
             onCall={() => onCall(company)}
             onMessage={() => onMessage(company)}
             onRequest={() => onRequest(company)}

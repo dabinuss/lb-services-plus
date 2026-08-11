@@ -94,11 +94,6 @@ export default function App() {
     createCall(target.company ? { company: target.company } : { number: target.number })
   }
 
-  const reopenActivity = (entry) => {
-    if (entry.kind !== 'message') return
-    setConversation({ channelId: entry.channel_id, title: entry.company?.name || 'Conversation', icon: entry.company?.icon })
-  }
-
   const content = !bootstrap ? (
     <div className="empty-state">Loading…</div>
   ) : (
@@ -112,7 +107,7 @@ export default function App() {
           onRequest={(company) => setRequestSheet({ company })}
         />
       )}
-      {tab === 'activity' && <ActivityScreen onOpen={reopenActivity} />}
+      {tab === 'activity' && <ActivityScreen onOpen={setConversation} />}
       {tab === 'company' && bootstrap.employee && (
         <CompanyScreen
           employee={bootstrap.employee}

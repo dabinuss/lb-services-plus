@@ -1,37 +1,51 @@
-// One row of the Services overview (plan §5-9). Buttons are only shown when
-// the company actually allows the action.
-export default function CompanyCard({ company, onCall, onMessage, onRequest }) {
+// One card of the Services overview (plan §5-9): a background/branding
+// image with the company's logo and name overlaid, an availability dot, and
+// a labeled action row below. Buttons only show when the company actually
+// allows that action.
+export default function CompanyCard({ company, categoryName, onCall, onMessage, onRequest }) {
   const canMessage = company.messagesEnabled && company.numbers.some((n) => n.messagesEnabled)
   const canCall = company.callsEnabled
   const canRequest = company.requestsEnabled
 
   return (
     <div className={`company-card${company.available ? '' : ' unavailable'}`}>
-      <div className="company-icon">
-        {company.icon ? <img src={company.icon} alt="" /> : <span>{company.name[0]}</span>}
-      </div>
+      <div
+        className="company-banner"
+        style={company.background ? { backgroundImage: `url(${company.background})` } : undefined}
+      >
+        <div className="company-banner-scrim" />
 
-      <div className="company-info">
-        <div className="company-name">{company.name}</div>
-        <div className={`company-status ${company.available ? 'available' : 'unavailable'}`}>
-          {company.available ? 'Available' : 'No employees available'}
+        <div className="company-logo">
+          {company.icon ? <img src={company.icon} alt="" /> : <span>{company.name[0]}</span>}
+          <span className={`company-status-dot ${company.available ? 'available' : 'unavailable'}`} />
+        </div>
+
+        <div className="company-banner-text">
+          <div className="company-name">{company.name}</div>
+          <div className="company-subtitle">
+            {categoryName || 'Company'}
+            {!company.available && ' · Unavailable'}
+          </div>
         </div>
       </div>
 
-      <div className="company-actions">
+      <div className="company-actions-row">
+        {canCall && (
+          <button className="company-action call" onClick={onCall}>
+            <span className="company-action-icon">📞</span>
+            Call
+          </button>
+        )}
         {canRequest && (
-          <button className="icon-button" onClick={onRequest} aria-label="Request">
-            📋
+          <button className="company-action request" onClick={onRequest}>
+            <span className="company-action-icon">📋</span>
+            Request
           </button>
         )}
         {canMessage && (
-          <button className="icon-button" onClick={onMessage} aria-label="Message">
-            💬
-          </button>
-        )}
-        {canCall && (
-          <button className="icon-button call" onClick={onCall} aria-label="Call">
-            📞
+          <button className="company-action message" onClick={onMessage}>
+            <span className="company-action-icon">💬</span>
+            Message
           </button>
         )}
       </div>
