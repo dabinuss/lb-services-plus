@@ -42,8 +42,8 @@ const fixtures = {
         messagesEnabled: true,
         requestsEnabled: true,
         numbers: [
-          { id: 1, label: 'Main Hotline', isMain: true, callsEnabled: true, messagesEnabled: true },
-          { id: 7, label: 'Dispatch', isMain: false, callsEnabled: true, messagesEnabled: true },
+          { id: 1, label: 'Main Hotline', number: '911', isMain: true, callsEnabled: true, messagesEnabled: true },
+          { id: 7, label: 'Dispatch', number: '5550911', isMain: false, callsEnabled: true, messagesEnabled: true },
         ],
       },
       {
@@ -57,7 +57,7 @@ const fixtures = {
         callsEnabled: true,
         messagesEnabled: true,
         requestsEnabled: true,
-        numbers: [{ id: 2, label: 'Main Hotline', isMain: true, callsEnabled: true, messagesEnabled: true }],
+        numbers: [{ id: 2, label: 'Main Hotline', number: '911', isMain: true, callsEnabled: true, messagesEnabled: true }],
       },
       {
         id: 3,
@@ -76,8 +76,8 @@ const fixtures = {
         messagesEnabled: true,
         requestsEnabled: true,
         numbers: [
-          { id: 3, label: 'Main Hotline', isMain: true, callsEnabled: true, messagesEnabled: true },
-          { id: 4, label: 'Workshop', isMain: false, callsEnabled: true, messagesEnabled: true },
+          { id: 3, label: 'Main Hotline', number: '911', isMain: true, callsEnabled: true, messagesEnabled: true },
+          { id: 4, label: 'Workshop', number: '5550199', isMain: false, callsEnabled: true, messagesEnabled: true },
         ],
       },
       {
@@ -92,8 +92,8 @@ const fixtures = {
         messagesEnabled: true,
         requestsEnabled: true,
         numbers: [
-          { id: 5, label: 'Main Hotline', isMain: true, callsEnabled: true, messagesEnabled: true },
-          { id: 6, label: 'Airport Line', isMain: false, callsEnabled: true, messagesEnabled: true },
+          { id: 5, label: 'Main Hotline', number: '5550188', isMain: true, callsEnabled: true, messagesEnabled: true },
+          { id: 6, label: 'Airport Line', number: '5550177', isMain: false, callsEnabled: true, messagesEnabled: true },
         ],
       },
     ],

@@ -181,6 +181,7 @@ function Companies.GetPublicList()
                         out[i] = {
                             id = n.id,
                             label = n.label,
+                            number = n.number,
                             isMain = n.is_main == 1,
                             callsEnabled = n.calls_enabled == 1,
                             messagesEnabled = n.messages_enabled == 1,

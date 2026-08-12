@@ -164,7 +164,8 @@ export default function App() {
                 numberPicker.mode === 'call' ? placeCall(numberPicker.company, n) : openConversationFor(numberPicker.company, n)
               }
             >
-              {n.label}
+              <span>{n.label}</span>
+              {n.number && <span className="sheet-option-number">{n.number}</span>}
             </button>
           ))}
         </Sheet>
