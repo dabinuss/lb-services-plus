@@ -409,23 +409,50 @@ async function fetchNuiFixture(action, data) {
       return paginate(fixtureCompanyConversations, data.page)
     case 'getCompanySettings':
       return fixtureSettings
-    case 'updateCompanySettings':
+    case 'updateCompanySettings': {
       fixtureSettings = { ...fixtureSettings, ...data.settings }
+      // Same fixture-sync gap as updateNumberSettings below - the Services
+      // overview reads company.callsEnabled/messagesEnabled/requestsEnabled
+      // from fixtures.bootstrap.companies, a separate object from
+      // fixtureSettings above, so a change here needs mirroring over there
+      // too or the overview's buttons never reflect it in devMode.
+      const loggedInCompany = fixtures.bootstrap.companies.find((c) => c.id === 3)
+      if (loggedInCompany) {
+        loggedInCompany.callsEnabled = fixtureSettings.callsEnabled
+        loggedInCompany.messagesEnabled = fixtureSettings.messagesEnabled
+        loggedInCompany.requestsEnabled = fixtureSettings.requestsEnabled
+      }
       return true
-    case 'updateNumberSettings':
+    }
+    case 'updateNumberSettings': {
       fixtureSettings = {
         ...fixtureSettings,
         numbers: fixtureSettings.numbers.map((n) => {
           if (n.id !== data.numberId) return n
           const next = { ...n, ...data.settings }
-          // Mirrors the server: Mailbox OFF also forces Messages OFF, main
-          // number's mailbox can never be turned off (server/main.lua).
-          next.mailboxEnabled = n.isMain || next.mailboxEnabled
-          next.messagesEnabled = next.mailboxEnabled && (n.isMain || next.messagesEnabled)
+          // Mirrors the server: only Calls stays forced on for the main
+          // number. One Messages toggle, not a separate Mailbox one -
+          // mailboxEnabled always follows messagesEnabled (server/main.lua).
+          next.callsEnabled = n.isMain || next.callsEnabled
+          next.mailboxEnabled = next.messagesEnabled
           return next
         }),
       }
+      // The Services overview (CompanyCard's Call/Message buttons) reads
+      // its own copy of this number from fixtures.bootstrap.companies, not
+      // from fixtureSettings above - two separate fixture datasets standing
+      // in for what's really the same DB row in production. Without this,
+      // a Settings change here would never show up over there in devMode.
+      const updated = fixtureSettings.numbers.find((n) => n.id === data.numberId)
+      if (updated) {
+        fixtures.bootstrap.companies.forEach((c) => {
+          c.numbers = c.numbers.map((n) =>
+            n.id === data.numberId ? { ...n, callsEnabled: updated.callsEnabled, messagesEnabled: updated.messagesEnabled } : n,
+          )
+        })
+      }
       return true
+    }
     case 'getRequestTypes':
       return fixtures.requestTypes[data.categoryId] || []
     case 'createRequest':

@@ -206,17 +206,23 @@ RegisterCallback("updateNumberSettings", function(source, reply, numberId, setti
     end
     if not number then return reply(false) end
 
-    -- the main number's calls/messages/mailbox can never be fully disabled
-    -- (plan §8) - mailbox included, otherwise Main would fall into the same
-    -- "messages enabled but invisible to the company" hole as below.
+    -- Only Calls stays forced on for the main number (plan review round 6
+    -- follow-up) - a company must always be reachable by call. Messages is
+    -- a real boss choice even for Main, same as any other number.
     local callsEnabled = number.is_main == 1 or (settings.callsEnabled == true)
-    local mailboxEnabled = number.is_main == 1 or (settings.mailboxEnabled == true)
 
-    -- Mailbox OFF must mean Messages OFF for this number (plan review round
-    -- 3 §4): messages_enabled alone used to let a customer keep sending
-    -- into a channel no employee mailbox would ever surface, a silent
-    -- black hole instead of an honest "can't message this number".
-    local messagesEnabled = mailboxEnabled and (number.is_main == 1 or settings.messagesEnabled == true)
+    -- One boss-facing toggle, not a separate Messages/Mailbox pair (plan
+    -- review round 6 follow-up) - mailbox_enabled and messages_enabled are
+    -- still two separate columns (mailbox controls whether an incoming chat
+    -- shows up in the company inbox at all, messages controls whether a
+    -- customer can send in the first place), kept apart specifically so a
+    -- customer can never keep sending into a channel no employee mailbox
+    -- would ever surface (plan review round 3 §4) - but a boss only ever
+    -- needs "can customers message this number or not", so this always
+    -- sets both to the same value instead of exposing that split as two
+    -- switches that visibly (and confusingly) moved each other.
+    local messagesEnabled = settings.messagesEnabled == true
+    local mailboxEnabled = messagesEnabled
 
     MySQL.update.await(
         "UPDATE phone_services_plus_numbers SET calls_enabled = ?, messages_enabled = ?, mailbox_enabled = ? WHERE id = ?",

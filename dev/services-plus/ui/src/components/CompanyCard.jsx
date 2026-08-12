@@ -3,8 +3,13 @@
 // a labeled action row below. Buttons only show when the company actually
 // allows that action.
 export default function CompanyCard({ company, categoryName, onCall, onMessage, onRequest }) {
+  // Call mirrors Message's own check - a company can have its calls toggle
+  // on overall while every individual number has calls switched off (boss
+  // settings, per number), same as messages/mailbox. Request has no
+  // per-number concept at all - requests aren't tied to a phone number, so
+  // company.requestsEnabled alone is already the complete picture.
   const canMessage = company.available && company.messagesEnabled && company.numbers.some((n) => n.messagesEnabled)
-  const canCall = company.available && company.callsEnabled
+  const canCall = company.available && company.callsEnabled && company.numbers.some((n) => n.callsEnabled)
   const canRequest = company.available && company.requestsEnabled
   const mainNumber = company.numbers?.find((n) => n.isMain) ?? null
 

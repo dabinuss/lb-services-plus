@@ -31,9 +31,9 @@ export default function SettingsTab() {
     await fetchNui('updateNumberSettings', { numberId, settings: patch })
 
     // The server can derive a different outcome than the patch alone would
-    // suggest (Mailbox OFF forces Messages OFF too) - re-fetch instead of
-    // trusting the optimistic merge above so the toggles never silently
-    // drift from what's actually saved.
+    // suggest (Calls always stays on for the main number regardless of what
+    // was sent) - re-fetch instead of trusting the optimistic merge above
+    // so the toggles never silently drift from what's actually saved.
     fetchNui('getCompanySettings').then((r) => r && setSettings(r))
   }
 
@@ -70,6 +70,16 @@ export default function SettingsTab() {
         </div>
       </div>
 
+      {/* Requests aren't tied to any one number - a customer only ever
+          picks a company, never a number, when creating one, and
+          distribution goes through Request routing above, not a specific
+          line. This is the only place a boss can turn the whole feature
+          off. */}
+      <div className="hotline-row">
+        <span>Requests enabled</span>
+        <Switch checked={settings.requestsEnabled} onChange={(next) => save({ requestsEnabled: next })} />
+      </div>
+
       <div className="section-title compact-title">Phone numbers</div>
       <div className="number-list">
         {settings.numbers.map((n) => (
@@ -78,6 +88,14 @@ export default function SettingsTab() {
               {n.label} {n.isMain && <span className="hint">(main)</span>}
             </div>
             <div className="number-toggles">
+              {/* Calls stays forced on for Main - a company must always be
+                  reachable by call. Messages is freely toggleable even for
+                  Main. One switch, not a separate Messages/Mailbox pair -
+                  both still exist as separate DB columns (mailbox controls
+                  whether an incoming chat shows up in the company inbox,
+                  messages controls whether a customer can send at all) but
+                  a boss only ever needs "can customers message this number
+                  or not", so this sets both together. */}
               <div className="hotline-row">
                 <span>Calls</span>
                 <Switch
@@ -90,16 +108,7 @@ export default function SettingsTab() {
                 <span>Messages</span>
                 <Switch
                   checked={n.messagesEnabled}
-                  disabled={n.isMain}
-                  onChange={(next) => saveNumber(n.id, { callsEnabled: n.callsEnabled, messagesEnabled: next, mailboxEnabled: n.mailboxEnabled })}
-                />
-              </div>
-              <div className="hotline-row">
-                <span>Mailbox</span>
-                <Switch
-                  checked={n.mailboxEnabled}
-                  disabled={n.isMain}
-                  onChange={(next) => saveNumber(n.id, { callsEnabled: n.callsEnabled, messagesEnabled: n.messagesEnabled, mailboxEnabled: next })}
+                  onChange={(next) => saveNumber(n.id, { callsEnabled: n.callsEnabled, messagesEnabled: next, mailboxEnabled: next })}
                 />
               </div>
             </div>
