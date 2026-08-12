@@ -137,6 +137,14 @@ Example:
 add_ace identifier.license:YOUR_LICENSE servicesplus.admin allow
 ```
 
+## Developer API
+
+Other server resources can create and manage requests, query company
+availability, synchronize employee states, and send company messages through
+the public Services+ exports and lifecycle events.
+
+See the complete [Server API documentation](dev/services-plus/API.md).
+
 ## Important
 
 Services+ runs as its own FiveM resource.
