@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { fetchNui } from '../../lib/nui.js'
+import { fetchNui, isValidBrandingUrl } from '../../lib/nui.js'
 import Sheet from '../../components/Sheet.jsx'
 import ConfirmButton from '../../components/ConfirmButton.jsx'
 import Switch from '../../components/Switch.jsx'
@@ -37,6 +37,7 @@ export default function CompaniesTab() {
   // renamed inline, or null - includes the main number, which can be
   // relabeled/renumbered but never deleted.
   const [editingNumber, setEditingNumber] = useState(null)
+  const [saveError, setSaveError] = useState('')
 
   const load = () => fetchNui('admin:getCompanies').then((r) => r && setCompanies(r))
 
@@ -53,11 +54,13 @@ export default function CompaniesTab() {
   const categoryName = (id) => categories.find((c) => c.id === id)?.name || 'Uncategorized'
 
   const openNew = () => {
+    setSaveError('')
     setEditingId('new')
     setForm({ ...EMPTY_FORM })
   }
 
   const openEdit = (c) => {
+    setSaveError('')
     setEditingId(c.id)
     setForm({
       name: c.name, categoryId: c.category_id || '', icon: c.icon || '',
@@ -69,30 +72,46 @@ export default function CompaniesTab() {
   }
 
   const closeSheet = () => {
+    setSaveError('')
     setEditingId(null)
     setForm(null)
   }
 
   const save = async () => {
+    const icon = form.icon.trim()
+    const background = form.background.trim()
+    if (!isValidBrandingUrl(icon) || !isValidBrandingUrl(background)) {
+      setSaveError('Icon and background must be valid public HTTPS URLs (maximum 255 characters).')
+      return
+    }
+
+    const payload = { ...form, icon, background, categoryId: form.categoryId || null }
     if (editingId === 'new') {
-      const result = await fetchNui('admin:createCompany', { ...form, categoryId: form.categoryId || null })
+      const result = await fetchNui('admin:createCompany', payload)
       if (result) {
         closeSheet()
         load()
+      } else {
+        setSaveError('Could not create the company. Check the required fields, phone number and HTTPS URLs.')
       }
     } else {
-      const ok = await fetchNui('admin:updateCompany', { id: editingId, ...form, categoryId: form.categoryId || null })
+      const ok = await fetchNui('admin:updateCompany', { id: editingId, ...payload })
       if (ok) {
         closeSheet()
         load()
+      } else {
+        setSaveError('Could not save the company. Check the required fields, phone number and HTTPS URLs.')
       }
     }
   }
 
   // Soft-delete only server-side - this disables the company instead of
   // removing it, so its message/call history survives.
-  const disableCompany = async (id) => {
-    if (await fetchNui('admin:deleteCompany', { id })) load()
+  const disableCompany = async (id, closeAfter = false) => {
+    if (await fetchNui('admin:deleteCompany', { id })) {
+      if (closeAfter) closeSheet()
+      load()
+    }
   }
 
   const setCeiling = async (patch) => {
@@ -172,6 +191,7 @@ export default function CompaniesTab() {
 
       {editingId && form && (
         <Sheet title={editingId === 'new' ? 'New company' : 'Edit company'} onClose={closeSheet}>
+          {saveError && <div className="notice">{saveError}</div>}
           {editingId === 'new' && (
             <input
               className="search-input"
@@ -200,15 +220,31 @@ export default function CompaniesTab() {
           </select>
           <input
             className="search-input"
-            placeholder="Icon URL"
+            type="url"
+            maxLength={255}
+            inputMode="url"
+            autoCapitalize="none"
+            spellCheck={false}
+            placeholder="Icon URL (https://…)"
             value={form.icon}
-            onChange={(e) => setForm({ ...form, icon: e.target.value })}
+            onChange={(e) => {
+              setSaveError('')
+              setForm({ ...form, icon: e.target.value })
+            }}
           />
           <input
             className="search-input"
-            placeholder="Background image URL (optional)"
+            type="url"
+            maxLength={255}
+            inputMode="url"
+            autoCapitalize="none"
+            spellCheck={false}
+            placeholder="Background image URL (optional, https://…)"
             value={form.background}
-            onChange={(e) => setForm({ ...form, background: e.target.value })}
+            onChange={(e) => {
+              setSaveError('')
+              setForm({ ...form, background: e.target.value })
+            }}
           />
           <input
             className="search-input"
@@ -314,6 +350,17 @@ export default function CompaniesTab() {
                   Make leader
                 </button>
               </div>
+
+              {company.enabled === 1 && (
+                <>
+                  <div className="section-title">Danger zone</div>
+                  <div className="hotline-row">
+                    <span>Delete this company</span>
+                    <ConfirmButton onConfirm={() => disableCompany(company.id, true)}>Delete company</ConfirmButton>
+                  </div>
+                  <div className="hint">The company is disabled; its call, message and request history is preserved.</div>
+                </>
+              )}
             </div>
           )}
         </Sheet>

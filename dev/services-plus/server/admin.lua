@@ -32,6 +32,71 @@ local function adminCallback(name, fn)
     end)
 end
 
+-- Company branding is rendered directly by every player's NUI. Keep it
+-- flexible (no domain allowlist), but only accept well-formed HTTPS URLs
+-- that fit the DB column and don't point at obvious local/private targets.
+-- This also rejects credentials and whitespace/control-character tricks.
+---@param value any
+---@return string? normalized
+---@return boolean valid
+local function optionalHttpsUrl(value)
+    if value == nil or value == "" then return nil, true end
+    if type(value) ~= "string" then return nil, false end
+
+    value = value:match("^%s*(.-)%s*$")
+    if value == "" then return nil, true end
+    if #value > 255 or value:find("[%s%c]") or value:sub(1, 8):lower() ~= "https://" then
+        return nil, false
+    end
+
+    local authority = value:sub(9):match("^([^/%?#]+)")
+    if not authority or authority:find("@", 1, true) or authority:sub(1, 1) == "[" then
+        return nil, false
+    end
+
+    local hostname, port = authority:match("^([^:]+):(%d+)$")
+    if not hostname then
+        if authority:find(":", 1, true) then return nil, false end
+        hostname = authority
+    elseif tonumber(port) < 1 or tonumber(port) > 65535 then
+        return nil, false
+    end
+
+    hostname = hostname:lower()
+    if hostname == "localhost" or hostname:sub(-6) == ".local" or hostname:sub(-10) == ".localhost" then
+        return nil, false
+    end
+
+    local a, b, c, d = hostname:match("^(%d+)%.(%d+)%.(%d+)%.(%d+)$")
+    if a then
+        a, b, c, d = tonumber(a), tonumber(b), tonumber(c), tonumber(d)
+        if a > 255 or b > 255 or c > 255 or d > 255
+            or a == 0 or a == 10 or a == 127 or a >= 224
+            or (a == 100 and b >= 64 and b <= 127)
+            or (a == 169 and b == 254)
+            or (a == 172 and b >= 16 and b <= 31)
+            or (a == 192 and b == 168)
+            or (a == 198 and (b == 18 or b == 19)) then
+            return nil, false
+        end
+    else
+        -- Reject abbreviated/legacy numeric host forms such as 127.1; URL
+        -- parsers can canonicalize those back to a private IPv4 address.
+        if not hostname:find("[^%d%.]") then return nil, false end
+
+        if not hostname:find("%.") or hostname:sub(1, 1) == "." or hostname:sub(-1) == "."
+            or hostname:find("..", 1, true) or hostname:find("[^%w%.%-]") then
+            return nil, false
+        end
+
+        for label in hostname:gmatch("[^.]+") do
+            if #label > 63 or label:sub(1, 1) == "-" or label:sub(-1) == "-" then return nil, false end
+        end
+    end
+
+    return value, true
+end
+
 -- ---------------------------------------------------------------------------
 -- Categories (plan §54)
 -- ---------------------------------------------------------------------------
@@ -111,6 +176,10 @@ adminCallback("admin:createCompany", function(_, reply, data)
     local existing = MySQL.scalar.await("SELECT id FROM phone_services_plus_companies WHERE job = ?", { data.job })
     if existing then return reply(false) end
 
+    local icon, iconValid = optionalHttpsUrl(data.icon)
+    local background, backgroundValid = optionalHttpsUrl(data.background)
+    if not iconValid or not backgroundValid then return reply(false) end
+
     -- One transaction (plan review round 3 §8, matches this project's own
     -- rule on grouped writes): the company row and its mandatory Main
     -- number either both land or neither does. Previously a UNIQUE-number
@@ -126,7 +195,7 @@ adminCallback("admin:createCompany", function(_, reply, data)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ]],
             {
-                data.job, data.name, data.categoryId or json.null, data.icon or json.null, data.background or json.null,
+                data.job, data.name, data.categoryId or json.null, icon or json.null, background or json.null,
                 tonumber(data.bossGrade) or 100, Config.DefaultCallRouting, Config.DefaultRequestRouting,
             },
         },
@@ -145,10 +214,14 @@ adminCallback("admin:createCompany", function(_, reply, data)
 end)
 
 adminCallback("admin:updateCompany", function(_, reply, data)
+    local icon, iconValid = optionalHttpsUrl(data.icon)
+    local background, backgroundValid = optionalHttpsUrl(data.background)
+    if not iconValid or not backgroundValid then return reply(false) end
+
     MySQL.update.await(
         "UPDATE phone_services_plus_companies SET name = ?, category_id = ?, icon = ?, background = ?, boss_grade = ?, enabled = ? WHERE id = ?",
         {
-            data.name, data.categoryId or json.null, data.icon or json.null, data.background or json.null,
+            data.name, data.categoryId or json.null, icon or json.null, background or json.null,
             tonumber(data.bossGrade) or 100, data.enabled and 1 or 0, data.id,
         }
     )

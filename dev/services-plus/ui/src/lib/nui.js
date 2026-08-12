@@ -6,6 +6,42 @@
 
 export const devMode = !window.invokeNative
 
+// Mirrors the server's authoritative company-branding check so admins get
+// immediate feedback before a save. This is intentionally validation, not
+// a domain allowlist: any well-formed public HTTPS host is accepted.
+export function isValidBrandingUrl(value) {
+  const candidate = value?.trim() || ''
+  if (!candidate) return true
+  if (candidate.length > 255 || /\s/.test(candidate)) return false
+
+  try {
+    const url = new URL(candidate)
+    if (url.protocol !== 'https:' || url.username || url.password || url.hostname.startsWith('[')) return false
+
+    const hostname = url.hostname.toLowerCase()
+    if (hostname === 'localhost' || hostname.endsWith('.localhost') || hostname.endsWith('.local')) return false
+
+    const octets = hostname.split('.').map(Number)
+    const isIpv4 = octets.length === 4 && octets.every((part, i) => String(part) === hostname.split('.')[i] && part >= 0 && part <= 255)
+    if (isIpv4) {
+      const [a, b] = octets
+      return !(
+        a === 0 || a === 10 || a === 127 || a >= 224
+        || (a === 100 && b >= 64 && b <= 127)
+        || (a === 169 && b === 254)
+        || (a === 172 && b >= 16 && b <= 31)
+        || (a === 192 && b === 168)
+        || (a === 198 && (b === 18 || b === 19))
+      )
+    }
+
+    const labels = hostname.split('.')
+    return labels.length > 1 && labels.every((label) => /^[a-z0-9-]{1,63}$/.test(label) && !label.startsWith('-') && !label.endsWith('-'))
+  } catch {
+    return false
+  }
+}
+
 // Mirrors Config.PageSize.* in shared/config.lua (all 25 there too) - lets
 // devMode actually exercise "Load more" instead of always handing back
 // every fixture row regardless of `page`.
@@ -505,6 +541,7 @@ async function fetchNuiFixture(action, data) {
     case 'admin:getCompanies':
       return fixtureAdminCompanies
     case 'admin:createCompany':
+      if (!isValidBrandingUrl(data.icon) || !isValidBrandingUrl(data.background)) return false
       fixtureAdminCompanies = [
         ...fixtureAdminCompanies,
         {
@@ -515,6 +552,7 @@ async function fetchNuiFixture(action, data) {
       ]
       return { id: 99 }
     case 'admin:updateCompany':
+      if (!isValidBrandingUrl(data.icon) || !isValidBrandingUrl(data.background)) return false
       fixtureAdminCompanies = fixtureAdminCompanies.map((c) =>
         c.id === data.id ? { ...c, ...data, category_id: data.categoryId, boss_grade: data.bossGrade, enabled: data.enabled ? 1 : 0 } : c,
       )
