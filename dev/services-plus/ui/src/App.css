@@ -7,6 +7,13 @@
   background-color: var(--background-primary);
   color: var(--text-primary);
   overflow: hidden;
+
+  /* Shared elevation tokens - subtle, theme-agnostic (additive darkening
+     reads fine on both light and dark surfaces). Used on cards instead of
+     a flat filled rectangle being the only thing separating them from the
+     screen background. */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 1px 2px rgba(0, 0, 0, 0.05), 0 4px 14px rgba(0, 0, 0, 0.08);
 }
 
 .app-body {
@@ -29,6 +36,7 @@
 .screen-header {
   font-size: 1.7rem;
   font-weight: 700;
+  letter-spacing: -0.02em;
   margin-bottom: 0.8rem;
 }
 
@@ -52,6 +60,7 @@
   border-top: 1px solid var(--separator);
   background: var(--background-secondary);
   padding-bottom: env(safe-area-inset-bottom, 0.4rem);
+  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05);
 }
 
 .nav-item {
@@ -62,6 +71,7 @@
   gap: 0.15rem;
   padding: 0.5rem 0 0.3rem;
   color: var(--text-secondary);
+  transition: color 0.15s ease;
 }
 
 .nav-item.active {
@@ -89,6 +99,12 @@
   font-size: 0.85rem;
   outline: none;
   margin-bottom: 0.7rem;
+  border: 1.5px solid transparent;
+  transition: border-color 0.15s ease;
+}
+
+.search-input:focus {
+  border-color: var(--accent);
 }
 
 .category-row {
@@ -116,6 +132,7 @@
 .category-chip.active {
   background: var(--accent);
   color: #fff;
+  box-shadow: var(--shadow-sm);
 }
 
 /* Icon-only variant (Services category filter) - .category-chip stays a
@@ -145,28 +162,46 @@
   background: var(--background-secondary);
   border-radius: 0.9rem;
   overflow: hidden;
+  box-shadow: var(--shadow-md);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+}
+
+.company-card:active {
+  transform: scale(0.985);
 }
 
 .company-card.unavailable {
   opacity: 0.6;
+  box-shadow: var(--shadow-sm);
 }
 
 .company-banner {
   position: relative;
+  overflow: hidden;
   padding: 0.65rem 0.6rem;
   display: flex;
   align-items: center;
   gap: 0.6rem;
   background-color: var(--background-highlight);
   background-image: linear-gradient(135deg, var(--background-highlight), var(--background-secondary));
+}
+
+/* Blurred, not a sharp photo directly as the banner's own background - a
+   separate layer since `filter` would otherwise blur the logo/text on top
+   of it too (same trick as .dashboard-header-bg). */
+.company-banner-bg {
+  position: absolute;
+  inset: -20%;
   background-size: cover;
   background-position: center;
+  filter: blur(6px);
+  transform: scale(1.15);
 }
 
 .company-banner-scrim {
   position: absolute;
   inset: 0;
-  background: linear-gradient(0deg, rgba(0, 0, 0, 0.72) 0%, rgba(0, 0, 0, 0.15) 55%, transparent 100%);
+  background: linear-gradient(0deg, rgba(0, 0, 0, 0.55) 0%, rgba(0, 0, 0, 0.08) 55%, transparent 100%);
 }
 
 .company-logo {
@@ -188,7 +223,8 @@
 .company-logo img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
+  padding: 0.35rem;
   border-radius: inherit;
 }
 
@@ -257,17 +293,10 @@
   font-size: 0.95rem;
 }
 
-.company-action.call {
-  color: var(--success);
-}
-
-.company-action.request {
-  color: var(--warning);
-}
-
-.company-action.message {
-  color: var(--accent);
-}
+/* Deliberately no per-action color here anymore (call=green, request=
+   orange, message=blue) - three saturated colors side by side on every
+   single card added up across a whole list. The emoji icon already
+   differentiates them; the label stays neutral. */
 
 .company-icon {
   width: 2.8rem;
@@ -291,7 +320,8 @@
 .company-icon img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
+  padding: 0.3rem;
 }
 
 .company-info {
@@ -316,10 +346,12 @@
   align-items: center;
   justify-content: center;
   font-size: 1rem;
+  box-shadow: var(--shadow-sm);
 }
 
 .icon-button.call {
   background: var(--success);
+  box-shadow: var(--shadow-sm);
 }
 
 .icon-button.logout {
@@ -337,6 +369,7 @@
 
 .icon-button.subtle {
   background: transparent;
+  box-shadow: none;
   color: var(--text-tertiary);
   width: 1.6rem;
   height: 1.6rem;
@@ -443,6 +476,7 @@
   border-radius: 1rem;
   font-size: 0.82rem;
   line-height: 1.3;
+  box-shadow: var(--shadow-sm);
 }
 
 .bubble.theirs {
@@ -476,6 +510,12 @@
   padding: 0 0.9rem;
   font-size: 0.82rem;
   outline: none;
+  border: 1.5px solid transparent;
+  transition: border-color 0.15s ease;
+}
+
+.conversation-input input:focus {
+  border-color: var(--accent);
 }
 
 .send-button {
@@ -485,6 +525,7 @@
   background: var(--accent);
   color: #fff;
   flex-shrink: 0;
+  box-shadow: var(--shadow-sm);
 }
 
 .send-button:disabled {
@@ -526,6 +567,7 @@
   border-radius: 0.7rem;
   font-size: 0.85rem;
   font-weight: 600;
+  box-shadow: var(--shadow-md);
 }
 
 .login-button:disabled {
@@ -542,10 +584,24 @@
   padding: 0.8rem 0.9rem;
   border-radius: 0.9rem;
   margin-bottom: 0.8rem;
+  box-shadow: var(--shadow-md);
 }
 
 .dashboard-header:not(.has-bg) {
   background: var(--background-secondary);
+}
+
+/* With a company background photo, this stops being a boxed card and
+   becomes a full-bleed hero instead - no border/shadow/corners of its own,
+   the photo just fades straight into the screen behind the rest of the
+   content (plan review UX follow-up). Bleeds past .screen's own 1rem side
+   padding and re-covers the notch clearance itself since it's no longer
+   inside that padding. */
+.dashboard-header.has-bg {
+  margin: -3.6rem -1rem 0.6rem;
+  padding: 3.6rem 1.9rem 1.6rem;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .dashboard-header-bg {
@@ -553,14 +609,19 @@
   inset: -20%;
   background-size: cover;
   background-position: center;
-  filter: blur(18px);
+  filter: blur(8px);
   transform: scale(1.15); /* hides the blur's soft edge past the header's own bounds */
 }
 
+/* Fades top-to-bottom into the screen's own background color instead of a
+   flat diagonal tint - the photo dissolves into the page rather than
+   sitting in a visibly separate tinted box. Kept light enough that the
+   photo itself stays visible under the fade instead of just reading as a
+   plain dark gradient. */
 .dashboard-header-scrim {
   position: absolute;
   inset: 0;
-  background: linear-gradient(135deg, rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0.2));
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.28) 0%, rgba(0, 0, 0, 0.1) 55%, var(--background-primary) 100%);
 }
 
 .dashboard-header-info {
@@ -588,12 +649,14 @@
 .dashboard-logo img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
+  padding: 0.3rem;
 }
 
 .dashboard-company {
   font-size: 1.15rem;
   font-weight: 700;
+  letter-spacing: -0.01em;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -631,6 +694,7 @@
   background: var(--background-secondary);
   border-radius: 0.8rem;
   overflow: hidden;
+  box-shadow: var(--shadow-md);
 }
 
 .duty-card-top {
@@ -665,8 +729,7 @@
 }
 
 .status-pill-icon {
-  font-size: 0.7em;
-  opacity: 0.7; /* subtle - a hint next to the label, not a second focal point */
+  font-size: 0.6em;
 }
 
 /* Same specificity (4 classes) as .status-pill.<key>.active's own
@@ -834,6 +897,7 @@
 
 .category-row.subtab-row .category-chip.active {
   background: var(--accent);
+  box-shadow: var(--shadow-sm);
 }
 
 .dashboard-body {
@@ -849,9 +913,10 @@
 }
 
 .section-title {
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   font-weight: 700;
   text-transform: uppercase;
+  letter-spacing: 0.04em;
   color: var(--text-secondary);
   margin-top: 0.6rem;
 }
@@ -886,31 +951,58 @@
   font-weight: 600;
   text-align: center;
   text-transform: capitalize;
+  transition: background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.status-pill.active,
-.status-pill.static {
+.status-pill.active {
+  box-shadow: var(--shadow-sm);
   color: #fff;
 }
 
-.status-pill.available.active,
-.status-pill.available.static {
+.status-pill.available.active {
   background: var(--success);
 }
 
-.status-pill.busy.active,
-.status-pill.busy.static {
+.status-pill.busy.active {
   background: var(--danger);
 }
 
-.status-pill.pause.active,
-.status-pill.pause.static {
+.status-pill.pause.active {
   background: var(--warning);
 }
 
+/* Read-only badge (Team list) - a small colored presence dot + neutral
+   pill instead of a solid color fill, so a longer team roster doesn't turn
+   into a wall of saturated color. */
 .status-pill.static {
   flex: none;
-  padding: 0.25rem 0.6rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.6rem 0.25rem 0.5rem;
+  background: var(--background-highlight);
+  color: var(--text-primary);
+}
+
+.status-pill.static::before {
+  content: '';
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 999px;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+.status-pill.available.static {
+  color: var(--success);
+}
+
+.status-pill.busy.static {
+  color: var(--danger);
+}
+
+.status-pill.pause.static {
+  color: var(--warning);
 }
 
 /* hotlines */
@@ -930,6 +1022,7 @@
   border-radius: 0.6rem;
   padding: 0.6rem 0.7rem;
   font-size: 0.82rem;
+  box-shadow: var(--shadow-sm);
 }
 
 /* requests */
@@ -947,6 +1040,7 @@
   background: var(--background-secondary);
   border-radius: 0.8rem;
   padding: 0.6rem 0.8rem;
+  box-shadow: var(--shadow-sm);
 }
 
 .request-row.status-active {
@@ -988,11 +1082,15 @@
 .request-action.accept {
   background: var(--success);
   color: #fff;
+  box-shadow: var(--shadow-sm);
 }
 
+/* Neutral, not a second solid color block next to Accept's green - Accept
+   is the one action worth that much visual weight, Complete/Cancel are
+   secondary and share the same quieter treatment (colored text only). */
 .request-action.complete {
-  background: var(--accent);
-  color: #fff;
+  background: var(--background-highlight);
+  color: var(--accent);
 }
 
 .request-action.cancel {
@@ -1040,6 +1138,7 @@
   background: var(--background-secondary);
   border-radius: 0.8rem;
   padding: 0.6rem 0.8rem;
+  box-shadow: var(--shadow-sm);
 }
 
 .team-row-main {
@@ -1111,6 +1210,7 @@
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
+  box-shadow: var(--shadow-sm);
 }
 
 .number-toggles {
@@ -1125,6 +1225,7 @@
   justify-content: center;
   padding: 0.4rem;
   font-size: 0.72rem;
+  box-shadow: none; /* too busy at this compact chip size */
 }
 
 /* ------------------------------------------------------------- admin area */
@@ -1139,6 +1240,7 @@
   background: var(--background-secondary);
   border-radius: 0.8rem;
   overflow: hidden;
+  box-shadow: var(--shadow-md);
 }
 
 .admin-row {

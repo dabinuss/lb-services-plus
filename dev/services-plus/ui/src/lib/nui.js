@@ -12,6 +12,15 @@ export const devMode = !window.invokeNative
 const FIXTURE_PAGE_SIZE = 25
 const paginate = (list, page) => list.slice((page || 0) * FIXTURE_PAGE_SIZE, ((page || 0) + 1) * FIXTURE_PAGE_SIZE)
 
+// One company per category, each with its own background banner, so the
+// Services overview/CompanyCard/dashboard-header blur treatment all have
+// something real to render against instead of just the plain fallback
+// gradient. Picsum's seeded URLs (not real photos of the theme) are used
+// deliberately - reliably valid images every time beats a photo-accurate
+// but potentially-dead specific Unsplash id, and this data never ships
+// (devMode only).
+const bg = (seed) => `https://picsum.photos/seed/${seed}/800/450`
+
 const fixtures = {
   bootstrap: {
     categories: [
@@ -27,12 +36,15 @@ const fixtures = {
         name: 'Los Santos Police Department',
         categoryId: 1,
         icon: 'https://cdn-icons-png.flaticon.com/512/7211/7211100.png',
-        background: null,
+        background: bg('lspd'),
         available: true,
         callsEnabled: true,
         messagesEnabled: true,
         requestsEnabled: true,
-        numbers: [{ id: 1, label: 'Main Hotline', isMain: true, callsEnabled: true, messagesEnabled: true }],
+        numbers: [
+          { id: 1, label: 'Main Hotline', isMain: true, callsEnabled: true, messagesEnabled: true },
+          { id: 7, label: 'Dispatch', isMain: false, callsEnabled: true, messagesEnabled: true },
+        ],
       },
       {
         id: 2,
@@ -40,7 +52,7 @@ const fixtures = {
         name: 'Pillbox Medical',
         categoryId: 2,
         icon: 'https://cdn-icons-png.flaticon.com/128/1032/1032989.png',
-        background: null,
+        background: bg('pillbox'),
         available: false,
         callsEnabled: true,
         messagesEnabled: true,
@@ -53,7 +65,12 @@ const fixtures = {
         name: 'Downtown Cab Co.',
         categoryId: 4,
         icon: 'https://cdn-icons-png.flaticon.com/128/10281/10281554.png',
-        background: null,
+        // 'downtown-cab' happened to be an almost pure-white picsum photo
+        // (avg rgb ~241,241,241) - made the blurred dashboard header look
+        // like a plain white fadeout with no visible image underneath it,
+        // which read as a CSS bug but was actually just this fixture's
+        // source photo. 'taxi-rank' has real color/contrast.
+        background: bg('taxi-rank'),
         available: true,
         callsEnabled: true,
         messagesEnabled: true,
@@ -63,9 +80,28 @@ const fixtures = {
           { id: 4, label: 'Workshop', isMain: false, callsEnabled: true, messagesEnabled: true },
         ],
       },
+      {
+        id: 4,
+        job: 'taxi',
+        name: 'Coastal Taxi Co.',
+        categoryId: 3,
+        icon: 'https://cdn-icons-png.flaticon.com/128/3079/3079165.png',
+        background: bg('coastal-taxi'),
+        available: true,
+        callsEnabled: true,
+        messagesEnabled: true,
+        requestsEnabled: true,
+        numbers: [
+          { id: 5, label: 'Main Hotline', isMain: true, callsEnabled: true, messagesEnabled: true },
+          { id: 6, label: 'Airport Line', isMain: false, callsEnabled: true, messagesEnabled: true },
+        ],
+      },
     ],
     myNumber: '5550100',
     admin: true,
+    // Logged in at the Mechanic company (Downtown Cab Co., id 3) - referenced
+    // by companyLogin/getTeam/getCompanyConversations/etc. below too, keep
+    // any future id changes here in sync with those.
     employee: {
       companyId: 3,
       job: 'mechanic',
@@ -77,6 +113,9 @@ const fixtures = {
       status: 'available',
     },
   },
+  // Customer-facing request types, keyed by categoryId - one per category so
+  // the Request sheet has something to show no matter which company it's
+  // opened from.
   requestTypes: {
     4: [
       {
@@ -90,36 +129,117 @@ const fixtures = {
         description: 'Request a ride from your current location.', passenger_count: 1, description_enabled: 1,
       },
     ],
+    1: [
+      {
+        id: 3, category_id: 1, name: 'Request Backup', icon: 'police',
+        description: 'Flag down the nearest available unit.', passenger_count: 0, description_enabled: 1,
+      },
+    ],
+    2: [
+      {
+        id: 4, category_id: 2, name: 'Medical Emergency', icon: 'medical',
+        description: 'Request an ambulance to your location.', passenger_count: 0, description_enabled: 1,
+      },
+    ],
   },
 }
 
-let fixtureMessages = [
-  { id: 1, sender: '5550100', sender_type: 'customer', content: 'Hey, is anyone there?', created_at: new Date(Date.now() - 60000).toISOString() },
-]
+// Single demo conversation (channelId 1, customer 5550100 <-> Downtown Cab's
+// Main Hotline) - deliberately long (30+) so "Load older" on scroll-to-top
+// actually has something to page through. Every fixture channel_id resolves
+// to this same conversation regardless of which one was clicked (a real
+// per-channel message store is more than this fixture layer needs to be).
+let fixtureMessages = Array.from({ length: 32 }, (_, i) => {
+  const fromCustomer = i % 3 !== 2 // mostly customer, company chimes in every third message
+  return {
+    id: i + 1,
+    sender: fromCustomer ? '5550100' : '5559001',
+    sender_type: fromCustomer ? 'customer' : 'company',
+    content: fromCustomer
+      ? ['Hey, is anyone there?', 'Still waiting on a pickup', 'Any update?', 'Ok thanks', 'How much longer?'][i % 5]
+      : ["We're on it, hang tight!", 'On our way now.', 'Should be about 5 more minutes.', 'Thanks for your patience!'][i % 4],
+    created_at: new Date(Date.now() - (32 - i) * 90000).toISOString(),
+  }
+})
 
+// Own conversations across every company, for Activity > Messages.
 let fixtureActivity = [
   {
     channel_id: 1,
-    last_message: 'Hey, is anyone there?',
-    updated_at: new Date().toISOString(),
+    last_message: 'Thanks for your patience!',
+    updated_at: new Date(Date.now() - 60000).toISOString(),
     company: { id: 3, name: 'Downtown Cab Co.', icon: 'https://cdn-icons-png.flaticon.com/128/10281/10281554.png' },
+  },
+  {
+    channel_id: 2,
+    last_message: 'Backup unit dispatched to your location.',
+    updated_at: new Date(Date.now() - 3 * 3600000).toISOString(),
+    company: { id: 1, name: 'Los Santos Police Department', icon: 'https://cdn-icons-png.flaticon.com/512/7211/7211100.png' },
+  },
+  {
+    channel_id: 3,
+    last_message: 'Ambulance is en route, ETA 4 minutes.',
+    updated_at: new Date(Date.now() - 26 * 3600000).toISOString(),
+    company: { id: 2, name: 'Pillbox Medical', icon: 'https://cdn-icons-png.flaticon.com/128/1032/1032989.png' },
+  },
+  {
+    channel_id: 4,
+    last_message: 'Your driver is 2 minutes away.',
+    updated_at: new Date(Date.now() - 2 * 86400000).toISOString(),
+    company: { id: 4, name: 'Coastal Taxi Co.', icon: 'https://cdn-icons-png.flaticon.com/128/3079/3079165.png' },
   },
 ]
 
+// Own requests across companies/types/every status, for Activity > Requests
+// and the company dashboard's own Requests queue.
 let fixtureRequests = [
   {
     id: 1, status: 'open', request_type_id: 2, company_id: null, passenger_count: 2, description: 'Alta Street',
     type_name: 'Taxi Pickup', type_icon: 'taxi', is_mine: false, pos_x: 100, pos_y: 200,
     created_at: new Date(Date.now() - 30000).toISOString(),
   },
+  {
+    id: 2, status: 'active', request_type_id: 1, company_id: 3, passenger_count: null, description: 'Flat tire on the highway',
+    type_name: 'Roadside Assistance', type_icon: 'wrench', is_mine: true, pos_x: 220, pos_y: -340,
+    created_at: new Date(Date.now() - 600000).toISOString(),
+  },
+  {
+    id: 3, status: 'completed', request_type_id: 1, company_id: 3, passenger_count: null, description: null,
+    type_name: 'Roadside Assistance', type_icon: 'wrench', is_mine: true, pos_x: 50, pos_y: 60,
+    created_at: new Date(Date.now() - 5 * 3600000).toISOString(),
+  },
+  {
+    id: 4, status: 'cancelled', request_type_id: 2, company_id: 4, passenger_count: 1, description: 'Airport terminal 2',
+    type_name: 'Taxi Pickup', type_icon: 'taxi', is_mine: false, pos_x: -800, pos_y: -1200,
+    created_at: new Date(Date.now() - 30 * 3600000).toISOString(),
+  },
 ]
 
+// Own call history across companies/states, for Activity > Calls.
 const fixtureCalls = [
   {
     id: 1, customer_number: '5559876', employee_number: null, state: 'missed', label: 'Main Hotline',
     company_id: 3, number_id: 3,
     company_name: 'Downtown Cab Co.', company_icon: 'https://cdn-icons-png.flaticon.com/128/10281/10281554.png',
     created_at: new Date(Date.now() - 3600000).toISOString(),
+  },
+  {
+    id: 2, customer_number: '5550100', employee_number: '5559050', state: 'answered', label: 'Main Hotline',
+    company_id: 1, number_id: 1,
+    company_name: 'Los Santos Police Department', company_icon: 'https://cdn-icons-png.flaticon.com/512/7211/7211100.png',
+    created_at: new Date(Date.now() - 7 * 3600000).toISOString(),
+  },
+  {
+    id: 3, customer_number: '5550100', employee_number: null, state: 'ringing', label: 'Main Hotline',
+    company_id: 2, number_id: 2,
+    company_name: 'Pillbox Medical', company_icon: 'https://cdn-icons-png.flaticon.com/128/1032/1032989.png',
+    created_at: new Date(Date.now() - 20 * 60000).toISOString(),
+  },
+  {
+    id: 4, customer_number: '5550100', employee_number: '5559070', state: 'answered', label: 'Airport Line',
+    company_id: 4, number_id: 6,
+    company_name: 'Coastal Taxi Co.', company_icon: 'https://cdn-icons-png.flaticon.com/128/3079/3079165.png',
+    created_at: new Date(Date.now() - 3 * 86400000).toISOString(),
   },
 ]
 
@@ -128,9 +248,15 @@ let fixtureHotlines = [
   { numberId: 4, label: 'Workshop', active: false, locked: false },
 ]
 
+// Team roster for the logged-in company (Downtown Cab, mechanic) - getTeam()
+// is always scoped to the caller's own company, so this is the only one
+// that needs filling out. A few members with varied grade/status/hotlines
+// to actually exercise the search bar and list.
 const fixtureTeam = [
   { name: 'Dabi', gradeLabel: 'Boss', status: 'available', hotlines: ['Main Hotline'], phoneNumber: '5559001' },
   { name: 'John', gradeLabel: 'Worker', status: 'busy', hotlines: ['Main Hotline', 'Workshop'], phoneNumber: '5559002' },
+  { name: 'Mia Torres', gradeLabel: 'Senior Mechanic', status: 'pause', hotlines: ['Workshop'], phoneNumber: '5559003' },
+  { name: 'Tom Reyes', gradeLabel: 'Mechanic', status: 'available', hotlines: ['Main Hotline'], phoneNumber: '5559004' },
 ]
 
 let fixtureSettings = {
@@ -143,6 +269,15 @@ let fixtureSettings = {
   ],
 }
 
+// Employee-side inbox for the logged-in company - a few conversations from
+// different contact numbers so the list (and its own pagination) has
+// something to show beyond one row.
+let fixtureCompanyConversations = [
+  { channel_id: 1, contact_number: '5550100', last_message: 'Thanks for your patience!', label: 'Main Hotline' },
+  { channel_id: 5, contact_number: '5551122', last_message: 'Can you fix a flat tire?', label: 'Workshop' },
+  { channel_id: 6, contact_number: '5553344', last_message: 'What are your hours?', label: 'Main Hotline' },
+]
+
 // --------------------------------------------------------- admin fixtures
 
 let fixtureAdminCategories = [
@@ -152,22 +287,62 @@ let fixtureAdminCategories = [
   { id: 4, key: 'mechanic', name: 'Mechanic', icon: 'wrench', sort_order: 40, competition_allowed: 1 },
 ]
 
+// Mirrors fixtures.bootstrap.companies above (same ids/backgrounds) so the
+// admin area has all four categories' companies to edit too, not just the
+// one the test employee happens to be logged into.
 let fixtureAdminCompanies = [
+  {
+    id: 1, job: 'police', name: 'Los Santos Police Department', category_id: 1, boss_grade: 100, enabled: 1,
+    admin_calls_allowed: 1, admin_messages_allowed: 1, admin_requests_allowed: 1,
+    icon: 'https://cdn-icons-png.flaticon.com/512/7211/7211100.png', background: bg('lspd'),
+    numbers: [
+      { id: 1, label: 'Main Hotline', number: '911', is_main: 1 },
+      { id: 7, label: 'Dispatch', number: '5550911', is_main: 0 },
+    ],
+  },
+  {
+    id: 2, job: 'ambulance', name: 'Pillbox Medical', category_id: 2, boss_grade: 100, enabled: 1,
+    admin_calls_allowed: 1, admin_messages_allowed: 1, admin_requests_allowed: 1,
+    icon: 'https://cdn-icons-png.flaticon.com/128/1032/1032989.png', background: bg('pillbox'),
+    numbers: [{ id: 2, label: 'Main Hotline', number: '912', is_main: 1 }],
+  },
   {
     id: 3, job: 'mechanic', name: 'Downtown Cab Co.', category_id: 4, boss_grade: 4, enabled: 1,
     admin_calls_allowed: 1, admin_messages_allowed: 1, admin_requests_allowed: 1,
-    icon: 'https://cdn-icons-png.flaticon.com/128/10281/10281554.png', background: null,
+    icon: 'https://cdn-icons-png.flaticon.com/128/10281/10281554.png', background: bg('taxi-rank'),
     numbers: [
       { id: 3, label: 'Main Hotline', number: '911', is_main: 1 },
       { id: 4, label: 'Workshop', number: '5550199', is_main: 0 },
     ],
   },
+  {
+    id: 4, job: 'taxi', name: 'Coastal Taxi Co.', category_id: 3, boss_grade: 100, enabled: 1,
+    admin_calls_allowed: 1, admin_messages_allowed: 1, admin_requests_allowed: 1,
+    icon: 'https://cdn-icons-png.flaticon.com/128/3079/3079165.png', background: bg('coastal-taxi'),
+    numbers: [
+      { id: 5, label: 'Main Hotline', number: '5550188', is_main: 1 },
+      { id: 6, label: 'Airport Line', number: '5550177', is_main: 0 },
+    ],
+  },
 ]
 
+// Mirrors fixtures.requestTypes above, one per category.
 let fixtureAdminRequestTypes = [
+  {
+    id: 1, category_id: 4, name: 'Roadside Assistance', icon: 'wrench', description: 'Request on-site repairs.',
+    passenger_count: 0, description_enabled: 1, competition_enabled: 0, enabled: 1,
+  },
   {
     id: 2, category_id: 3, name: 'Taxi Pickup', icon: 'taxi', description: 'Request a ride.',
     passenger_count: 1, description_enabled: 1, competition_enabled: 1, enabled: 1,
+  },
+  {
+    id: 3, category_id: 1, name: 'Request Backup', icon: 'police', description: 'Flag down the nearest available unit.',
+    passenger_count: 0, description_enabled: 1, competition_enabled: 0, enabled: 1,
+  },
+  {
+    id: 4, category_id: 2, name: 'Medical Emergency', icon: 'medical', description: 'Request an ambulance.',
+    passenger_count: 0, description_enabled: 1, competition_enabled: 0, enabled: 1,
   },
 ]
 
@@ -186,11 +361,18 @@ async function fetchNuiFixture(action, data) {
     case 'setStatus':
       return true
     case 'openConversation':
-    case 'getMessages':
-      return { channelId: 1, contactNumber: '5550100', viewerRole: 'customer', messages: [...fixtureMessages].reverse() }
+    case 'getMessages': {
+      // Newest-first + paginate, same as the real ORDER BY created_at DESC
+      // LIMIT - lets "Load older" (ConversationScreen) actually have
+      // something to page through instead of always getting everything at
+      // once regardless of `page`.
+      const newestFirst = [...fixtureMessages].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+      return { channelId: 1, contactNumber: '5550100', viewerRole: 'customer', messages: paginate(newestFirst, data.page) }
+    }
     case 'sendMessage': {
       const message = {
         id: fixtureMessages.length + 1, sender: fixtures.bootstrap.myNumber, sender_type: 'customer', content: data.content,
+        created_at: new Date(Date.now()).toISOString(),
       }
       fixtureMessages.push(message)
       return message
@@ -199,8 +381,14 @@ async function fetchNuiFixture(action, data) {
       return paginate(fixtureActivity, data.page)
     case 'archiveConversation':
       return true
-    case 'resolveCall':
-      return data.numberId === 3 ? { company: 'mechanic' } : { number: '5551234' }
+    case 'resolveCall': {
+      // Main numbers ring the native company ring-group (matches "All"
+      // routing on a real server); anything else resolves to one random
+      // employee's own number, same as the real resolveCall would.
+      const MAIN_NUMBER_JOB = { 1: 'police', 2: 'ambulance', 3: 'mechanic', 5: 'taxi' }
+      const job = MAIN_NUMBER_JOB[data.numberId]
+      return job ? { company: job } : { number: '5551234' }
+    }
     case 'getCallHistory':
     case 'getMyCalls':
       return paginate(fixtureCalls, data.page)
@@ -212,7 +400,7 @@ async function fetchNuiFixture(action, data) {
     case 'getTeam':
       return fixtureTeam
     case 'getCompanyConversations':
-      return paginate([{ channel_id: 1, contact_number: '5550100', last_message: 'Hey, is anyone there?', label: 'Main Hotline' }], data.page)
+      return paginate(fixtureCompanyConversations, data.page)
     case 'getCompanySettings':
       return fixtureSettings
     case 'updateCompanySettings':
@@ -249,7 +437,10 @@ async function fetchNuiFixture(action, data) {
       return paginate(fixtureRequests, data.page)
     case 'getMyRequests':
       return paginate(
-        fixtureRequests.map((r) => ({ ...r, company_name: 'Downtown Cab Co.', company_icon: fixtures.bootstrap.companies[2].icon })),
+        fixtureRequests.map((r) => {
+          const company = fixtures.bootstrap.companies.find((c) => c.id === r.company_id)
+          return { ...r, company_name: company?.name, company_icon: company?.icon }
+        }),
         data.page,
       )
     case 'setWaypoint':

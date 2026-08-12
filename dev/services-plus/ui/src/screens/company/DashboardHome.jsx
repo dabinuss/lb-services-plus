@@ -2,10 +2,12 @@ import { useEffect, useState } from 'react'
 import { fetchNui, createCall } from '../../lib/nui.js'
 import Switch from '../../components/Switch.jsx'
 
+// Colored presence dots instead of plain typographic symbols (✓ ‖ ●) - a
+// proper little status icon per option, not just a character.
 const STATUSES = [
-  { key: 'available', label: 'Available', icon: '✓' },
-  { key: 'pause', label: 'Pause', icon: '‖' },
-  { key: 'busy', label: 'Busy', icon: '●' },
+  { key: 'available', label: 'Available', icon: '🟢' },
+  { key: 'pause', label: 'Pause', icon: '🟡' },
+  { key: 'busy', label: 'Busy', icon: '🔴' },
 ]
 
 // Duty, status and hotlines (plan §19-23).

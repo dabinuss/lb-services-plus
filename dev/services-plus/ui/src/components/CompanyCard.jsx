@@ -9,10 +9,10 @@ export default function CompanyCard({ company, categoryName, onCall, onMessage, 
 
   return (
     <div className={`company-card${company.available ? '' : ' unavailable'}`}>
-      <div
-        className="company-banner"
-        style={company.background ? { backgroundImage: `url(${company.background})` } : undefined}
-      >
+      <div className="company-banner">
+        {company.background && (
+          <div className="company-banner-bg" style={{ backgroundImage: `url(${company.background})` }} />
+        )}
         <div className="company-banner-scrim" />
 
         <div className="company-logo">

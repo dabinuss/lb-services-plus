@@ -27,6 +27,17 @@ button {
   border: none;
   background: none;
   cursor: pointer;
+  transition: transform 0.12s ease, opacity 0.12s ease, background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+/* A little tactile press feedback on every button in the app for free -
+   one rule instead of hand-tuning it per component. */
+button:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+button:disabled {
+  cursor: default;
 }
 
 ::-webkit-scrollbar {
