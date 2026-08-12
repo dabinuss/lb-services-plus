@@ -807,20 +807,27 @@
 
 /* Segmented control, not a row of separate floating pills - one grouped,
    centered track (Admin/Company/Settings/Activity sub-tabs all use this),
-   unlike .category-row.icon-only's scrollable list of independent chips. */
+   unlike .category-row.icon-only's scrollable list of independent chips.
+   Tighter than a text-pill chip's default padding so more tabs fit before
+   ever needing the overflow-x fallback below (5 tabs with longer labels -
+   Company's Home/Requests/Messages/Calls/Settings - was overflowing the
+   screen width and getting clipped/unreachable at the edge, invisible
+   since this had no scroll fallback). */
 .category-row.subtab-row {
   width: fit-content;
   max-width: 100%;
   margin: 0 auto 0.6rem;
   padding: 0.2rem;
-  gap: 0.15rem;
+  gap: 0.1rem;
   background: var(--background-highlight);
   border-radius: 0.8rem;
-  overflow-x: visible;
+  overflow-x: auto;
   flex-shrink: 0;
 }
 
 .category-row.subtab-row .category-chip {
+  flex-shrink: 0;
+  padding: 0.42rem 0.55rem;
   background: transparent;
   border-radius: 0.6rem;
 }

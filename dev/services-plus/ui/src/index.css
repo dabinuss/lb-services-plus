@@ -49,3 +49,21 @@ button {
   overflow: hidden;
   box-shadow: 0 0 0 0.6rem #1c1c1e, 0 1rem 3rem rgba(0, 0, 0, 0.5);
 }
+
+/* Dev-only, outside the phone frame entirely - never rendered in the real
+   build (see App.jsx's devMode check). Just a manual override for testing
+   both themes; the actual app always gets its theme from lb-phone. */
+.dev-theme-toggle {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  z-index: 1000;
+
+  padding: 0.5rem 0.9rem;
+  border-radius: 999px;
+  background: #1c1c1e;
+  color: #f2f2f7;
+  font-size: 0.85rem;
+  font-weight: 600;
+  box-shadow: 0 0.25rem 0.75rem rgba(0, 0, 0, 0.35);
+}

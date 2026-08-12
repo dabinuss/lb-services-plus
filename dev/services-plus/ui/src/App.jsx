@@ -170,5 +170,21 @@ export default function App() {
     </div>
   )
 
-  return devMode ? <Frame>{app}</Frame> : app
+  // Dev-only theme toggle, outside the phone frame - lb-phone provides the
+  // real theme via getSettings()/onSettingsChange in the actual build, this
+  // is purely so both themes are reachable while testing in a plain browser.
+  return devMode ? (
+    <>
+      <button
+        className="dev-theme-toggle"
+        onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+        title="Toggle light/dark (dev only)"
+      >
+        {theme === 'dark' ? '☀️ Light' : '🌙 Dark'}
+      </button>
+      <Frame>{app}</Frame>
+    </>
+  ) : (
+    app
+  )
 }
