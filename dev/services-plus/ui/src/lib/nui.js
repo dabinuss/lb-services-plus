@@ -244,8 +244,8 @@ const fixtureCalls = [
 ]
 
 let fixtureHotlines = [
-  { numberId: 3, label: 'Main Hotline', active: true, locked: false },
-  { numberId: 4, label: 'Workshop', active: false, locked: false },
+  { numberId: 3, label: 'Main Hotline', number: '555-0100', active: true, locked: false },
+  { numberId: 4, label: 'Workshop', number: '555-0200', active: false, locked: false },
 ]
 
 // Team roster for the logged-in company (Downtown Cab, mechanic) - getTeam()

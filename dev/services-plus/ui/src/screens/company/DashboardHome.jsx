@@ -30,7 +30,10 @@ export default function DashboardHome({ initialOnDuty, initialStatus, employeeNa
   // screen width and got clipped. Only ever shows on-duty colleagues
   // anyway, so pairing it with the other "who's around right now" info
   // here reads naturally, and a search bar keeps a larger team scannable.
-  const visibleTeam = team?.filter((m) => m.name.toLowerCase().includes(teamSearch.trim().toLowerCase()))
+  const visibleTeam = team?.filter((m) => {
+    const search = teamSearch.trim().toLowerCase()
+    return m.name.toLowerCase().includes(search) || m.gradeLabel?.toLowerCase().includes(search)
+  })
 
   // Going off-duty ends the fake-login session, not just the duty flag -
   // "offline" is one of the only three things allowed to log the player
@@ -118,10 +121,13 @@ export default function DashboardHome({ initialOnDuty, initialStatus, employeeNa
             {hotlines === null && <div className="empty-state">Loading…</div>}
             {hotlines?.map((line) => (
               <div key={line.numberId} className="hotline-row">
-                <span>
-                  {line.label}
-                  {line.locked && <span className="hint"> (locked)</span>}
-                </span>
+                <div className="hotline-info">
+                  <span className="hotline-label">
+                    {line.label}
+                    {line.locked && <span className="hint"> (locked)</span>}
+                  </span>
+                  <span className="hotline-number">{line.number}</span>
+                </div>
                 <Switch checked={line.active} disabled={line.locked} onChange={() => toggleHotline(line)} />
               </div>
             ))}

@@ -959,6 +959,10 @@
   gap: 0.6rem;
 }
 
+.tab-panel .search-input {
+  margin-bottom: 0;
+}
+
 .section-title {
   font-size: 0.72rem;
   font-weight: 700;
@@ -1070,6 +1074,21 @@
   padding: 0.6rem 0.7rem;
   font-size: 0.82rem;
   box-shadow: var(--shadow-sm);
+}
+
+.hotline-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.hotline-label {
+  font-weight: 500;
+}
+
+.hotline-number {
+  font-size: 0.72rem;
+  color: var(--sp-text-secondary);
 }
 
 /* requests */

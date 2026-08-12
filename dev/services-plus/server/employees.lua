@@ -125,6 +125,7 @@ function Employees.GetHotlineOptions(source, companyId)
         out[#out + 1] = {
             numberId = n.id,
             label = n.label,
+            number = n.number,
             active = active,
             locked = locked,
         }
