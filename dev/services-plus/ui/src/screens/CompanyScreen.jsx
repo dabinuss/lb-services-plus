@@ -8,7 +8,7 @@ import CompanyDashboard from './company/CompanyDashboard.jsx'
 // it needs to survive this component unmounting when the user switches to
 // another bottom-nav tab and back (stays logged in until logout, going
 // off-duty, or a real reload/phone switch - never just from leaving this tab).
-export default function CompanyScreen({ employee, companies, session, onLogin, onLogout, onOpenConversation }) {
+export default function CompanyScreen({ employee, companies, session, onLogin, onLogout, onOpenConversation, teamUpdate }) {
   const [loggingIn, setLoggingIn] = useState(false)
 
   const company = companies.find((c) => c.id === employee.companyId)
@@ -42,6 +42,7 @@ export default function CompanyScreen({ employee, companies, session, onLogin, o
       company={company}
       onLogout={onLogout}
       onOpenConversation={onOpenConversation}
+      teamUpdate={teamUpdate}
     />
   )
 }

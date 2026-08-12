@@ -22,7 +22,6 @@ export default function ConversationScreen({ target, incoming, onClose }) {
   // (plan review round 4 §3).
   const [viewerRole, setViewerRole] = useState(target.viewerRole || null)
   const listRef = useRef(null)
-  const pageRef = useRef(0)
   // Prepending older messages must not trigger the scroll-to-bottom effect
   // below (that's only for "a new message just arrived") - this flag tells
   // that effect to instead restore the pre-prepend scroll offset.
@@ -32,7 +31,6 @@ export default function ConversationScreen({ target, incoming, onClose }) {
     const action = target.channelId ? 'getMessages' : 'openConversation'
     const payload = target.channelId ? { channelId: target.channelId } : { numberId: target.numberId }
 
-    pageRef.current = 0
     fetchNui(action, payload).then((result) => {
       if (!result) return
       setChannelId(result.channelId)
@@ -68,15 +66,21 @@ export default function ConversationScreen({ target, incoming, onClose }) {
   }, [messages])
 
   // Backend pagination already existed for getMessages, but nothing here
-  // ever asked for page > 0 - everything before the most recent 25 messages
-  // was simply unreachable (plan review round 4 §5). Loading older on
-  // scroll-to-top mirrors how the rest of the app's lists got "Load more".
+  // ever asked for anything beyond the first page - everything before the
+  // most recent 25 messages was simply unreachable (plan review round 4 §5).
+  // Loading older on scroll-to-top mirrors how the rest of the app's lists
+  // got "Load more". Cursor-based on the oldest loaded message's id, not a
+  // page number (plan review round 5 §6) - an OFFSET-based page 2 recounts
+  // from whatever is newest *right now*, so a message arriving in this chat
+  // between loads shifts every OFFSET after it and can re-show (or skip) a
+  // row. `beforeId` is a fixed boundary that doesn't move underneath it.
   const loadOlder = async () => {
     if (!channelId || loadingOlder || !hasOlder) return
+    const oldestId = messages?.[0]?.id
+    if (oldestId == null) return
 
     setLoadingOlder(true)
-    const nextPage = pageRef.current + 1
-    const result = await fetchNui('getMessages', { channelId, page: nextPage })
+    const result = await fetchNui('getMessages', { channelId, beforeId: oldestId })
     setLoadingOlder(false)
     if (!result) return
 
@@ -85,7 +89,6 @@ export default function ConversationScreen({ target, incoming, onClose }) {
     const prevScrollHeight = el?.scrollHeight || 0
 
     prependRef.current = true
-    pageRef.current = nextPage
     setHasOlder(result.messages.length === PAGE_SIZE)
     setMessages((prev) => [...older, ...(prev || [])])
 

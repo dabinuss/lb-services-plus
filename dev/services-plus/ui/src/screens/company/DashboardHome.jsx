@@ -11,7 +11,7 @@ const STATUSES = [
 ]
 
 // Duty, status and hotlines (plan §19-23).
-export default function DashboardHome({ initialOnDuty, initialStatus, employeeName, employeeGrade, onLogout }) {
+export default function DashboardHome({ initialOnDuty, initialStatus, employeeName, employeeGrade, onLogout, teamUpdate }) {
   const [onDuty, setOnDuty] = useState(initialOnDuty)
   const [status, setStatus] = useState(initialStatus)
   const [hotlines, setHotlines] = useState(null)
@@ -23,6 +23,20 @@ export default function DashboardHome({ initialOnDuty, initialStatus, employeeNa
     fetchNui('getHotlines').then((result) => result && setHotlines(result))
     fetchNui('getTeam').then((result) => result && setTeam(result))
   }, [])
+
+  // A colleague's own status/hotline change, pushed in real time instead of
+  // only ever reflecting what getTeam() returned at mount (plan review
+  // round 5 §8). Duty on/off itself isn't covered by this event - a
+  // colleague going off duty still only disappears on the next reload.
+  useEffect(() => {
+    if (!teamUpdate) return
+    setTeam((prev) => {
+      if (!prev) return prev
+      const exists = prev.some((m) => m.name === teamUpdate.name)
+      return exists ? prev.map((m) => (m.name === teamUpdate.name ? teamUpdate : m)) : [...prev, teamUpdate]
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [teamUpdate])
 
   // Team moved here, right under Hotlines (plan review UX follow-up) - it
   // was its own tab, but with duty/status/hotlines/team/messages/calls/

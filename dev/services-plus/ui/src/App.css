@@ -880,12 +880,29 @@
   font-weight: 600;
   font-size: 0.85rem;
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: center;
-  gap: 0.12rem;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.5rem;
   padding: 0.55rem 0.8rem;
   text-align: left;
+}
+
+.sheet-option-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  color: var(--sp-text-secondary);
+  font-size: 0.9rem;
+  line-height: 1;
+  opacity: 0.8;
+}
+
+.sheet-option-label {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1.2;
 }
 
 .sheet-option-number {

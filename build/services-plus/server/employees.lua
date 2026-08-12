@@ -325,6 +325,65 @@ function Employees.GetTeam(companyId)
     return team
 end
 
+--- The same per-member shape GetTeam() builds, for exactly one employee -
+--- used by BroadcastStateChanged below so a status/hotline change doesn't
+--- need every colleague to re-fetch the whole team list to see it.
+---@param source number
+---@param companyId number
+---@return table? nil if not currently on duty (colleagues only ever see the
+---  on-duty subset, same as GetTeam)
+function Employees.GetTeamMemberRow(source, companyId)
+    if not Framework.GetOnDuty(source) then return nil end
+
+    local job = Framework.GetJob(source)
+    if not job then return nil end
+
+    local numbers = Companies.GetNumbers(companyId)
+    local activeHotlines = {}
+
+    for i = 1, #numbers do
+        if Employees.IsHotlineActive(source, companyId, numbers[i].id) then
+            activeHotlines[#activeHotlines + 1] = numbers[i].label
+        end
+    end
+
+    return {
+        name = Framework.GetPlayerName(source),
+        grade = job.grade,
+        gradeLabel = job.gradeLabel,
+        status = Employees.GetStatus(source),
+        hotlines = activeHotlines,
+        phoneNumber = Framework.GetPhoneNumber(source),
+    }
+end
+
+--- Pushes `source`'s current team row to every other on-duty colleague of
+--- the same job (plan review round 5 §8) - the Team view used to only ever
+--- reflect what GetTeam() returned at mount time, so a colleague going
+--- Available -> Busy or flipping a hotline stayed invisible to everyone else
+--- already looking at that list until they happened to reload it. A small
+--- per-change delta instead of polling, scoped to just this one employee's
+--- row - not a full team re-broadcast. Duty on/off itself isn't covered
+--- here (out of scope for this round - see plan review round 5 §8), so a
+--- colleague going off duty still only disappears from others' lists on
+--- their next reload.
+---@param source number
+function Employees.BroadcastStateChanged(source)
+    local job = Framework.GetJob(source)
+    local company = job and Companies.GetByJob(job.name)
+    if not company then return end
+
+    local row = Employees.GetTeamMemberRow(source, company.id)
+    if not row then return end
+
+    local staff = Framework.GetPlayersByJob(job.name)
+    for i = 1, #staff do
+        if staff[i] ~= source and Framework.GetOnDuty(staff[i]) then
+            TriggerClientEvent("services-plus:client:employeeStateChanged", staff[i], row)
+        end
+    end
+end
+
 AddEventHandler("playerDropped", function()
     state[source] = nil
 end)

@@ -18,7 +18,7 @@ const TABS = [
 ]
 
 // Everything past the fake-login (plan §19, §35-38, §20-24, §33-34).
-export default function CompanyDashboard({ session, employee, company, onLogout, onOpenConversation }) {
+export default function CompanyDashboard({ session, employee, company, onLogout, onOpenConversation, teamUpdate }) {
   const [tab, setTab] = useState('home')
   const tabs = TABS.filter((t) => !t.bossOnly || session.employee.isBoss)
 
@@ -66,6 +66,7 @@ export default function CompanyDashboard({ session, employee, company, onLogout,
             employeeName={session.employee.name}
             employeeGrade={session.employee.gradeLabel}
             onLogout={onLogout}
+            teamUpdate={teamUpdate}
           />
         )}
         {tab === 'requests' && <RequestsTab />}

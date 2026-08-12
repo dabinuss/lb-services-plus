@@ -56,7 +56,11 @@ function Companies.Reload()
     categories = MySQL.query.await("SELECT * FROM phone_services_plus_categories ORDER BY sort_order ASC") or {}
 
     local companyRows = MySQL.query.await("SELECT * FROM phone_services_plus_companies WHERE enabled = 1") or {}
-    local numberRows = MySQL.query.await("SELECT * FROM phone_services_plus_numbers ORDER BY is_main DESC, id ASC") or {}
+    -- Soft-deleted numbers (plan review round 5 §1) drop out of this cache
+    -- the same way a disabled company does - everything that reads a
+    -- company's numbers through Companies.GetNumbers() (calls, hotlines,
+    -- messaging, company settings) only ever sees live ones.
+    local numberRows = MySQL.query.await("SELECT * FROM phone_services_plus_numbers WHERE enabled = 1 ORDER BY is_main DESC, id ASC") or {}
 
     companiesById = {}
     companiesByJob = {}

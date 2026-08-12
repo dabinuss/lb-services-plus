@@ -213,11 +213,24 @@ adminCallback("admin:createNumber", function(_, reply, data)
     reply(id ~= nil)
 end)
 
+-- Soft-delete only (plan review round 5 §1, same reasoning as companies and
+-- request types): number_id cascades all the way down to channels, messages
+-- and call history, so a real DELETE here used to take that number's entire
+-- chat and call history with it. Disabling instead just drops it out of
+-- Companies.Reload()'s cache (so it stops ringing/receiving new messages),
+-- while admin:getCompanies still lists it (no WHERE enabled=1 there) so it
+-- can be re-enabled later.
 adminCallback("admin:deleteNumber", function(_, reply, data)
     local number = MySQL.single.await("SELECT is_main FROM phone_services_plus_numbers WHERE id = ?", { data.id })
     if not number or number.is_main == 1 then return reply(false) end -- plan §52: main number can't be removed
 
-    MySQL.update.await("DELETE FROM phone_services_plus_numbers WHERE id = ?", { data.id })
+    MySQL.update.await("UPDATE phone_services_plus_numbers SET enabled = 0 WHERE id = ?", { data.id })
+    Companies.Reload()
+    reply(true)
+end)
+
+adminCallback("admin:enableNumber", function(_, reply, data)
+    MySQL.update.await("UPDATE phone_services_plus_numbers SET enabled = 1 WHERE id = ?", { data.id })
     Companies.Reload()
     reply(true)
 end)

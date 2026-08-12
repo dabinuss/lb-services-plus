@@ -116,12 +116,16 @@ of smaller correctness/perf items):
 
 ## Setup
 
-1. Import [`sql/install.sql`](sql/install.sql) (`CREATE TABLE IF NOT EXISTS` /
-   `ADD COLUMN IF NOT EXISTS` throughout, so re-running it after an update is
-   always safe - needs MySQL 8.0.29+ / MariaDB 10.0.2+ for the phase 3
-   migration block at the bottom, and MariaDB for the post-review hardening
-   block's `ADD INDEX IF NOT EXISTS`/`ADD UNIQUE KEY IF NOT EXISTS` - on
-   plain MySQL, drop the `IF NOT EXISTS` there and run it once).
+1. Import [`sql/install.sql`](sql/install.sql) - **fresh install only**,
+   `CREATE TABLE IF NOT EXISTS` throughout, already reflects the current
+   final schema. No manual SQL editing needed on a new database, plain MySQL
+   included (plan review round 5 §9).
+   Already have a Services+ database from an earlier version instead? Import
+   [`sql/migrations.sql`](sql/migrations.sql) once (skip `install.sql`) -
+   it's the older `ADD COLUMN IF NOT EXISTS` upgrade path, needs MySQL
+   8.0.29+ / MariaDB 10.0.2+, and MariaDB specifically for its
+   `ADD INDEX IF NOT EXISTS` lines (plain MySQL: drop `IF NOT EXISTS` from
+   those specific lines and run it once - see that file's own header).
 2. `cd ui && npm install && npm run build`.
 3. Make sure `resources/services-plus` on your dev server is a **junction**
    pointing at this `dev/services-plus` folder, not a copy - see the repo

@@ -32,6 +32,7 @@ export default function App() {
   const [numberPicker, setNumberPicker] = useState(null) // { mode: 'call'|'message', company, numbers }
   const [requestSheet, setRequestSheet] = useState(null) // { company }
   const [incomingMessage, setIncomingMessage] = useState(null)
+  const [teamUpdate, setTeamUpdate] = useState(null)
 
   useEffect(() => {
     if (devMode) {
@@ -59,6 +60,12 @@ export default function App() {
   // this just routes the push to whichever one (if any) is currently open.
   useEffect(() => {
     onNuiEvent('newMessage', (data) => setIncomingMessage(data))
+  }, [])
+
+  // Same idea, for a colleague's status/hotline change (plan review round 5
+  // §8) - keeps the Team view current without polling.
+  useEffect(() => {
+    onNuiEvent('employeeStateChanged', (data) => setTeamUpdate(data))
   }, [])
 
   const visibleTabs = TABS.filter((t) => !t.requires || bootstrap?.[t.requires])
@@ -125,6 +132,7 @@ export default function App() {
           onLogin={setCompanySession}
           onLogout={() => setCompanySession(null)}
           onOpenConversation={setConversation}
+          teamUpdate={teamUpdate}
         />
       )}
       {tab === 'admin' && bootstrap.admin && <AdminScreen />}

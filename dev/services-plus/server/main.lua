@@ -72,6 +72,10 @@ RegisterCallback("setStatus", function(source, reply, status)
 
     if not Employees.SetStatus(source, status) then return reply(false) end
 
+    -- Lets colleagues' own Team views pick this up immediately instead of
+    -- staying stale until their next reload (plan review round 5 §8).
+    Employees.BroadcastStateChanged(source)
+
     reply({ ok = true, onDuty = Framework.GetOnDuty(source), status = status })
 end)
 
@@ -92,6 +96,9 @@ RegisterCallback("toggleHotline", function(source, reply, numberId, active)
 
     local job = Framework.GetJob(source)
     local company = Companies.GetByJob(job.name)
+
+    -- Same as setStatus above (plan review round 5 §8).
+    Employees.BroadcastStateChanged(source)
 
     reply({ ok = true, hotlines = Employees.GetHotlineOptions(source, company.id) })
 end)
@@ -270,8 +277,11 @@ RegisterCallback("openConversation", function(source, reply, numberId, page)
     -- Mailbox OFF means Messages OFF for this number too (plan review round
     -- 3 §4) - checked here as well, not just enforced at write-time in
     -- updateNumberSettings, so it also holds for any row written before
-    -- that rule existed.
-    if not number or number.messages_enabled ~= 1 or number.mailbox_enabled ~= 1 then return reply(false) end
+    -- that rule existed. A soft-deleted number (plan review round 5 §1) is
+    -- rejected the same way - it's already gone from Companies.GetNumbers's
+    -- cache everywhere else, but this queries the row directly by id, so it
+    -- needs its own check.
+    if not number or number.enabled ~= 1 or number.messages_enabled ~= 1 or number.mailbox_enabled ~= 1 then return reply(false) end
 
     -- Companies.GetById only ever holds enabled=1 companies, so this also
     -- covers a disabled company rejecting new conversations (plan review).
@@ -292,8 +302,14 @@ RegisterCallback("openConversation", function(source, reply, numberId, page)
     local channel = getOrCreateChannel(numberId, contactNumber)
     if not channel then return reply(false) end
 
+    -- `sender` (the actual employee's private number for a company-side
+    -- message) is deliberately not selected here (plan review round 5 §5) -
+    -- the UI only ever reads `sender_type` to align bubbles, and every other
+    -- client in this chat used to receive a specific colleague's personal
+    -- number for no reason. Still stored in the table itself for
+    -- logging/audit, just never read back out to a client.
     local messages = MySQL.query.await(
-        "SELECT id, sender, sender_type, content, created_at FROM phone_services_plus_messages WHERE channel_id = ? ORDER BY created_at DESC, id DESC LIMIT ?, ?",
+        "SELECT id, sender_type, content, created_at FROM phone_services_plus_messages WHERE channel_id = ? ORDER BY created_at DESC, id DESC LIMIT ?, ?",
         { channel.id, ClampPage(page) * Config.PageSize.messages, Config.PageSize.messages }
     )
 
@@ -313,7 +329,7 @@ RegisterCallback("sendMessage", function(source, reply, channelId, content)
     if not channel then return reply(false) end
 
     local number = MySQL.single.await("SELECT * FROM phone_services_plus_numbers WHERE id = ?", { channel.number_id })
-    if not number or number.messages_enabled ~= 1 or number.mailbox_enabled ~= 1 then return reply(false) end
+    if not number or number.enabled ~= 1 or number.messages_enabled ~= 1 or number.mailbox_enabled ~= 1 then return reply(false) end
 
     local company = Companies.GetById(number.company_id)
     if not company or company.messages_enabled ~= 1 then return reply(false) end
@@ -359,8 +375,12 @@ RegisterCallback("sendMessage", function(source, reply, channelId, content)
     -- sender_type (snake_case) matches the raw column name the SQL SELECTs
     -- above return - this payload and those rows land in the same client-
     -- side `messages` array and are read the same way, so the field name
-    -- has to match either way it arrived.
-    local payload = { channelId = channelId, id = messageId, sender = senderNumber, sender_type = senderType, content = content }
+    -- has to match either way it arrived. `sender` (senderNumber) is
+    -- deliberately left out (plan review round 5 §5, same reasoning as the
+    -- SELECTs below) - the UI never reads it, and for a company-side message
+    -- it would hand every other client in this chat the specific replying
+    -- employee's private phone number.
+    local payload = { channelId = channelId, id = messageId, sender_type = senderType, content = content }
 
     -- Push straight into an already-open conversation (plan review §15).
     -- SendCustomAppMessage only exists as a CLIENT export (it targets the
@@ -400,7 +420,15 @@ RegisterCallback("sendMessage", function(source, reply, channelId, content)
     reply(payload)
 end)
 
-RegisterCallback("getMessages", function(source, reply, channelId, page)
+-- `beforeId`, not a page number (plan review round 5 §6): OFFSET-based
+-- pagination re-counts from the *current* newest row on every call, so a
+-- message landing in this channel between "load page 0" and "load page 1"
+-- shifts every OFFSET after it - the last row of page 0 could resurface at
+-- the top of page 1, or a row could be skipped entirely. `id < beforeId` is
+-- an exact, stable boundary that doesn't move regardless of what's inserted
+-- afterwards - the oldest id already on screen, or omitted for the first
+-- (newest) page.
+RegisterCallback("getMessages", function(source, reply, channelId, beforeId)
     local channel = MySQL.single.await("SELECT * FROM phone_services_plus_channels WHERE id = ?", { channelId })
     if not channel then return reply(false) end
 
@@ -412,10 +440,20 @@ RegisterCallback("getMessages", function(source, reply, channelId, page)
 
     if not owns then return reply(false) end
 
-    local messages = MySQL.query.await(
-        "SELECT id, sender, sender_type, content, created_at FROM phone_services_plus_messages WHERE channel_id = ? ORDER BY created_at DESC, id DESC LIMIT ?, ?",
-        { channelId, ClampPage(page) * Config.PageSize.messages, Config.PageSize.messages }
-    )
+    local cursorId = tonumber(beforeId)
+    local messages
+
+    if cursorId then
+        messages = MySQL.query.await(
+            "SELECT id, sender_type, content, created_at FROM phone_services_plus_messages WHERE channel_id = ? AND id < ? ORDER BY id DESC LIMIT ?",
+            { channelId, cursorId, Config.PageSize.messages }
+        )
+    else
+        messages = MySQL.query.await(
+            "SELECT id, sender_type, content, created_at FROM phone_services_plus_messages WHERE channel_id = ? ORDER BY id DESC LIMIT ?",
+            { channelId, Config.PageSize.messages }
+        )
+    end
 
     -- Whichever side reopened this (customer's own Activity vs an
     -- employee's company inbox) needs to know which sender_type is "mine" -

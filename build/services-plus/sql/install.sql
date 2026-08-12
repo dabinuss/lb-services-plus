@@ -1,6 +1,13 @@
--- Services+ schema. Run once against the same database lb-phone uses.
--- Table prefix `phone_services_plus_` keeps this fully separate from
+-- Services+ schema - FRESH INSTALL ONLY. Run this once against the same
+-- database lb-phone uses, on a brand new install with none of these tables
+-- yet. Table prefix `phone_services_plus_` keeps this fully separate from
 -- lb-phone's own `phone_services_*` tables (the native Companies app).
+--
+-- Every CREATE TABLE below already reflects the current, final schema (no
+-- ALTER TABLE needed after this file on a fresh install). If you're
+-- *upgrading* an existing Services+ database instead, do NOT re-run this
+-- file - run `sql/migrations.sql` instead (see its own header for why the
+-- two are kept separate, plan review round 5 §9).
 
 CREATE TABLE IF NOT EXISTS `phone_services_plus_categories` (
     `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -38,6 +45,10 @@ CREATE TABLE IF NOT EXISTS `phone_services_plus_companies` (
     `call_routing` VARCHAR(10) NOT NULL DEFAULT 'all',
     `request_routing` VARCHAR(10) NOT NULL DEFAULT 'all',
 
+    -- Soft-delete only (plan review round 4 §9): company_id cascades all the
+    -- way down to numbers, channels, messages and call history, so a real
+    -- DELETE here would take a company's entire chat and call history with
+    -- it. "Deleting" a company from the admin area just clears this instead.
     `enabled` TINYINT(1) NOT NULL DEFAULT 1,
     `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -58,6 +69,13 @@ CREATE TABLE IF NOT EXISTS `phone_services_plus_numbers` (
     `messages_enabled` TINYINT(1) NOT NULL DEFAULT 1,
     `mailbox_enabled` TINYINT(1) NOT NULL DEFAULT 1,
 
+    -- Soft-delete only (plan review round 5 §1): number_id cascades down to
+    -- channels, messages, and call history, so a real DELETE here would take
+    -- that number's entire chat and call history with it - exactly the same
+    -- reasoning as `phone_services_plus_companies.enabled` above. Admin's
+    -- "remove number" action just clears this instead.
+    `enabled` TINYINT(1) NOT NULL DEFAULT 1,
+
     PRIMARY KEY (`id`),
     UNIQUE KEY `number` (`number`),
     FOREIGN KEY (`company_id`) REFERENCES `phone_services_plus_companies`(`id`) ON DELETE CASCADE
@@ -77,9 +95,10 @@ CREATE TABLE IF NOT EXISTS `phone_services_plus_channels` (
     PRIMARY KEY (`id`),
     -- One channel per (number, contact) - closes the race where two
     -- concurrent openConversation calls could otherwise create two channels
-    -- for the same pair (plan review §7). getOrCreateChannel() relies on
-    -- this via INSERT IGNORE.
+    -- for the same pair. getOrCreateChannel() relies on this via INSERT IGNORE.
     UNIQUE KEY `number_contact` (`number_id`, `contact_number`),
+    KEY `contact_archived_updated` (`contact_number`, `archived_by_contact`, `updated_at`),
+    KEY `number_archived_updated` (`number_id`, `archived_by_company`, `updated_at`),
     FOREIGN KEY (`number_id`) REFERENCES `phone_services_plus_numbers`(`id`) ON DELETE CASCADE
 ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -91,7 +110,8 @@ CREATE TABLE IF NOT EXISTS `phone_services_plus_messages` (
     -- Which *side* sent this - the UI aligns chat bubbles by this, not by
     -- comparing `sender` against the viewer's own number (that only ever
     -- worked for the one employee who actually sent it, plan review round
-    -- 4 §3). `sender` itself is kept for logging/debugging only.
+    -- 4 §3). `sender` itself is kept server-side only, for logging/audit -
+    -- it is never sent back to any client (plan review round 5 §5).
     `sender_type` ENUM('customer', 'company') NOT NULL DEFAULT 'customer',
     `content` VARCHAR(1000) NOT NULL,
     `pos_x` FLOAT DEFAULT NULL,
@@ -100,6 +120,7 @@ CREATE TABLE IF NOT EXISTS `phone_services_plus_messages` (
     `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     PRIMARY KEY (`id`),
+    KEY `channel_created` (`channel_id`, `created_at`),
     FOREIGN KEY (`channel_id`) REFERENCES `phone_services_plus_channels`(`id`) ON DELETE CASCADE
 ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -126,6 +147,9 @@ CREATE TABLE IF NOT EXISTS `phone_services_plus_calls` (
     `ended_at` TIMESTAMP NULL DEFAULT NULL,
 
     PRIMARY KEY (`id`),
+    KEY `company_created` (`company_id`, `created_at`),
+    KEY `customer_created` (`customer_number`, `created_at`),
+    KEY `lb_call_id` (`lb_call_id`),
     FOREIGN KEY (`company_id`) REFERENCES `phone_services_plus_companies`(`id`) ON DELETE CASCADE,
     FOREIGN KEY (`number_id`) REFERENCES `phone_services_plus_numbers`(`id`) ON DELETE CASCADE
 ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -189,86 +213,13 @@ CREATE TABLE IF NOT EXISTS `phone_services_plus_requests` (
     `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     PRIMARY KEY (`id`),
+    KEY `company_status_created` (`company_id`, `status`, `created_at`),
+    KEY `requester_created` (`requester_number`, `created_at`),
+    KEY `employee_status` (`employee_identifier`, `status`),
     FOREIGN KEY (`request_type_id`) REFERENCES `phone_services_plus_request_types`(`id`) ON DELETE CASCADE,
     FOREIGN KEY (`company_id`) REFERENCES `phone_services_plus_companies`(`id`) ON DELETE SET NULL
 ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
--- ---------------------------------------------------------------------------
--- Phase 3 migration. Safe to re-run: only adds these columns if they're
--- missing, for installs that ran this file before phase 3 existed.
--- Requires MySQL 8.0.29+ / MariaDB 10.0.2+ for "ADD COLUMN IF NOT EXISTS".
--- ---------------------------------------------------------------------------
-ALTER TABLE `phone_services_plus_companies`
-    ADD COLUMN IF NOT EXISTS `admin_calls_allowed` TINYINT(1) NOT NULL DEFAULT 1 AFTER `requests_enabled`,
-    ADD COLUMN IF NOT EXISTS `admin_messages_allowed` TINYINT(1) NOT NULL DEFAULT 1 AFTER `admin_calls_allowed`,
-    ADD COLUMN IF NOT EXISTS `admin_requests_allowed` TINYINT(1) NOT NULL DEFAULT 1 AFTER `admin_messages_allowed`;
-
--- ---------------------------------------------------------------------------
--- Post-review hardening migration. Safe to re-run. Requires MariaDB
--- 10.0.2+ for "ADD ... IF NOT EXISTS" (MySQL 8.0.29+ only covers ADD COLUMN,
--- not ADD INDEX/KEY - on plain MySQL, drop the "IF NOT EXISTS" here if it
--- errors and just run this block once).
--- ---------------------------------------------------------------------------
-
--- De-duplicate any channels created before the UNIQUE constraint below
--- existed (a race in getOrCreateChannel could produce two channels for the
--- same number+contact pair) - keeps the oldest one, reassigns its messages.
-UPDATE `phone_services_plus_messages` m
-    JOIN `phone_services_plus_channels` dup ON dup.id = m.channel_id
-    JOIN `phone_services_plus_channels` keep
-        ON keep.number_id = dup.number_id
-        AND keep.contact_number = dup.contact_number
-        AND keep.id < dup.id
-SET m.channel_id = keep.id;
-
-DELETE dup FROM `phone_services_plus_channels` dup
-    JOIN `phone_services_plus_channels` keep
-        ON keep.number_id = dup.number_id
-        AND keep.contact_number = dup.contact_number
-        AND keep.id < dup.id;
-
--- `number_contact` itself is NOT added here (plan review round 4 §10) - the
--- fresh CREATE TABLE above already declares it directly, so adding it again
--- here is both redundant for any install using this version of the file
--- and, worse, plain MySQL doesn't support "ADD ... IF NOT EXISTS" for
--- keys/indexes at all (syntax error, not a harmless no-op like on MariaDB)
--- - a fresh install would fail outright on this line despite genuinely
--- needing nothing done. Installs that upgraded through an earlier version
--- of this file already picked it up from *that* run of this exact line.
-ALTER TABLE `phone_services_plus_channels`
-    ADD INDEX IF NOT EXISTS `contact_archived_updated` (`contact_number`, `archived_by_contact`, `updated_at`),
-    ADD INDEX IF NOT EXISTS `number_archived_updated` (`number_id`, `archived_by_company`, `updated_at`);
-
-ALTER TABLE `phone_services_plus_messages`
-    ADD INDEX IF NOT EXISTS `channel_created` (`channel_id`, `created_at`);
-
-ALTER TABLE `phone_services_plus_calls`
-    ADD COLUMN IF NOT EXISTS `lb_call_id` BIGINT UNSIGNED DEFAULT NULL AFTER `number_id`,
-    ADD INDEX IF NOT EXISTS `company_created` (`company_id`, `created_at`),
-    ADD INDEX IF NOT EXISTS `customer_created` (`customer_number`, `created_at`),
-    ADD INDEX IF NOT EXISTS `lb_call_id` (`lb_call_id`);
-
-ALTER TABLE `phone_services_plus_requests`
-    ADD INDEX IF NOT EXISTS `company_status_created` (`company_id`, `status`, `created_at`),
-    ADD INDEX IF NOT EXISTS `requester_created` (`requester_number`, `created_at`),
-    ADD INDEX IF NOT EXISTS `employee_status` (`employee_identifier`, `status`);
-
--- ---------------------------------------------------------------------------
--- Round 3 review migration. Safe to re-run.
--- ---------------------------------------------------------------------------
-ALTER TABLE `phone_services_plus_request_types`
-    ADD COLUMN IF NOT EXISTS `enabled` TINYINT(1) NOT NULL DEFAULT 1 AFTER `competition_enabled`;
-
--- ---------------------------------------------------------------------------
--- Round 4 review migration. Safe to re-run.
--- ---------------------------------------------------------------------------
-ALTER TABLE `phone_services_plus_messages`
-    ADD COLUMN IF NOT EXISTS `sender_type` ENUM('customer', 'company') NOT NULL DEFAULT 'customer' AFTER `sender`;
-
--- Backfill existing rows for installs that had messages before sender_type
--- existed - anything not sent by the channel's own contact number was sent
--- by the company side.
-UPDATE `phone_services_plus_messages` m
-    JOIN `phone_services_plus_channels` c ON c.id = m.channel_id
-SET m.sender_type = 'company'
-WHERE m.sender <> c.contact_number;
+-- Upgrading an existing Services+ install instead of setting one up fresh?
+-- Run sql/migrations.sql once instead of (or after skipping) this file - see
+-- its own header.

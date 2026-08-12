@@ -91,6 +91,18 @@ end
 local notifiedSources = {}
 local OPEN_REQUEST_TTL_MS = 30 * 60000
 
+-- identifier -> true while an acceptRequest for that employee is in flight
+-- (plan review round 5 §2). The existing-active SELECT followed by the
+-- 'open'-scoped UPDATE stops two concurrent accepts from both winning the
+-- *same* request, but not two concurrent accepts for two *different*
+-- requests by the *same* employee - both could see "no active request yet"
+-- in their SELECT before either UPDATE lands. This scopes "only one accept
+-- in flight per employee at a time" instead - released in every return path
+-- in acceptRequest below. No queue/transaction needed for this app's scale,
+-- and no leak risk from a mid-flight disconnect either: MySQL.await still
+-- resumes and completes this coroutine even after the player's gone.
+local acceptLocks = {}
+
 --- Notifies every eligible employee for `company`'s request routing mode via
 --- the Sibling-NUI request card (plan §42-44) and returns how many were
 --- reached.
@@ -253,6 +265,12 @@ RegisterCallback("acceptRequest", function(source, reply, requestId)
         or (request.company_id == nil and requestType.category_id == company.category_id)
     if not allowed then return reply(false) end
 
+    -- Requests OFF must apply immediately (plan review round 5 §4) - without
+    -- this, createRequest already refuses new requests once a company turns
+    -- requests off, but an already-open request's id stays valid forever, so
+    -- a direct acceptRequest call for it could still go through.
+    if company.requests_enabled ~= 1 then return reply(false) end
+
     -- Re-check the exact same eligibility distribute() used (plan review
     -- §9) - duty, pause/busy and hotline can all have changed since the
     -- notification went out, and a direct RPC call must not be able to skip
@@ -265,16 +283,28 @@ RegisterCallback("acceptRequest", function(source, reply, requestId)
 
     local identifier = Framework.GetIdentifier(source)
 
+    if acceptLocks[identifier] then return reply(false) end
+    acceptLocks[identifier] = true
+
+    ---@param result any
+    local function finish(result)
+        acceptLocks[identifier] = nil
+        reply(result)
+    end
+
     -- One active request per employee at a time (plan review round 4 §4):
     -- without this, accepting a second request while the first is still
     -- active just silently buries the first one - getActiveRequest() only
     -- ever returns the newest via LIMIT 1, so it'd never resurface on the
     -- overlay/rehydration even though it's still sitting there `active`.
+    -- acceptLocks above (plan review round 5 §2) is what actually makes this
+    -- check race-safe against a second concurrent accept for a *different*
+    -- request - on its own this SELECT-then-UPDATE pair wasn't atomic.
     local existingActive = MySQL.scalar.await(
         "SELECT id FROM phone_services_plus_requests WHERE employee_identifier = ? AND status = 'active' LIMIT 1",
         { identifier }
     )
-    if existingActive then return reply(false) end
+    if existingActive then return finish(false) end
 
     -- Atomic first-accept-wins (plan §15): the WHERE status = 'open' means
     -- only one of any number of concurrent accepts can ever affect a row.
@@ -283,7 +313,7 @@ RegisterCallback("acceptRequest", function(source, reply, requestId)
         { company.id, identifier, requestId }
     )
 
-    if affected == 0 then return reply(false) end
+    if affected == 0 then return finish(false) end
 
     clearNotifications(requestId, source)
 
@@ -310,7 +340,7 @@ RegisterCallback("acceptRequest", function(source, reply, requestId)
     -- sync regardless of where Accept was pressed (plan review round 2 §4).
     TriggerClientEvent("services-plus:client:requestAccepted", source, activePayload)
 
-    reply(activePayload)
+    finish(activePayload)
 end)
 
 -- Rehydration for the Sibling-NUI overlay (plan review §14): a client
@@ -393,7 +423,7 @@ RegisterCallback("getCompanyRequests", function(source, reply, page)
     local identifier = Framework.GetIdentifier(source)
 
     local rows = MySQL.query.await([[
-        SELECT r.*, t.name AS type_name, t.icon AS type_icon
+        SELECT r.*, r.pos_x AS x, r.pos_y AS y, t.name AS type_name, t.icon AS type_icon
         FROM phone_services_plus_requests r
         JOIN phone_services_plus_request_types t ON t.id = r.request_type_id
         WHERE r.company_id = ? OR (r.company_id IS NULL AND t.category_id = ? AND r.status = 'open')

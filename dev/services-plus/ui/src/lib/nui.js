@@ -296,23 +296,23 @@ let fixtureAdminCompanies = [
     admin_calls_allowed: 1, admin_messages_allowed: 1, admin_requests_allowed: 1,
     icon: 'https://cdn-icons-png.flaticon.com/512/7211/7211100.png', background: bg('lspd'),
     numbers: [
-      { id: 1, label: 'Main Hotline', number: '911', is_main: 1 },
-      { id: 7, label: 'Dispatch', number: '5550911', is_main: 0 },
+      { id: 1, label: 'Main Hotline', number: '911', is_main: 1, enabled: 1 },
+      { id: 7, label: 'Dispatch', number: '5550911', is_main: 0, enabled: 1 },
     ],
   },
   {
     id: 2, job: 'ambulance', name: 'Pillbox Medical', category_id: 2, boss_grade: 100, enabled: 1,
     admin_calls_allowed: 1, admin_messages_allowed: 1, admin_requests_allowed: 1,
     icon: 'https://cdn-icons-png.flaticon.com/128/1032/1032989.png', background: bg('pillbox'),
-    numbers: [{ id: 2, label: 'Main Hotline', number: '912', is_main: 1 }],
+    numbers: [{ id: 2, label: 'Main Hotline', number: '912', is_main: 1, enabled: 1 }],
   },
   {
     id: 3, job: 'mechanic', name: 'Downtown Cab Co.', category_id: 4, boss_grade: 4, enabled: 1,
     admin_calls_allowed: 1, admin_messages_allowed: 1, admin_requests_allowed: 1,
     icon: 'https://cdn-icons-png.flaticon.com/128/10281/10281554.png', background: bg('taxi-rank'),
     numbers: [
-      { id: 3, label: 'Main Hotline', number: '911', is_main: 1 },
-      { id: 4, label: 'Workshop', number: '5550199', is_main: 0 },
+      { id: 3, label: 'Main Hotline', number: '911', is_main: 1, enabled: 1 },
+      { id: 4, label: 'Workshop', number: '5550199', is_main: 0, enabled: 1 },
     ],
   },
   {
@@ -320,8 +320,8 @@ let fixtureAdminCompanies = [
     admin_calls_allowed: 1, admin_messages_allowed: 1, admin_requests_allowed: 1,
     icon: 'https://cdn-icons-png.flaticon.com/128/3079/3079165.png', background: bg('coastal-taxi'),
     numbers: [
-      { id: 5, label: 'Main Hotline', number: '5550188', is_main: 1 },
-      { id: 6, label: 'Airport Line', number: '5550177', is_main: 0 },
+      { id: 5, label: 'Main Hotline', number: '5550188', is_main: 1, enabled: 1 },
+      { id: 6, label: 'Airport Line', number: '5550177', is_main: 0, enabled: 1 },
     ],
   },
 ]
@@ -362,12 +362,17 @@ async function fetchNuiFixture(action, data) {
       return true
     case 'openConversation':
     case 'getMessages': {
-      // Newest-first + paginate, same as the real ORDER BY created_at DESC
-      // LIMIT - lets "Load older" (ConversationScreen) actually have
-      // something to page through instead of always getting everything at
-      // once regardless of `page`.
-      const newestFirst = [...fixtureMessages].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-      return { channelId: 1, contactNumber: '5550100', viewerRole: 'customer', messages: paginate(newestFirst, data.page) }
+      // Newest-first + cursor slice, same as the real `id < beforeId ORDER
+      // BY id DESC LIMIT` (plan review round 5 §6) - lets "Load older"
+      // (ConversationScreen) actually have something to page through, and
+      // mirrors the real callback's `beforeId` contract instead of the old
+      // OFFSET-based `page` one. `sender` is dropped from what's returned,
+      // same as the real server (plan review round 5 §5) - the UI never
+      // reads it.
+      const newestFirst = [...fixtureMessages].sort((a, b) => b.id - a.id)
+      const slice = data.beforeId ? newestFirst.filter((m) => m.id < data.beforeId) : newestFirst
+      const messages = slice.slice(0, FIXTURE_PAGE_SIZE).map(({ sender, ...rest }) => rest)
+      return { channelId: 1, contactNumber: '5550100', viewerRole: 'customer', messages }
     }
     case 'sendMessage': {
       const message = {
@@ -375,7 +380,8 @@ async function fetchNuiFixture(action, data) {
         created_at: new Date(Date.now()).toISOString(),
       }
       fixtureMessages.push(message)
-      return message
+      const { sender, ...withoutSender } = message
+      return withoutSender
     }
     case 'getActivity':
       return paginate(fixtureActivity, data.page)
@@ -499,12 +505,23 @@ async function fetchNuiFixture(action, data) {
     case 'admin:createNumber':
       fixtureAdminCompanies = fixtureAdminCompanies.map((c) =>
         c.id === data.companyId
-          ? { ...c, numbers: [...c.numbers, { id: Date.now(), label: data.label, number: data.number, is_main: 0 }] }
+          ? { ...c, numbers: [...c.numbers, { id: Date.now(), label: data.label, number: data.number, is_main: 0, enabled: 1 }] }
           : c,
       )
       return true
+    // Mirrors the server: soft-delete only (plan review round 5 §1), so
+    // chat/call history for this number isn't wiped along with it.
     case 'admin:deleteNumber':
-      fixtureAdminCompanies = fixtureAdminCompanies.map((c) => ({ ...c, numbers: c.numbers.filter((n) => n.id !== data.id) }))
+      fixtureAdminCompanies = fixtureAdminCompanies.map((c) => ({
+        ...c,
+        numbers: c.numbers.map((n) => (n.id === data.id ? { ...n, enabled: 0 } : n)),
+      }))
+      return true
+    case 'admin:enableNumber':
+      fixtureAdminCompanies = fixtureAdminCompanies.map((c) => ({
+        ...c,
+        numbers: c.numbers.map((n) => (n.id === data.id ? { ...n, enabled: 1 } : n)),
+      }))
       return true
 
     case 'admin:getRequestTypes':

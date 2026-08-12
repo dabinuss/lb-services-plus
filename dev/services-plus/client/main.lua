@@ -39,6 +39,15 @@ RegisterNetEvent("services-plus:client:newMessage", function(payload)
     })
 end)
 
+-- Same relay pattern, for a colleague's status/hotline change (plan review
+-- round 5 §8) - keeps the Team view in sync without polling.
+RegisterNetEvent("services-plus:client:employeeStateChanged", function(payload)
+    exports["lb-phone"]:SendCustomAppMessage(Config.App.identifier, {
+        type = "employeeStateChanged",
+        member = payload,
+    })
+end)
+
 CreateThread(function()
     while GetResourceState("lb-phone") ~= "started" do
         Wait(500)
@@ -91,14 +100,34 @@ end
 -- lb-phone company will have its calls paused too while Busy/Pause/off-duty
 -- here. There is no finer-grained native hook to avoid that.
 --
--- nil = Services+ isn't currently holding calls off. Non-nil = the native
--- state the player actually had *before* Services+ forced it off, to be
--- restored verbatim instead of hard-setting `true` (plan review round 3
--- §10) - lb-phone's toggle is a player preference, not a Services+-owned
--- flag, so a player who deliberately turned company calls off, then went
--- Busy and back Available in Services+, must not have them silently
--- switched back on.
-local priorNativeCompanyCalls = nil
+-- Persisted via client KVP, not a plain Lua local (plan review round 5 §3):
+-- a RAM-only var loses this the moment Services+ itself restarts while a
+-- player is still Busy/Pause/off-duty. That used to mean two things went
+-- wrong at once - the "nothing captured to restore" comment below applied
+-- even though something genuinely had been captured before the restart, and
+-- worse, the *next* Busy/Pause transition after that restart would read
+-- lb-phone's current (already-suppressed, Services+-set) `false` back via
+-- GetCompanyCallsStatus() and store that as if it were the player's own
+-- original preference - permanently losing the real one. Client KVPs
+-- survive a resource restart (this resource's own, and lb-phone's), so the
+-- capture/suppress/restore cycle below now does too.
+local PRIOR_CALLS_KVP = "servicesPlusPriorNativeCalls"
+
+---@return boolean? nil = Services+ isn't currently holding calls off
+local function getPriorNativeCompanyCalls()
+    local raw = GetResourceKvpString(PRIOR_CALLS_KVP)
+    if raw == nil then return nil end
+    return raw == "true"
+end
+
+---@param value boolean the native state to restore once Available again
+local function setPriorNativeCompanyCalls(value)
+    SetResourceKvp(PRIOR_CALLS_KVP, value and "true" or "false")
+end
+
+local function clearPriorNativeCompanyCalls()
+    DeleteResourceKvp(PRIOR_CALLS_KVP)
+end
 
 ---@param result table
 local function syncNativeCompanyCalls(result)
@@ -108,9 +137,10 @@ local function syncNativeCompanyCalls(result)
 
     pcall(function()
         if shouldReceive then
-            if priorNativeCompanyCalls ~= nil then
-                exports["lb-phone"]:ToggleCompanyCalls(priorNativeCompanyCalls)
-                priorNativeCompanyCalls = nil
+            local prior = getPriorNativeCompanyCalls()
+            if prior ~= nil then
+                exports["lb-phone"]:ToggleCompanyCalls(prior)
+                clearPriorNativeCompanyCalls()
             end
             -- Nothing captured to restore (e.g. fresh client state after a
             -- restart while Busy) - deliberately left alone rather than
@@ -122,8 +152,8 @@ local function syncNativeCompanyCalls(result)
             -- silently switched back on. Worth knowing: this does mean a
             -- restart mid-Busy can leave calls off until the next real
             -- Busy/Pause/off-duty -> Available transition.
-        elseif priorNativeCompanyCalls == nil then
-            priorNativeCompanyCalls = exports["lb-phone"]:GetCompanyCallsStatus()
+        elseif getPriorNativeCompanyCalls() == nil then
+            setPriorNativeCompanyCalls(exports["lb-phone"]:GetCompanyCallsStatus())
             exports["lb-phone"]:ToggleCompanyCalls(false)
         end
     end)
@@ -154,7 +184,7 @@ RegisterNUICallback("sendMessage", function(data, cb)
 end)
 
 RegisterNUICallback("getMessages", function(data, cb)
-    cb(bridge("getMessages", data.channelId, data.page))
+    cb(bridge("getMessages", data.channelId, data.beforeId))
 end)
 
 RegisterNUICallback("getActivity", function(data, cb)
@@ -263,7 +293,7 @@ local ADMIN_ACTIONS = {
     "admin:getCategories", "admin:createCategory", "admin:updateCategory", "admin:deleteCategory",
     "admin:getCompanies", "admin:createCompany", "admin:updateCompany", "admin:deleteCompany",
     "admin:setCompanyCeiling", "admin:assignBoss",
-    "admin:createNumber", "admin:deleteNumber",
+    "admin:createNumber", "admin:deleteNumber", "admin:enableNumber",
     "admin:getRequestTypes", "admin:createRequestType", "admin:updateRequestType", "admin:deleteRequestType",
 }
 

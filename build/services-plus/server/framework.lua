@@ -389,8 +389,17 @@ CreateThread(function()
 
     while true do
         local players = GetPlayers()
+
         for i = 1, #players do
             Framework.GetJob(tonumber(players[i]))
+
+            -- A 600-player server makes this 600 framework lookups back to
+            -- back with no yield at all - individually cheap, but bursting
+            -- all of them into the same server tick is still unnecessary
+            -- (plan review round 5 §7). Yielding every 25 keeps the self-heal
+            -- spread across several ticks instead, with no change to the
+            -- outer 2-minute cadence.
+            if i % 25 == 0 then Wait(0) end
         end
 
         Wait(120000)

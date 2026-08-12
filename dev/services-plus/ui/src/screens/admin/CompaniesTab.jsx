@@ -50,8 +50,14 @@ function CompanyRow({ company, categories, onChanged, onEdit }) {
     }
   }
 
+  // Soft-delete only server-side (plan review round 5 §1) - same reasoning
+  // as disableCompany below, keeps that number's chat/call history intact.
   const deleteNumber = async (id) => {
     if (await fetchNui('admin:deleteNumber', { id })) onChanged()
+  }
+
+  const enableNumber = async (id) => {
+    if (await fetchNui('admin:enableNumber', { id })) onChanged()
   }
 
   // Soft-delete only server-side (plan review round 4 §9) - this disables
@@ -95,12 +101,18 @@ function CompanyRow({ company, categories, onChanged, onEdit }) {
             <div key={n.id} className="number-row">
               <div className="dashboard-label">
                 {n.label} <span className="hint">{n.number}</span> {n.is_main === 1 && <span className="hint">(main)</span>}
+                {n.enabled !== 1 && <span className="hint"> (disabled)</span>}
               </div>
-              {n.is_main !== 1 && (
-                <ConfirmButton className="icon-button subtle" onConfirm={() => deleteNumber(n.id)}>
-                  ✕
-                </ConfirmButton>
-              )}
+              {n.is_main !== 1 &&
+                (n.enabled === 1 ? (
+                  <ConfirmButton className="icon-button subtle" onConfirm={() => deleteNumber(n.id)}>
+                    ✕
+                  </ConfirmButton>
+                ) : (
+                  <button className="request-action complete" onClick={() => enableNumber(n.id)}>
+                    Re-enable
+                  </button>
+                ))}
             </div>
           ))}
           <div className="admin-inline-form">
