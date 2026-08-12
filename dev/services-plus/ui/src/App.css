@@ -137,15 +137,58 @@
 
 /* Icon-only variant (Services category filter) - .category-chip stays a
    text pill everywhere else (Admin/Company/Settings sub-tabs). */
+.category-row.icon-only {
+  gap: 0.4rem;
+  align-items: center; /* ensures all items are on the exact same height */
+}
+
 .category-row.icon-only .category-chip {
-  width: 2.3rem;
-  height: 2.3rem;
+  width: 2.0rem;
+  height: 2.0rem;
   padding: 0;
   border-radius: 0.7rem; /* rounded square, not a circle, unlike the text-pill chips elsewhere */
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.05rem;
+  font-size: 0.95rem;
+}
+
+.category-row.icon-only .category-chip.all-btn {
+  background: transparent;
+  height: 2.0rem;
+  width: 2.0rem;
+  border-radius: 0.6rem;
+}
+
+.category-row.icon-only .category-chip.all-btn.active {
+  background: var(--sp-accent);
+  color: #fff;
+}
+
+.category-divider {
+  width: 1.5px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: 0.3rem 0.2rem;
+  border-radius: 1px;
+}
+
+.category-group {
+  display: flex;
+  background: var(--sp-bg-highlight);
+  border-radius: 0.8rem;
+  padding: 0.2rem;
+  gap: 0.2rem;
+}
+
+.category-group .category-chip {
+  background: transparent;
+  border-radius: 0.6rem;
+  box-shadow: none;
+}
+
+.category-group .category-chip.active {
+  background: var(--sp-accent);
+  box-shadow: var(--shadow-sm);
 }
 
 .company-list {
@@ -194,7 +237,7 @@
   inset: -20%;
   background-size: cover;
   background-position: center;
-  filter: blur(6px);
+  filter: blur(3px);
   transform: scale(1.15);
 }
 
@@ -598,8 +641,8 @@
    padding and re-covers the notch clearance itself since it's no longer
    inside that padding. */
 .dashboard-header.has-bg {
-  margin: -3.6rem -1rem 0.6rem;
-  padding: 3.6rem 1.9rem 1.6rem;
+  margin: -3.6rem -1rem -3.4rem;
+  padding: 3.6rem 1.9rem 5.6rem;
   border-radius: 0;
   box-shadow: none;
 }
@@ -609,7 +652,7 @@
   inset: -20%;
   background-size: cover;
   background-position: center;
-  filter: blur(8px);
+  filter: blur(4px);
   transform: scale(1.15); /* hides the blur's soft edge past the header's own bounds */
 }
 
@@ -879,9 +922,11 @@
 .category-row.subtab-row {
   width: fit-content;
   max-width: 100%;
-  margin: 0 auto 0.6rem;
-  padding: 0.2rem;
-  gap: 0.1rem;
+  margin: 0 auto 0.8rem;
+  padding: 0.2rem 0;
+  gap: 0.3rem;
+  position: relative;
+  z-index: 1;
   background: var(--sp-bg-highlight);
   border-radius: 0.8rem;
   overflow-x: auto;
@@ -904,6 +949,8 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  position: relative;
+  z-index: 1;
 }
 
 .tab-panel {

@@ -3,9 +3,9 @@
 // a labeled action row below. Buttons only show when the company actually
 // allows that action.
 export default function CompanyCard({ company, categoryName, onCall, onMessage, onRequest }) {
-  const canMessage = company.messagesEnabled && company.numbers.some((n) => n.messagesEnabled)
-  const canCall = company.callsEnabled
-  const canRequest = company.requestsEnabled
+  const canMessage = company.available && company.messagesEnabled && company.numbers.some((n) => n.messagesEnabled)
+  const canCall = company.available && company.callsEnabled
+  const canRequest = company.available && company.requestsEnabled
 
   return (
     <div className={`company-card${company.available ? '' : ' unavailable'}`}>

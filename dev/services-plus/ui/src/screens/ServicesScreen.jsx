@@ -40,25 +40,34 @@ export default function ServicesScreen({ companies, categories, onCall, onMessag
           just this row, the same .category-chip class is reused as a plain
           text pill for sub-tab navigation elsewhere (Admin, Company, Settings). */}
       <div className="category-row icon-only">
-        <button
-          className={`category-chip${activeCategory === null ? ' active' : ''}`}
-          onClick={() => setActiveCategory(null)}
-          aria-label="All"
-          title="All"
-        >
-          🏢
-        </button>
-        {categories.map((cat) => (
+        <div className="category-group">
           <button
-            key={cat.id}
-            className={`category-chip${activeCategory === cat.id ? ' active' : ''}`}
-            onClick={() => setActiveCategory(activeCategory === cat.id ? null : cat.id)}
-            aria-label={cat.name}
-            title={cat.name}
+            className={`category-chip all-btn${activeCategory === null ? ' active' : ''}`}
+            onClick={() => setActiveCategory(null)}
+            aria-label="All"
+            title="All"
           >
-            <CategoryIcon icon={cat.icon} />
+            <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round">
+              <line x1="4" y1="7" x2="20" y2="7"></line>
+              <line x1="4" y1="12" x2="20" y2="12"></line>
+              <line x1="4" y1="17" x2="20" y2="17"></line>
+            </svg>
           </button>
-        ))}
+
+          <div className="category-divider" />
+
+          {categories.map((cat) => (
+            <button
+              key={cat.id}
+              className={`category-chip${activeCategory === cat.id ? ' active' : ''}`}
+              onClick={() => setActiveCategory(activeCategory === cat.id ? null : cat.id)}
+              aria-label={cat.name}
+              title={cat.name}
+            >
+              <CategoryIcon icon={cat.icon} />
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="company-list">
