@@ -30,6 +30,7 @@ server_scripts {
     'server/requests.lua',
     'server/admin.lua',
     'server/main.lua',
+    'server/seed.lua',
 }
 
 -- The custom app itself (ui/dist) is loaded by lb-phone as a plain iframe

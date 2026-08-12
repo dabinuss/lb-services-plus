@@ -6,6 +6,11 @@ Config.Framework = "auto"
 
 Config.Locale = "en"
 
+-- Set to true if you want the script to automatically populate an empty database 
+-- with default test companies (Police, Ambulance, Mechanic, Taxi).
+-- It will safely skip if companies already exist.
+Config.SeedTestData = false
+
 -- Custom app registration (see docs.lbscripts.com/phone/custom-apps)
 Config.App = {
     identifier = "services_plus",
