@@ -51,8 +51,10 @@ function Requests.Reload()
     for i = 1, #rows do
         local t = rows[i]
         typesById[t.id] = t
-        typesByCategory[t.category_id] = typesByCategory[t.category_id] or {}
-        table.insert(typesByCategory[t.category_id], t)
+        if t.category_id ~= nil then
+            typesByCategory[t.category_id] = typesByCategory[t.category_id] or {}
+            table.insert(typesByCategory[t.category_id], t)
+        end
     end
 end
 
@@ -64,6 +66,7 @@ end
 ---@param categoryId number
 ---@return table[]
 function Requests.GetTypesForCategory(categoryId)
+    if not categoryId then return {} end
     -- typesByCategory holds every row, disabled ones included - GetType(id)
     -- below still needs to resolve those for requests that were already
     -- created before a type got disabled (plan review round 3 §9). This is

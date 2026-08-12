@@ -4,8 +4,8 @@
   width: 100%;
   display: flex;
   flex-direction: column;
-  background-color: var(--background-primary);
-  color: var(--text-primary);
+  background-color: var(--sp-bg-primary);
+  color: var(--sp-text-primary);
   overflow: hidden;
 
   /* Shared elevation tokens - subtle, theme-agnostic (additive darkening
@@ -41,14 +41,14 @@
 }
 
 .empty-state {
-  color: var(--text-secondary);
+  color: var(--sp-text-secondary);
   text-align: center;
   padding: 2rem 1rem;
   font-size: 0.85rem;
 }
 
 .placeholder-card {
-  background: var(--background-secondary);
+  background: var(--sp-bg-secondary);
   border-radius: 0.8rem;
   margin-top: 1rem;
 }
@@ -57,8 +57,8 @@
 
 .nav-bar {
   display: flex;
-  border-top: 1px solid var(--separator);
-  background: var(--background-secondary);
+  border-top: 1px solid var(--sp-separator);
+  background: var(--sp-bg-secondary);
   padding-bottom: env(safe-area-inset-bottom, 0.4rem);
   box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05);
 }
@@ -70,12 +70,12 @@
   align-items: center;
   gap: 0.15rem;
   padding: 0.5rem 0 0.3rem;
-  color: var(--text-secondary);
+  color: var(--sp-text-secondary);
   transition: color 0.15s ease;
 }
 
 .nav-item.active {
-  color: var(--accent);
+  color: var(--sp-accent);
 }
 
 .nav-icon {
@@ -93,8 +93,8 @@
   width: 100%;
   height: 2.6rem;
   border-radius: 0.7rem;
-  background: var(--background-highlight);
-  color: var(--text-primary);
+  background: var(--sp-bg-highlight);
+  color: var(--sp-text-primary);
   padding: 0 0.9rem;
   font-size: 0.85rem;
   outline: none;
@@ -104,7 +104,7 @@
 }
 
 .search-input:focus {
-  border-color: var(--accent);
+  border-color: var(--sp-accent);
 }
 
 .category-row {
@@ -122,15 +122,15 @@
   flex-shrink: 0;
   padding: 0.4rem 0.8rem;
   border-radius: 999px;
-  background: var(--background-highlight);
-  color: var(--text-secondary);
+  background: var(--sp-bg-highlight);
+  color: var(--sp-text-secondary);
   font-size: 0.75rem;
   font-weight: 600;
   white-space: nowrap;
 }
 
 .category-chip.active {
-  background: var(--accent);
+  background: var(--sp-accent);
   color: #fff;
   box-shadow: var(--shadow-sm);
 }
@@ -159,7 +159,7 @@
 }
 
 .company-card {
-  background: var(--background-secondary);
+  background: var(--sp-bg-secondary);
   border-radius: 0.9rem;
   overflow: hidden;
   box-shadow: var(--shadow-md);
@@ -182,8 +182,8 @@
   display: flex;
   align-items: center;
   gap: 0.6rem;
-  background-color: var(--background-highlight);
-  background-image: linear-gradient(135deg, var(--background-highlight), var(--background-secondary));
+  background-color: var(--sp-bg-highlight);
+  background-image: linear-gradient(135deg, var(--sp-bg-highlight), var(--sp-bg-secondary));
 }
 
 /* Blurred, not a sharp photo directly as the banner's own background - a
@@ -212,12 +212,12 @@
   border-radius: 0.6rem;
   overflow: visible;
   flex-shrink: 0;
-  background: var(--background-highlight);
+  background: var(--sp-bg-highlight);
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: 700;
-  color: var(--text-primary);
+  color: var(--sp-text-primary);
 }
 
 .company-logo img {
@@ -235,15 +235,15 @@
   width: 0.75rem;
   height: 0.75rem;
   border-radius: 999px;
-  border: 2px solid var(--background-secondary);
+  border: 2px solid var(--sp-bg-secondary);
 }
 
 .company-status-dot.available {
-  background: var(--success);
+  background: var(--sp-success);
 }
 
 .company-status-dot.unavailable {
-  background: var(--text-tertiary);
+  background: var(--sp-text-tertiary);
 }
 
 .company-banner-text {
@@ -270,7 +270,7 @@
 
 .company-actions-row {
   display: flex;
-  border-top: 1px solid var(--separator);
+  border-top: 1px solid var(--sp-separator);
 }
 
 .company-action {
@@ -282,11 +282,11 @@
   padding: 0.45rem 0;
   font-size: 0.78rem;
   font-weight: 600;
-  color: var(--text-primary);
+  color: var(--sp-text-primary);
 }
 
 .company-action + .company-action {
-  border-left: 1px solid var(--separator);
+  border-left: 1px solid var(--sp-separator);
 }
 
 .company-action-icon {
@@ -304,7 +304,7 @@
   border-radius: 0.7rem;
   overflow: hidden;
   flex-shrink: 0;
-  background: var(--background-highlight);
+  background: var(--sp-bg-highlight);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -341,7 +341,7 @@
   width: 2.2rem;
   height: 2.2rem;
   border-radius: 0.6rem;
-  background: var(--background-highlight);
+  background: var(--sp-bg-highlight);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -350,18 +350,18 @@
 }
 
 .icon-button.call {
-  background: var(--success);
+  background: var(--sp-success);
   box-shadow: var(--shadow-sm);
 }
 
 .icon-button.logout {
-  /* Same themed tile as every other icon-button (--background-highlight
+  /* Same themed tile as every other icon-button (--sp-bg-highlight
      already reads fine over a blurred photo header - see .company-logo)
      instead of a fixed white fill that looked out of place in dark mode -
-     just the glyph itself picks up --danger to read as the exit action it is. */
+     just the glyph itself picks up --sp-danger to read as the exit action it is. */
   position: relative;
   z-index: 1;
-  color: var(--danger);
+  color: var(--sp-danger);
   font-size: 1.15rem;
   font-weight: 700;
   flex-shrink: 0;
@@ -370,7 +370,7 @@
 .icon-button.subtle {
   background: transparent;
   box-shadow: none;
-  color: var(--text-tertiary);
+  color: var(--sp-text-tertiary);
   width: 1.6rem;
   height: 1.6rem;
   border-radius: 0.4rem;
@@ -393,12 +393,12 @@
   align-items: center;
   gap: 0.7rem;
   padding: 0.5rem 0;
-  border-bottom: 1px solid var(--separator);
+  border-bottom: 1px solid var(--sp-separator);
 }
 
 .last-message {
   font-size: 0.75rem;
-  color: var(--text-secondary);
+  color: var(--sp-text-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -413,13 +413,13 @@
 
 .activity-time {
   font-size: 0.7rem;
-  color: var(--text-tertiary);
+  color: var(--sp-text-tertiary);
 }
 
 .load-more {
   text-align: center;
   padding: 0.8rem;
-  color: var(--accent);
+  color: var(--sp-accent);
   font-size: 0.8rem;
   font-weight: 600;
 }
@@ -429,7 +429,7 @@
 .conversation-screen {
   position: absolute;
   inset: 0;
-  background: var(--background-primary);
+  background: var(--sp-bg-primary);
   padding: 0;
   z-index: 10;
 }
@@ -439,12 +439,12 @@
   align-items: center;
   gap: 0.5rem;
   padding: 3rem 1rem 0.7rem;
-  border-bottom: 1px solid var(--separator);
+  border-bottom: 1px solid var(--sp-separator);
 }
 
 .back-button {
   font-size: 1.6rem;
-  color: var(--accent);
+  color: var(--sp-accent);
   line-height: 1;
   padding-right: 0.2rem;
 }
@@ -481,14 +481,14 @@
 
 .bubble.theirs {
   align-self: flex-start;
-  background: var(--background-highlight);
-  color: var(--text-primary);
+  background: var(--sp-bg-highlight);
+  color: var(--sp-text-primary);
   border-bottom-left-radius: 0.25rem;
 }
 
 .bubble.mine {
   align-self: flex-end;
-  background: var(--accent);
+  background: var(--sp-accent);
   color: #fff;
   border-bottom-right-radius: 0.25rem;
 }
@@ -498,15 +498,15 @@
   align-items: center;
   gap: 0.5rem;
   padding: 0.6rem 1rem calc(0.6rem + env(safe-area-inset-bottom, 0px));
-  border-top: 1px solid var(--separator);
+  border-top: 1px solid var(--sp-separator);
 }
 
 .conversation-input input {
   flex: 1;
   height: 2.4rem;
   border-radius: 999px;
-  background: var(--background-highlight);
-  color: var(--text-primary);
+  background: var(--sp-bg-highlight);
+  color: var(--sp-text-primary);
   padding: 0 0.9rem;
   font-size: 0.82rem;
   outline: none;
@@ -515,14 +515,14 @@
 }
 
 .conversation-input input:focus {
-  border-color: var(--accent);
+  border-color: var(--sp-accent);
 }
 
 .send-button {
   width: 2.2rem;
   height: 2.2rem;
   border-radius: 0.6rem;
-  background: var(--accent);
+  background: var(--sp-accent);
   color: #fff;
   flex-shrink: 0;
   box-shadow: var(--shadow-sm);
@@ -561,7 +561,7 @@
 }
 
 .login-button {
-  background: var(--accent);
+  background: var(--sp-accent);
   color: #fff;
   padding: 0.7rem 1.6rem;
   border-radius: 0.7rem;
@@ -588,7 +588,7 @@
 }
 
 .dashboard-header:not(.has-bg) {
-  background: var(--background-secondary);
+  background: var(--sp-bg-secondary);
 }
 
 /* With a company background photo, this stops being a boxed card and
@@ -621,7 +621,7 @@
 .dashboard-header-scrim {
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0.28) 0%, rgba(0, 0, 0, 0.1) 55%, var(--background-primary) 100%);
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.28) 0%, rgba(0, 0, 0, 0.1) 55%, var(--sp-bg-primary) 100%);
 }
 
 .dashboard-header-info {
@@ -639,7 +639,7 @@
   border-radius: 0.6rem;
   overflow: hidden;
   flex-shrink: 0;
-  background: var(--background-highlight);
+  background: var(--sp-bg-highlight);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -672,7 +672,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: var(--background-secondary);
+  background: var(--sp-bg-secondary);
   border-radius: 0.8rem;
   padding: 0.7rem 0.9rem;
 }
@@ -684,14 +684,14 @@
 
 .dashboard-row-sub {
   font-size: 0.75rem;
-  color: var(--text-secondary);
+  color: var(--sp-text-secondary);
   margin-top: 0.15rem;
 }
 
 /* One card grouping duty + status (mirrors .company-card's banner + actions
    row on the Services overview - see .company-actions-row/.company-action). */
 .duty-card {
-  background: var(--background-secondary);
+  background: var(--sp-bg-secondary);
   border-radius: 0.8rem;
   overflow: hidden;
   box-shadow: var(--shadow-md);
@@ -709,7 +709,7 @@
    floating chips with their own padding/gaps inside it. */
 .duty-card-actions {
   display: flex;
-  border-top: 1px solid var(--separator);
+  border-top: 1px solid var(--sp-separator);
 }
 
 .duty-card-actions .status-pill {
@@ -721,11 +721,11 @@
   border-radius: 0;
   background: transparent;
   padding: 0.5rem 0;
-  color: var(--text-tertiary);
+  color: var(--sp-text-tertiary);
 }
 
 .duty-card-actions .status-pill + .status-pill {
-  border-left: 1px solid var(--separator);
+  border-left: 1px solid var(--sp-separator);
 }
 
 .status-pill-icon {
@@ -738,30 +738,30 @@
    change per status here, never a filled background. */
 .duty-card-actions .status-pill.available.active {
   background: transparent;
-  color: var(--success);
+  color: var(--sp-success);
 }
 
 .duty-card-actions .status-pill.pause.active {
   background: transparent;
-  color: var(--warning);
+  color: var(--sp-warning);
 }
 
 .duty-card-actions .status-pill.busy.active {
   background: transparent;
-  color: var(--danger);
+  color: var(--sp-danger);
 }
 
 .toggle {
   width: 2.6rem;
   height: 1.5rem;
   border-radius: 999px;
-  background: var(--background-highlight);
+  background: var(--sp-bg-highlight);
   position: relative;
   transition: background 0.2s;
 }
 
 .toggle.on {
-  background: var(--success);
+  background: var(--sp-success);
 }
 
 .toggle-knob {
@@ -814,7 +814,7 @@
 
 .sheet {
   width: 100%;
-  background: var(--background-secondary);
+  background: var(--sp-bg-secondary);
   border-radius: 1.1rem 1.1rem 0 0;
   padding: 0.9rem 1rem calc(0.9rem + env(safe-area-inset-bottom, 0px));
   display: flex;
@@ -825,15 +825,15 @@
 .sheet-title {
   text-align: center;
   font-size: 0.75rem;
-  color: var(--text-secondary);
+  color: var(--sp-text-secondary);
   margin-bottom: 0.2rem;
 }
 
 .sheet-option {
   height: 2.6rem;
   border-radius: 0.7rem;
-  background: var(--background-highlight);
-  color: var(--accent);
+  background: var(--sp-bg-highlight);
+  color: var(--sp-accent);
   font-weight: 600;
   font-size: 0.85rem;
 }
@@ -841,8 +841,8 @@
 .sheet-cancel {
   height: 2.6rem;
   border-radius: 0.7rem;
-  background: var(--background-highlight);
-  color: var(--danger);
+  background: var(--sp-bg-highlight);
+  color: var(--sp-danger);
   font-weight: 600;
   font-size: 0.85rem;
   margin-top: 0.3rem;
@@ -882,7 +882,7 @@
   margin: 0 auto 0.6rem;
   padding: 0.2rem;
   gap: 0.1rem;
-  background: var(--background-highlight);
+  background: var(--sp-bg-highlight);
   border-radius: 0.8rem;
   overflow-x: auto;
   flex-shrink: 0;
@@ -896,7 +896,7 @@
 }
 
 .category-row.subtab-row .category-chip.active {
-  background: var(--accent);
+  background: var(--sp-accent);
   box-shadow: var(--shadow-sm);
 }
 
@@ -917,19 +917,19 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--text-secondary);
+  color: var(--sp-text-secondary);
   margin-top: 0.6rem;
 }
 
 .hint {
-  color: var(--text-tertiary);
+  color: var(--sp-text-tertiary);
   font-weight: 400;
 }
 
 .notice {
   font-size: 0.75rem;
-  color: var(--warning);
-  background: var(--background-secondary);
+  color: var(--sp-warning);
+  background: var(--sp-bg-secondary);
   border-radius: 0.6rem;
   padding: 0.5rem 0.7rem;
 }
@@ -945,8 +945,8 @@
   flex: 1;
   padding: 0.5rem 0;
   border-radius: 0.7rem;
-  background: var(--background-highlight);
-  color: var(--text-secondary);
+  background: var(--sp-bg-highlight);
+  color: var(--sp-text-secondary);
   font-size: 0.75rem;
   font-weight: 600;
   text-align: center;
@@ -960,15 +960,15 @@
 }
 
 .status-pill.available.active {
-  background: var(--success);
+  background: var(--sp-success);
 }
 
 .status-pill.busy.active {
-  background: var(--danger);
+  background: var(--sp-danger);
 }
 
 .status-pill.pause.active {
-  background: var(--warning);
+  background: var(--sp-warning);
 }
 
 /* Read-only badge (Team list) - a small colored presence dot + neutral
@@ -980,8 +980,8 @@
   align-items: center;
   gap: 0.35rem;
   padding: 0.25rem 0.6rem 0.25rem 0.5rem;
-  background: var(--background-highlight);
-  color: var(--text-primary);
+  background: var(--sp-bg-highlight);
+  color: var(--sp-text-primary);
 }
 
 .status-pill.static::before {
@@ -994,15 +994,15 @@
 }
 
 .status-pill.available.static {
-  color: var(--success);
+  color: var(--sp-success);
 }
 
 .status-pill.busy.static {
-  color: var(--danger);
+  color: var(--sp-danger);
 }
 
 .status-pill.pause.static {
-  color: var(--warning);
+  color: var(--sp-warning);
 }
 
 /* hotlines */
@@ -1018,7 +1018,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  background: var(--background-secondary);
+  background: var(--sp-bg-secondary);
   border-radius: 0.6rem;
   padding: 0.6rem 0.7rem;
   font-size: 0.82rem;
@@ -1037,14 +1037,14 @@
   display: flex;
   align-items: center;
   gap: 0.6rem;
-  background: var(--background-secondary);
+  background: var(--sp-bg-secondary);
   border-radius: 0.8rem;
   padding: 0.6rem 0.8rem;
   box-shadow: var(--shadow-sm);
 }
 
 .request-row.status-active {
-  border: 1px solid var(--accent);
+  border: 1px solid var(--sp-accent);
 }
 
 .request-info {
@@ -1059,7 +1059,7 @@
 
 .request-meta {
   font-size: 0.72rem;
-  color: var(--text-secondary);
+  color: var(--sp-text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1080,7 +1080,7 @@
 }
 
 .request-action.accept {
-  background: var(--success);
+  background: var(--sp-success);
   color: #fff;
   box-shadow: var(--shadow-sm);
 }
@@ -1089,18 +1089,18 @@
    is the one action worth that much visual weight, Complete/Cancel are
    secondary and share the same quieter treatment (colored text only). */
 .request-action.complete {
-  background: var(--background-highlight);
-  color: var(--accent);
+  background: var(--sp-bg-highlight);
+  color: var(--sp-accent);
 }
 
 .request-action.cancel {
-  background: var(--background-highlight);
-  color: var(--danger);
+  background: var(--sp-bg-highlight);
+  color: var(--sp-danger);
 }
 
 .request-status {
   font-size: 0.72rem;
-  color: var(--text-tertiary);
+  color: var(--sp-text-tertiary);
   text-transform: capitalize;
   flex-shrink: 0;
 }
@@ -1119,7 +1119,7 @@
 
 .request-form-description {
   font-size: 0.78rem;
-  color: var(--text-secondary);
+  color: var(--sp-text-secondary);
   text-align: center;
 }
 
@@ -1135,7 +1135,7 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  background: var(--background-secondary);
+  background: var(--sp-bg-secondary);
   border-radius: 0.8rem;
   padding: 0.6rem 0.8rem;
   box-shadow: var(--shadow-sm);
@@ -1157,7 +1157,7 @@
 
 .team-grade {
   font-size: 0.72rem;
-  color: var(--text-secondary);
+  color: var(--sp-text-secondary);
 }
 
 .team-meta {
@@ -1169,7 +1169,7 @@
 
 .team-hotlines {
   font-size: 0.68rem;
-  color: var(--text-tertiary);
+  color: var(--sp-text-tertiary);
   max-width: 9rem;
   text-align: right;
   overflow: hidden;
@@ -1180,15 +1180,15 @@
 /* calls */
 
 .call-state.ringing {
-  color: var(--warning);
+  color: var(--sp-warning);
 }
 
 .call-state.missed {
-  color: var(--danger);
+  color: var(--sp-danger);
 }
 
 .call-state.answered {
-  color: var(--success);
+  color: var(--sp-success);
 }
 
 /* settings */
@@ -1204,7 +1204,7 @@
 }
 
 .number-row {
-  background: var(--background-secondary);
+  background: var(--sp-bg-secondary);
   border-radius: 0.8rem;
   padding: 0.6rem 0.7rem;
   display: flex;
@@ -1237,7 +1237,7 @@
 }
 
 .admin-row-block {
-  background: var(--background-secondary);
+  background: var(--sp-bg-secondary);
   border-radius: 0.8rem;
   overflow: hidden;
   box-shadow: var(--shadow-md);
@@ -1267,7 +1267,7 @@
 
 .admin-row-meta {
   font-size: 0.7rem;
-  color: var(--text-secondary);
+  color: var(--sp-text-secondary);
   text-transform: capitalize;
 }
 
@@ -1279,7 +1279,7 @@
 
 .admin-detail {
   padding: 0 0.8rem 0.8rem;
-  border-top: 1px solid var(--separator);
+  border-top: 1px solid var(--sp-separator);
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
@@ -1294,3 +1294,4 @@
 .admin-inline-form .search-input {
   margin-bottom: 0;
 }
+

@@ -47,6 +47,10 @@ export default function App() {
   }, [])
 
   useEffect(() => {
+    document.body.setAttribute('data-theme', theme)
+  }, [theme])
+
+  useEffect(() => {
     fetchNui('bootstrap').then(setBootstrap)
   }, [])
 
