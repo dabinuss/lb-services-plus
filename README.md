@@ -4,6 +4,26 @@ Services+ is an extended services app for **LB Phone**.
 
 It allows players to quickly find companies, call them, send messages or create service requests. Employees get their own company area to manage calls, requests, messages and availability.
 
+## Screenshots
+
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/4bf617c1-7fd8-4510-b083-07608a68be7e" width="180" alt="Services+ Screenshot 1" />
+  &nbsp;
+  <img src="https://github.com/user-attachments/assets/91c767eb-3c46-450f-b22f-94ae13acefac" width="180" alt="Services+ Screenshot 2" />
+  &nbsp;
+  <img src="https://github.com/user-attachments/assets/f3bd80bf-8b63-4a0f-90ae-da0909dff887" width="180" alt="Services+ Screenshot 3" />
+</p>
+
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/59b17e2a-9983-45c5-9453-180e988736e1" width="180" alt="Services+ Screenshot 4" />
+  &nbsp;
+  <img src="https://github.com/user-attachments/assets/084532fc-3700-477d-93b3-deceeeadc784" width="180" alt="Services+ Screenshot 5" />
+</p>
+
+
+
+
+
 ## Main Features
 
 ### For Players
