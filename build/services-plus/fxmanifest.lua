@@ -1,0 +1,1 @@
+E:/GitHub/lb-services-plus/dev/services-plus/fxmanifest.lua

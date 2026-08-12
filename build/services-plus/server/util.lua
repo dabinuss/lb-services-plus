@@ -1,0 +1,25 @@
+--[[
+    Small server-only helpers shared across files. Kept separate from
+    shared/ since these are never needed client-side.
+]]
+
+-- Guards against a manipulated client sending a huge OFFSET. 200 pages at
+-- 25 rows/page is already 5000 rows deep - nobody legitimately paginates
+-- that far by hand, and a real "browse everything" need should get a
+-- cursor-based query instead of a bigger page number (plan review round 2 §8).
+local MAX_PAGE = 200
+
+--- Coerces an NUI-supplied `page` value into a safe, bounded non-negative
+--- integer. A modified client can send negative numbers, floats, strings or
+--- absurdly large values - all of that gets sanitized here instead of at
+--- every call site.
+---@param page any
+---@return number
+function ClampPage(page)
+    page = math.floor(tonumber(page) or 0)
+
+    if page < 0 then page = 0 end
+    if page > MAX_PAGE then page = MAX_PAGE end
+
+    return page
+end
