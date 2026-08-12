@@ -6,6 +6,7 @@ export default function CompanyCard({ company, categoryName, onCall, onMessage, 
   const canMessage = company.available && company.messagesEnabled && company.numbers.some((n) => n.messagesEnabled)
   const canCall = company.available && company.callsEnabled
   const canRequest = company.available && company.requestsEnabled
+  const mainNumber = company.numbers?.find((n) => n.isMain) ?? null
 
   return (
     <div className={`company-card${company.available ? '' : ' unavailable'}`}>
@@ -23,8 +24,9 @@ export default function CompanyCard({ company, categoryName, onCall, onMessage, 
         <div className="company-banner-text">
           <div className="company-name">{company.name}</div>
           <div className="company-subtitle">
-            {categoryName || 'Company'}
-            {!company.available && ' · Unavailable'}
+            {!company.available
+              ? mainNumber?.number || categoryName || 'Company'
+              : `${categoryName || 'Company'}${mainNumber?.number ? ` · ${mainNumber.number}` : ''}`}
           </div>
         </div>
       </div>
