@@ -286,61 +286,77 @@ RegisterCallback("acceptRequest", function(source, reply, requestId)
     if acceptLocks[identifier] then return reply(false) end
     acceptLocks[identifier] = true
 
-    ---@param result any
-    local function finish(result)
-        acceptLocks[identifier] = nil
-        reply(result)
-    end
+    -- Wrapped in its own pcall (plan review round 6 §1) - without this, an
+    -- error thrown anywhere below (a dropped MySQL connection, a malformed
+    -- row, ...) skipped straight past the plain `acceptLocks[identifier] =
+    -- nil` a `finish()` helper used to do, out to callback.lua's own outer
+    -- pcall. The lock stayed set forever after that - this employee could
+    -- never accept another request until a resource restart. This is the
+    -- "finally" that guarantees it always gets released, error or not.
+    local ok, result = pcall(function()
+        -- One active request per employee at a time (plan review round 4
+        -- §4): without this, accepting a second request while the first is
+        -- still active just silently buries the first one -
+        -- getActiveRequest() only ever returns the newest via LIMIT 1, so
+        -- it'd never resurface on the overlay/rehydration even though it's
+        -- still sitting there `active`. acceptLocks above (plan review
+        -- round 5 §2) is what actually makes this check race-safe against a
+        -- second concurrent accept for a *different* request - on its own
+        -- this SELECT-then-UPDATE pair wasn't atomic.
+        local existingActive = MySQL.scalar.await(
+            "SELECT id FROM phone_services_plus_requests WHERE employee_identifier = ? AND status = 'active' LIMIT 1",
+            { identifier }
+        )
+        if existingActive then return false end
 
-    -- One active request per employee at a time (plan review round 4 §4):
-    -- without this, accepting a second request while the first is still
-    -- active just silently buries the first one - getActiveRequest() only
-    -- ever returns the newest via LIMIT 1, so it'd never resurface on the
-    -- overlay/rehydration even though it's still sitting there `active`.
-    -- acceptLocks above (plan review round 5 §2) is what actually makes this
-    -- check race-safe against a second concurrent accept for a *different*
-    -- request - on its own this SELECT-then-UPDATE pair wasn't atomic.
-    local existingActive = MySQL.scalar.await(
-        "SELECT id FROM phone_services_plus_requests WHERE employee_identifier = ? AND status = 'active' LIMIT 1",
-        { identifier }
-    )
-    if existingActive then return finish(false) end
+        -- Atomic first-accept-wins (plan §15): the WHERE status = 'open'
+        -- means only one of any number of concurrent accepts can ever
+        -- affect a row.
+        local affected = MySQL.update.await(
+            "UPDATE phone_services_plus_requests SET status = 'active', company_id = ?, employee_identifier = ? WHERE id = ? AND status = 'open'",
+            { company.id, identifier, requestId }
+        )
 
-    -- Atomic first-accept-wins (plan §15): the WHERE status = 'open' means
-    -- only one of any number of concurrent accepts can ever affect a row.
-    local affected = MySQL.update.await(
-        "UPDATE phone_services_plus_requests SET status = 'active', company_id = ?, employee_identifier = ? WHERE id = ? AND status = 'open'",
-        { company.id, identifier, requestId }
-    )
+        if affected == 0 then return false end
 
-    if affected == 0 then return finish(false) end
+        clearNotifications(requestId, source)
 
-    clearNotifications(requestId, source)
+        exports["lb-phone"]:SendNotification(request.requester_number, {
+            app = Config.App.name,
+            title = company.name,
+            content = ("%s is on the way."):format(requestType.name),
+        })
 
-    exports["lb-phone"]:SendNotification(request.requester_number, {
-        app = Config.App.name,
-        title = company.name,
-        content = ("%s is on the way."):format(requestType.name),
-    })
+        local activePayload = {
+            requestId = requestId,
+            typeName = requestType.name,
+            companyName = company.name,
+            companyIcon = company.icon,
+            passengerCount = request.passenger_count,
+            description = request.description,
+            x = request.pos_x,
+            y = request.pos_y,
+        }
 
-    local activePayload = {
-        requestId = requestId,
-        typeName = requestType.name,
-        companyName = company.name,
-        companyIcon = company.icon,
-        passengerCount = request.passenger_count,
-        description = request.description,
-        x = request.pos_x,
-        y = request.pos_y,
-    }
+        -- The RPC reply only reaches whichever surface (overlay or the
+        -- in-app Requests tab) made this exact call - a separate targeted
+        -- event to the winner is what actually keeps the Sibling-NUI
+        -- active-request card in sync regardless of where Accept was
+        -- pressed (plan review round 2 §4).
+        TriggerClientEvent("services-plus:client:requestAccepted", source, activePayload)
 
-    -- The RPC reply only reaches whichever surface (overlay or the in-app
-    -- Requests tab) made this exact call - a separate targeted event to the
-    -- winner is what actually keeps the Sibling-NUI active-request card in
-    -- sync regardless of where Accept was pressed (plan review round 2 §4).
-    TriggerClientEvent("services-plus:client:requestAccepted", source, activePayload)
+        return activePayload
+    end)
 
-    finish(activePayload)
+    acceptLocks[identifier] = nil
+
+    -- Re-raise past this pcall so callback.lua's own outer pcall logs it and
+    -- replies "server_error" exactly like any other callback failure -
+    -- nothing here needs its own special-cased error response, just the
+    -- guaranteed unlock above.
+    if not ok then error(result) end
+
+    reply(result)
 end)
 
 -- Rehydration for the Sibling-NUI overlay (plan review §14): a client
@@ -456,6 +472,18 @@ RegisterCallback("getMyRequests", function(source, reply, page)
     ]], { number, ClampPage(page) * Config.PageSize.requests, Config.PageSize.requests })
 
     reply(rows or {})
+end)
+
+-- Belt-and-suspenders alongside the pcall/finally in acceptRequest above
+-- (plan review round 6 §1) - that's the guaranteed release path, this is
+-- just an extra safety net for a disconnect landing at some exotic moment
+-- neither covers. Framework.GetIdentifier(source) this late is best-effort
+-- only (the framework's own player object may already be gone by
+-- playerDropped, same caveat employees.lua documents) - if it falls back to
+-- a "source:N" placeholder instead of the real identifier, this is simply a
+-- no-op rather than clearing the wrong lock.
+AddEventHandler("playerDropped", function()
+    acceptLocks[Framework.GetIdentifier(source)] = nil
 end)
 
 CreateThread(function()

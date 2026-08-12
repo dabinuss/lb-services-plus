@@ -77,6 +77,17 @@ function JobIndex.Set(source, job)
         JobIndex.byJob[job] = JobIndex.byJob[job] or {}
         JobIndex.byJob[job][source] = true
     end
+
+    -- A genuine change only ever reaches here - the early return above
+    -- already covers "unchanged" (including nil -> nil). Services+-specific
+    -- per-employee state (status/hotlines, see server/employees.lua) is
+    -- keyed by `source` alone with no idea which job it belongs to, so
+    -- without this a player switching jobs mid-connection (e.g. Police ->
+    -- Taxi) carried their old job's Busy/hotline state straight into the
+    -- new one (plan review round 6 §3) - framework.lua stays the only file
+    -- that touches framework internals, so this is an event, not a direct
+    -- call into Employees.* from here.
+    TriggerEvent("services-plus:internal:jobChanged", source, old, job)
 end
 
 function JobIndex.Remove(source)

@@ -82,6 +82,19 @@ function Employees.SetStatus(source, status)
     return true
 end
 
+--- Drops this player's Services+ runtime state back to defaults (plan
+--- review round 6 §3) - `ensure()` above lazily recreates it as fresh
+--- available/no-hotlines on next access, same as a brand new connection.
+--- Called on an actual framework job change (see the
+--- services-plus:internal:jobChanged handler below), not just any
+--- Framework.GetJob() call: without this, Busy at the old job carried
+--- straight into the new one, since this state is keyed by `source` alone
+--- with no idea which job it was ever set for.
+---@param source number
+function Employees.Reset(source)
+    state[source] = nil
+end
+
 --- Whether `source` currently has `numberId` activated, including the
 --- forced-on main-hotline rule (plan §21: auto-active while they're the only
 --- one on duty, and cannot be turned off in that case).
@@ -384,8 +397,50 @@ function Employees.BroadcastStateChanged(source)
     end
 end
 
+--- The other half of BroadcastStateChanged (plan review round 6 §4): going
+--- off duty (or changing away from `job` entirely) doesn't produce a row
+--- from GetTeamMemberRow (it returns nil once not on duty), so nothing
+--- above ever announced it - a colleague going off duty just silently stuck
+--- around in everyone else's already-open Team view until they happened to
+--- reload it. Takes `job` explicitly rather than re-deriving it from
+--- `source`'s current job/duty, since by the time this is useful (right
+--- after SetDuty(false), or after a job change already landed) neither may
+--- still say what it used to.
+---@param source number
+---@param job string
+function Employees.BroadcastRemoved(source, job)
+    local company = Companies.GetByJob(job)
+    if not company then return end
+
+    local payload = { removed = true, phoneNumber = Framework.GetPhoneNumber(source), name = Framework.GetPlayerName(source) }
+
+    local staff = Framework.GetPlayersByJob(job)
+    for i = 1, #staff do
+        if staff[i] ~= source and Framework.GetOnDuty(staff[i]) then
+            TriggerClientEvent("services-plus:client:employeeStateChanged", staff[i], payload)
+        end
+    end
+end
+
 AddEventHandler("playerDropped", function()
     state[source] = nil
+end)
+
+-- A genuine framework job change (plan review round 6 §3, §4 - see
+-- framework.lua's JobIndex.Set, which is the only place this event fires
+-- from). Two things need to happen: the old company's on-duty colleagues
+-- (if any - oldJob can be nil on a first-ever job assignment) need this
+-- player removed from their Team view, since they're not that job anymore
+-- regardless of duty status; and this player's own Services+ state needs
+-- to reset instead of carrying Busy/hotlines over into a job it was never
+-- set for. The BroadcastStateChanged call is a no-op unless they're
+-- already on duty at the new job too (framework-dependent - QB/Qbox duty
+-- isn't necessarily job-scoped) - harmless either way, GetTeamMemberRow
+-- just returns nil for "not on duty" and nothing gets sent.
+AddEventHandler("services-plus:internal:jobChanged", function(source, oldJob, newJob)
+    if oldJob then Employees.BroadcastRemoved(source, oldJob) end
+    Employees.Reset(source)
+    Employees.BroadcastStateChanged(source)
 end)
 
 -- Belt-and-suspenders self-heal for the sole-employee Main Hotline

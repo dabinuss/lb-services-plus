@@ -24,16 +24,25 @@ export default function DashboardHome({ initialOnDuty, initialStatus, employeeNa
     fetchNui('getTeam').then((result) => result && setTeam(result))
   }, [])
 
-  // A colleague's own status/hotline change, pushed in real time instead of
-  // only ever reflecting what getTeam() returned at mount (plan review
-  // round 5 §8). Duty on/off itself isn't covered by this event - a
-  // colleague going off duty still only disappears on the next reload.
+  // A colleague's own status/hotline/duty change, pushed in real time
+  // instead of only ever reflecting what getTeam() returned at mount (plan
+  // review round 5 §8, round 6 §4). `removed: true` (going off duty, or
+  // changing to a different job entirely) drops the row instead of
+  // upserting it - the one transition that doesn't produce a normal row
+  // from the server (GetTeamMemberRow returns nil for "not on duty").
+  //
+  // Matched by phoneNumber, not name (plan review round 6 §4) - two
+  // colleagues sharing a display name used to mean a push for one could
+  // silently update (or remove) the other's row instead. Falls back to name
+  // only if phoneNumber is missing on either side (no phone equipped).
   useEffect(() => {
     if (!teamUpdate) return
+    const matches = (m) =>
+      teamUpdate.phoneNumber && m.phoneNumber ? m.phoneNumber === teamUpdate.phoneNumber : m.name === teamUpdate.name
     setTeam((prev) => {
       if (!prev) return prev
-      const exists = prev.some((m) => m.name === teamUpdate.name)
-      return exists ? prev.map((m) => (m.name === teamUpdate.name ? teamUpdate : m)) : [...prev, teamUpdate]
+      if (teamUpdate.removed) return prev.filter((m) => !matches(m))
+      return prev.some(matches) ? prev.map((m) => (matches(m) ? teamUpdate : m)) : [...prev, teamUpdate]
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [teamUpdate])

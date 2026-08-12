@@ -120,7 +120,13 @@ CREATE TABLE IF NOT EXISTS `phone_services_plus_messages` (
     `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     PRIMARY KEY (`id`),
+    -- channel_created still serves openConversation's own
+    -- `ORDER BY created_at DESC` page-0 fetch (see server/main.lua) -
+    -- channel_id_id is what getMessages' `WHERE channel_id = ? AND id < ?
+    -- ORDER BY id DESC` cursor pagination actually wants (plan review round
+    -- 6 §5): built around the column it filters and orders by, not created_at.
     KEY `channel_created` (`channel_id`, `created_at`),
+    KEY `channel_id_id` (`channel_id`, `id`),
     FOREIGN KEY (`channel_id`) REFERENCES `phone_services_plus_channels`(`id`) ON DELETE CASCADE
 ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
