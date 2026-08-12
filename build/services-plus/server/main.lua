@@ -486,17 +486,24 @@ RegisterCallback("getActivity", function(source, reply, page)
     if not contactNumber then return reply({}) end
 
     local rows = MySQL.query.await([[
-        SELECT c.id AS channel_id, c.last_message, c.updated_at, n.company_id, n.label
+        SELECT c.id AS channel_id, c.last_message, c.updated_at, n.company_id, n.label,
+               company.name AS company_name, company.icon AS company_icon
         FROM phone_services_plus_channels c
         JOIN phone_services_plus_numbers n ON n.id = c.number_id
+        LEFT JOIN phone_services_plus_companies company ON company.id = n.company_id
         WHERE c.contact_number = ? AND c.archived_by_contact = 0
         ORDER BY c.updated_at DESC, c.id DESC
         LIMIT ?, ?
     ]], { contactNumber, ClampPage(page) * Config.PageSize.activity, Config.PageSize.activity })
 
     for i = 1, #(rows or {}) do
-        local company = Companies.GetById(rows[i].company_id)
-        rows[i].company = company and { id = company.id, name = company.name, icon = company.icon } or nil
+        rows[i].company = rows[i].company_name and {
+            id = rows[i].company_id,
+            name = rows[i].company_name,
+            icon = rows[i].company_icon,
+        } or nil
+        rows[i].company_name = nil
+        rows[i].company_icon = nil
     end
 
     reply(rows or {})

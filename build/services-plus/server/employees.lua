@@ -464,12 +464,10 @@ AddEventHandler("services-plus:internal:dutyChanged", function(source)
     pushOwnDutyState(source, false)
 end)
 
-AddEventHandler("playerDropped", function()
-    -- Use the maintained index: by this point the framework player object
-    -- may already be unavailable, while source is still the exact identity
-    -- used by every online Team row.
-    local job = Framework.GetIndexedJob(source)
-    if job then Employees.BroadcastRemoved(source, job) end
+AddEventHandler("services-plus:internal:playerDropped", function(source, oldJob)
+    -- framework.lua captures oldJob before removing it from JobIndex, so
+    -- Team removal is independent of playerDropped handler load order.
+    if oldJob then Employees.BroadcastRemoved(source, oldJob) end
     state[source] = nil
 end)
 

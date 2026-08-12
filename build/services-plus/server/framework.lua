@@ -96,7 +96,11 @@ function JobIndex.Set(source, job)
 end
 
 function JobIndex.Remove(source)
-    JobIndex.Set(source, nil)
+    local old = JobIndex.bySource[source]
+    if old and JobIndex.byJob[old] then
+        JobIndex.byJob[old][source] = nil
+    end
+    JobIndex.bySource[source] = nil
 end
 
 ---@param job string
@@ -313,12 +317,6 @@ function Framework.SetDuty(source, state)
     return true
 end
 
----@param source number
----@return string? last indexed job for this connection
-function Framework.GetIndexedJob(source)
-    return JobIndex.bySource[source]
-end
-
 -- Reconciles framework-owned duty with Services+ and suppresses duplicate
 -- pushes when QB/Qbox emit more than one compatible event for one change.
 -- Also called explicitly after Services+'s own SetDuty so ESX/standalone,
@@ -432,6 +430,11 @@ AddEventHandler("QBCore:Server:OnJobUpdate", function(source) refreshJobAndDuty(
 AddEventHandler("QBCore:Server:SetDuty", function(source) refreshJobAndDuty(source) end)
 
 AddEventHandler("playerDropped", function()
+    -- Capture and publish the old job before clearing the index. Other
+    -- modules no longer race separate playerDropped handlers to read it.
+    local oldJob = JobIndex.bySource[source]
+    TriggerEvent("services-plus:internal:playerDropped", source, oldJob)
+
     manualDuty[source] = nil
     DutyIndex[source] = nil
     JobIndex.Remove(source)

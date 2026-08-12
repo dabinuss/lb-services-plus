@@ -64,6 +64,20 @@ DELETE dup FROM `phone_services_plus_channels` dup
         AND keep.contact_number = dup.contact_number
         AND keep.id < dup.id;
 
+-- Moving duplicate-channel messages can make the retained channel's cached
+-- preview and sort timestamp older than its actual newest message. Rebuild
+-- both once from the newest message per retained channel.
+UPDATE `phone_services_plus_channels` c
+    JOIN `phone_services_plus_messages` newest ON newest.channel_id = c.id
+    LEFT JOIN `phone_services_plus_messages` newer
+        ON newer.channel_id = newest.channel_id
+        AND (
+            newer.created_at > newest.created_at
+            OR (newer.created_at = newest.created_at AND newer.id > newest.id)
+        )
+SET c.last_message = LEFT(newest.content, 100), c.updated_at = newest.created_at
+WHERE newer.id IS NULL;
+
 SET @idx_exists := (
     SELECT COUNT(*) FROM information_schema.statistics
     WHERE table_schema = DATABASE() AND table_name = 'phone_services_plus_channels' AND index_name = 'contact_archived_updated'

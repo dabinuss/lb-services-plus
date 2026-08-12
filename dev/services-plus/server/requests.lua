@@ -106,6 +106,7 @@ local acceptLocks = {}
 -- stable identifier is captured while the framework player object still
 -- exists, because it may already be gone when playerDropped runs.
 local activeAssignments = {}
+local disconnectCleanupLocks = {} -- requestId -> true while one cleanup owns it
 
 local function getDisconnectGraceMinutes()
     local value = tonumber(MySQL.scalar.await(
@@ -113,6 +114,76 @@ local function getDisconnectGraceMinutes()
     )) or 5
 
     return math.max(1, math.min(60, math.floor(value)))
+end
+
+local function cancelExpiredDisconnectedRequests(identifier)
+    local graceMinutes = getDisconnectGraceMinutes()
+    local sql = [[
+        SELECT id, requester_number
+        FROM phone_services_plus_requests
+        WHERE status = 'active'
+          AND employee_disconnected_at IS NOT NULL
+          AND TIMESTAMPADD(MINUTE, ?, employee_disconnected_at) <= NOW()
+    ]]
+    local params = { graceMinutes }
+
+    if identifier then
+        sql = sql .. " AND employee_identifier = ?"
+        params[#params + 1] = identifier
+    end
+
+    local candidates = MySQL.query.await(sql, params) or {}
+    local claimed = {}
+    local ids = {}
+
+    for i = 1, #candidates do
+        local id = tonumber(candidates[i].id)
+        if id and not disconnectCleanupLocks[id] then
+            disconnectCleanupLocks[id] = true
+            claimed[id] = candidates[i]
+            ids[#ids + 1] = id
+        end
+    end
+
+    if #ids == 0 then return end
+
+    local ok, err = pcall(function()
+        -- IDs originate from the unsigned integer primary key, so composing
+        -- this bounded IN list is safe and avoids one UPDATE per request.
+        local idList = table.concat(ids, ",")
+        MySQL.update.await(([=[
+            UPDATE phone_services_plus_requests
+            SET status = 'cancelled', employee_disconnected_at = NULL
+            WHERE id IN (%s) AND status = 'active'
+              AND employee_disconnected_at IS NOT NULL
+              AND TIMESTAMPADD(MINUTE, ?, employee_disconnected_at) <= NOW()
+        ]=]):format(idList), { graceMinutes })
+
+        -- Only rows this cleanup changed have both a claimed id and a
+        -- cleared disconnect timestamp. A concurrent reconnect/cancel
+        -- therefore cannot receive the wrong notification.
+        local cancelled = MySQL.query.await(([=[
+            SELECT id
+            FROM phone_services_plus_requests
+            WHERE id IN (%s) AND status = 'cancelled' AND employee_disconnected_at IS NULL
+        ]=]):format(idList)) or {}
+
+        for i = 1, #cancelled do
+            local row = claimed[tonumber(cancelled[i].id)]
+            if row and row.requester_number then
+                pcall(function()
+                    exports["lb-phone"]:SendNotification(row.requester_number, {
+                        app = Config.App.name,
+                        title = Config.App.name,
+                        content = "Your request was cancelled because the employee became unavailable.",
+                    })
+                end)
+            end
+        end
+    end)
+
+    for i = 1, #ids do disconnectCleanupLocks[ids[i]] = nil end
+    if not ok then error(err) end
 end
 
 --- Notifies every eligible employee for `company`'s request routing mode via
@@ -389,18 +460,12 @@ end)
 -- still 'active' in the database, so the overlay asks for it back on load.
 RegisterCallback("getActiveRequest", function(source, reply)
     local identifier = Framework.GetIdentifier(source)
-    local graceMinutes = getDisconnectGraceMinutes()
 
     -- Expired assignments are cancelled here too, before rehydration. This
     -- matters after a server/resource restart where the periodic cleanup
-    -- may not have had its first chance to run yet.
-    MySQL.update.await([[
-        UPDATE phone_services_plus_requests
-        SET status = 'cancelled'
-        WHERE employee_identifier = ? AND status = 'active'
-          AND employee_disconnected_at IS NOT NULL
-          AND TIMESTAMPADD(MINUTE, ?, employee_disconnected_at) <= NOW()
-    ]], { identifier, graceMinutes })
+    -- may not have had its first chance to run yet. It shares the same
+    -- batched cleanup path and customer notification as the timer.
+    cancelExpiredDisconnectedRequests(identifier)
 
     -- Rejoining inside the configured grace period keeps the assignment.
     MySQL.update.await([[
@@ -589,15 +654,7 @@ CreateThread(function()
     while true do
         Wait(30000)
 
-        local graceMinutes = getDisconnectGraceMinutes()
-
-        MySQL.update.await([[
-            UPDATE phone_services_plus_requests
-            SET status = 'cancelled'
-            WHERE status = 'active'
-              AND employee_disconnected_at IS NOT NULL
-              AND TIMESTAMPADD(MINUTE, ?, employee_disconnected_at) <= NOW()
-        ]], { graceMinutes })
+        cancelExpiredDisconnectedRequests()
     end
 end)
 
