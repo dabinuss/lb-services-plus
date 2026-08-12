@@ -19,7 +19,7 @@ export default function AdminScreen() {
     <div className="screen admin-screen">
       <div className="screen-header">Admin</div>
 
-      <div className="category-row subtab-row">
+      <div className="category-row subtab-row admin-tabs">
         {TABS.map((t) => (
           <button key={t.key} className={`category-chip${tab === t.key ? ' active' : ''}`} onClick={() => setTab(t.key)}>
             {t.label}

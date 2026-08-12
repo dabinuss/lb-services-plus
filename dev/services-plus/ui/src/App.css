@@ -1003,6 +1003,17 @@
   box-shadow: var(--shadow-sm);
 }
 
+/* Four admin tabs have longer labels than the company navigation. Tighten
+   only this control enough to keep Settings fully inside the phone frame. */
+.category-row.subtab-row.admin-tabs {
+  gap: 0.18rem;
+}
+
+.category-row.subtab-row.admin-tabs .category-chip {
+  padding-inline: 0.38rem;
+  font-size: 0.72rem;
+}
+
 .dashboard-body {
   flex: 1;
   min-height: 0;
