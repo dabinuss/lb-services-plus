@@ -10,7 +10,7 @@ CreateThread(function()
 
     print("^2[Services+] Seeding dummy test data...^0")
 
-    MySQL.insert.await("INSERT IGNORE INTO phone_services_plus_categories (id, `key`, name, icon) VALUES (1, 'police', 'Police', 'police'), (2, 'medical', 'Medical', 'medical'), (3, 'mechanic', 'Mechanic', 'wrench'), (4, 'taxi', 'Taxi', 'taxi')")
+    MySQL.insert.await("INSERT IGNORE INTO phone_services_plus_categories (id, `key`, name, icon) VALUES (1, 'police', 'Police', 'police'), (2, 'medical', 'Medical', 'medical'), (3, 'mechanic', 'Mechanic', 'wrench'), (4, 'taxi', 'Taxi', 'taxi'), (5, 'news', 'News', 'news')")
 
     MySQL.insert.await([[
         INSERT IGNORE INTO phone_services_plus_companies 
@@ -30,11 +30,12 @@ CreateThread(function()
     ]])
 
     MySQL.insert.await([[
-        INSERT IGNORE INTO phone_services_plus_request_types (category_id, name, icon, description) VALUES
-        (1, 'Emergency Backup', 'police', 'Request immediate police assistance.'),
-        (2, 'Medical Emergency', 'medical', 'Request an ambulance.'),
-        (3, 'Tow Truck', 'tow-truck', 'Request a tow truck for your vehicle.'),
-        (4, 'Taxi Ride', 'taxi', 'Request a cab to your location.')
+        INSERT IGNORE INTO phone_services_plus_request_types (category_id, name, icon, description, passenger_count, passenger_mode, count_label, note_mode, description_enabled) VALUES
+        (1, 'Emergency Backup', 'emergency_backup', 'Request immediate police assistance.', 0, 'disabled', 'Passenger count', 'optional', 1),
+        (2, 'Medical Emergency', 'medical_emergency', 'Request an ambulance.', 1, 'required', 'Number of injured people', 'disabled', 0),
+        (3, 'Tow Truck', 'tow_truck', 'Request a tow truck for your vehicle.', 0, 'disabled', 'Passenger count', 'required', 1),
+        (4, 'Taxi Ride', 'taxi_ride', 'Request a cab to your location.', 1, 'required', 'Passenger count', 'optional', 1),
+        (5, 'Breaking News', 'breaking_news', 'Report breaking news at your current location.', 0, 'disabled', 'Passenger count', 'disabled', 0)
     ]])
 
     Companies.Reload()

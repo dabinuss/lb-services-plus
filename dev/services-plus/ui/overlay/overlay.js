@@ -129,7 +129,7 @@
         card.innerHTML = `
             <div class="sp-title">${escapeHtml(payload.typeName)}</div>
             <div class="sp-sub">${escapeHtml(payload.companyName)}</div>
-            ${payload.passengerCount ? `<div class="sp-meta">${escapeHtml(payload.passengerCount)} passengers</div>` : ''}
+            ${payload.passengerCount ? `<div class="sp-meta">${escapeHtml(payload.countLabel || 'Passenger count')}: ${escapeHtml(payload.passengerCount)}</div>` : ''}
             ${payload.description ? `<div class="sp-meta">${escapeHtml(payload.description)}</div>` : ''}
             <div class="sp-buttons">
                 <button class="sp-btn decline">Decline</button>
@@ -155,7 +155,7 @@
             <div class="sp-title">${escapeHtml(payload.typeName)}</div>
             <div class="sp-sub">${escapeHtml(payload.companyName)}</div>
             <div class="sp-meta">
-                ${payload.passengerCount ? `${escapeHtml(payload.passengerCount)} passengers · ` : ''}
+                ${payload.passengerCount ? `${escapeHtml(payload.countLabel || 'Passenger count')}: ${escapeHtml(payload.passengerCount)} · ` : ''}
                 <span class="sp-distance">${formatDistance(payload.distance)}</span>
             </div>
             <div class="sp-buttons">

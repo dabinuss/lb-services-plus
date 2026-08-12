@@ -9,35 +9,42 @@ Config.DefaultCategories = {
     { key = "mechanic", name = "Mechanic", icon = "wrench", sort = 40, competitionAllowed = true },
     { key = "towing", name = "Towing", icon = "tow-truck", sort = 50, competitionAllowed = true },
     { key = "government", name = "Government", icon = "bank", sort = 60, competitionAllowed = false },
+    { key = "news", name = "News", icon = "news", sort = 70, competitionAllowed = false },
 }
 
 -- Default request types (plan §12, §55), seeded once the same way categories
 -- are. Managed through the future admin area afterwards, not read again here.
 Config.DefaultRequestTypes = {
     {
-        category = "taxi", name = "Taxi Pickup", icon = "taxi",
+        category = "taxi", name = "Taxi Pickup",
         description = "Request a ride from your current location.",
-        locationMode = "auto", passengerCount = true, descriptionEnabled = true, competitionEnabled = true,
+        locationMode = "auto", passengerMode = "required", noteMode = "optional", competitionEnabled = true,
     },
     {
-        category = "towing", name = "Vehicle Towing", icon = "tow-truck",
+        category = "towing", name = "Vehicle Towing",
         description = "Request a tow for a stranded vehicle.",
-        locationMode = "auto", passengerCount = false, descriptionEnabled = true, competitionEnabled = true,
+        locationMode = "auto", passengerMode = "disabled", noteMode = "optional", competitionEnabled = true,
     },
     {
-        category = "mechanic", name = "Roadside Assistance", icon = "wrench",
+        category = "mechanic", name = "Roadside Assistance",
         description = "Request on-site repairs.",
-        locationMode = "auto", passengerCount = false, descriptionEnabled = true, competitionEnabled = true,
+        locationMode = "auto", passengerMode = "disabled", noteMode = "optional", competitionEnabled = true,
     },
     {
-        category = "police", name = "Police Emergency", icon = "police",
+        category = "police", name = "Police Emergency",
         description = "Request police assistance.",
-        locationMode = "auto", passengerCount = false, descriptionEnabled = true, competitionEnabled = false,
+        locationMode = "auto", passengerMode = "disabled", noteMode = "optional", competitionEnabled = false,
     },
     {
-        category = "medical", name = "Medical Emergency", icon = "medical",
+        category = "medical", name = "Medical Emergency",
         description = "Request medical assistance.",
-        locationMode = "auto", passengerCount = false, descriptionEnabled = true, competitionEnabled = false,
+        locationMode = "auto", passengerMode = "required", countLabel = "Number of injured people",
+        noteMode = "disabled", competitionEnabled = false,
+    },
+    {
+        category = "news", name = "Breaking News",
+        description = "Report breaking news at your current location.",
+        locationMode = "auto", passengerMode = "disabled", noteMode = "disabled", competitionEnabled = false,
     },
 }
 

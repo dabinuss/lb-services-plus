@@ -100,7 +100,7 @@ export default function RequestsTab() {
             </div>
             {details.passenger_count != null && (
               <div className="request-detail-row">
-                <span className="hint">Passengers</span>
+                <span className="hint">{details.count_label || 'Passenger count'}</span>
                 <span>{details.passenger_count}</span>
               </div>
             )}

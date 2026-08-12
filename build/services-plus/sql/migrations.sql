@@ -25,6 +25,73 @@ SET @ddl := IF(@col_exists = 0,
     'SELECT 1');
 PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
+-- Request notes can now be disabled, optional or required. Existing enabled
+-- note fields retain their previous optional behavior.
+SET @col_exists := (
+    SELECT COUNT(*) FROM information_schema.columns
+    WHERE table_schema = DATABASE() AND table_name = 'phone_services_plus_request_types' AND column_name = 'note_mode'
+);
+SET @ddl := IF(@col_exists = 0,
+    'ALTER TABLE `phone_services_plus_request_types` ADD COLUMN `note_mode` ENUM(''disabled'', ''optional'', ''required'') NOT NULL DEFAULT ''disabled'' AFTER `description_enabled`',
+    'SELECT 1');
+PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+UPDATE `phone_services_plus_request_types`
+SET note_mode = 'optional'
+WHERE description_enabled = 1 AND note_mode = 'disabled';
+
+-- Passenger count previously behaved as a required field whenever enabled.
+SET @col_exists := (
+    SELECT COUNT(*) FROM information_schema.columns
+    WHERE table_schema = DATABASE() AND table_name = 'phone_services_plus_request_types' AND column_name = 'passenger_mode'
+);
+SET @ddl := IF(@col_exists = 0,
+    'ALTER TABLE `phone_services_plus_request_types` ADD COLUMN `passenger_mode` ENUM(''disabled'', ''optional'', ''required'') NOT NULL DEFAULT ''disabled'' AFTER `passenger_count`',
+    'SELECT 1');
+PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+UPDATE `phone_services_plus_request_types`
+SET passenger_mode = 'required'
+WHERE passenger_count = 1 AND passenger_mode = 'disabled';
+
+SET @col_exists := (
+    SELECT COUNT(*) FROM information_schema.columns
+    WHERE table_schema = DATABASE() AND table_name = 'phone_services_plus_request_types' AND column_name = 'count_label'
+);
+SET @ddl := IF(@col_exists = 0,
+    'ALTER TABLE `phone_services_plus_request_types` ADD COLUMN `count_label` VARCHAR(50) NOT NULL DEFAULT ''Passenger count'' AFTER `passenger_mode`',
+    'SELECT 1');
+PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- `icon` was the old admin-facing technical identifier field. It is now
+-- generated from the display name and no longer editable in the UI.
+UPDATE `phone_services_plus_request_types`
+SET icon = TRIM(BOTH '_' FROM LOWER(
+    REPLACE(REPLACE(REPLACE(REPLACE(TRIM(name), ' ', '_'), '-', '_'), '/', '_'), '__', '_')
+));
+
+-- Built-in Medical update and News preset. Location is captured
+-- automatically for every request by server/requests.lua.
+INSERT IGNORE INTO `phone_services_plus_categories` (`key`, name, icon, sort_order, competition_allowed)
+VALUES ('news', 'News', 'news', 70, 0);
+
+UPDATE `phone_services_plus_request_types` t
+    JOIN `phone_services_plus_categories` c ON c.id = t.category_id
+SET t.passenger_count = 1, t.passenger_mode = 'required',
+    t.count_label = 'Number of injured people', t.note_mode = 'disabled', t.description_enabled = 0
+WHERE c.`key` = 'medical' AND t.icon = 'medical_emergency';
+
+INSERT INTO `phone_services_plus_request_types`
+    (category_id, name, icon, description, location_mode, passenger_count, passenger_mode,
+     count_label, description_enabled, note_mode, competition_enabled)
+SELECT c.id, 'Breaking News', 'breaking_news', 'Report breaking news at your current location.',
+       'auto', 0, 'disabled', 'Passenger count', 0, 'disabled', 0
+FROM `phone_services_plus_categories` c
+WHERE c.`key` = 'news'
+  AND NOT EXISTS (
+      SELECT 1 FROM `phone_services_plus_request_types` t WHERE t.icon = 'breaking_news'
+  );
+
 SET @col_exists := (
     SELECT COUNT(*) FROM information_schema.columns
     WHERE table_schema = DATABASE() AND table_name = 'phone_services_plus_companies' AND column_name = 'admin_messages_allowed'

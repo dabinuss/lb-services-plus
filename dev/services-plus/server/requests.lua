@@ -33,11 +33,14 @@ local function seedIfEmpty()
 
         MySQL.insert.await([[
             INSERT INTO phone_services_plus_request_types
-                (category_id, name, icon, description, location_mode, passenger_count, description_enabled, competition_enabled)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                (category_id, name, icon, description, location_mode, passenger_count, passenger_mode, count_label, description_enabled, note_mode, competition_enabled)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ]], {
-            categoryId or json.null, t.name, t.icon or json.null, t.description or json.null, t.locationMode or "auto",
-            t.passengerCount and 1 or 0, t.descriptionEnabled and 1 or 0, t.competitionEnabled and 1 or 0,
+            categoryId or json.null, t.name,
+            t.name:lower():gsub("[^%w]+", "_"):gsub("^_+", ""):gsub("_+$", ""):sub(1, 100),
+            t.description or json.null, t.locationMode or "auto", t.passengerMode ~= "disabled" and 1 or 0,
+            t.passengerMode or "disabled", t.countLabel or "Passenger count",
+            t.noteMode ~= "disabled" and 1 or 0, t.noteMode or "optional", t.competitionEnabled and 1 or 0,
         })
     end
 end
@@ -213,6 +216,7 @@ local function distribute(company, requestType, request)
         companyName = company.name,
         companyIcon = company.icon,
         passengerCount = request.passengerCount,
+        countLabel = requestType.count_label or "Passenger count",
         description = request.description,
         x = request.x,
         y = request.y,
@@ -275,8 +279,10 @@ RegisterCallback("createRequest", function(source, reply, companyId, requestType
 
     -- Bounded, whole-number only - a bare tonumber() would accept negative
     -- values, decimals or an absurd count (plan review round 2 §6).
+    local passengerMode = requestType.passenger_mode
+        or (requestType.passenger_count == 1 and "required" or "disabled")
     local finalPassengerCount = nil
-    if requestType.passenger_count == 1 then
+    if passengerMode ~= "disabled" and passengerCount ~= nil and passengerCount ~= "" then
         local n = tonumber(passengerCount)
         if n and n == math.floor(n) and n >= 1 and n <= Config.MaxPassengerCount then
             finalPassengerCount = n
@@ -288,9 +294,14 @@ RegisterCallback("createRequest", function(source, reply, companyId, requestType
             -- rejected outright.
             return reply(false)
         end
+    elseif passengerMode == "required" then
+        return reply(false)
     end
 
-    local finalDescription = requestType.description_enabled == 1 and type(description) == "string" and description ~= "" and description:sub(1, 255) or nil
+    local noteMode = requestType.note_mode or (requestType.description_enabled == 1 and "optional" or "disabled")
+    local note = type(description) == "string" and description:match("^%s*(.-)%s*$") or ""
+    if noteMode == "required" and note == "" then return reply(false) end
+    local finalDescription = noteMode ~= "disabled" and note ~= "" and note:sub(1, 255) or nil
 
     -- Competition needs both the category and the request type to allow it
     -- (plan §16: configurable at either level).
@@ -429,6 +440,7 @@ RegisterCallback("acceptRequest", function(source, reply, requestId)
             companyName = company.name,
             companyIcon = company.icon,
             passengerCount = request.passenger_count,
+            countLabel = requestType.count_label or "Passenger count",
             description = request.description,
             x = request.pos_x,
             y = request.pos_y,
@@ -476,7 +488,7 @@ RegisterCallback("getActiveRequest", function(source, reply)
 
     local request = MySQL.single.await([[
         SELECT r.id AS requestId, r.pos_x AS x, r.pos_y AS y, r.passenger_count AS passengerCount, r.description,
-               t.name AS typeName, c.name AS companyName, c.icon AS companyIcon
+               t.name AS typeName, t.count_label AS countLabel, c.name AS companyName, c.icon AS companyIcon
         FROM phone_services_plus_requests r
         JOIN phone_services_plus_request_types t ON t.id = r.request_type_id
         LEFT JOIN phone_services_plus_companies c ON c.id = r.company_id
@@ -561,7 +573,7 @@ RegisterCallback("getCompanyRequests", function(source, reply, page)
     local rows = MySQL.query.await([[
         SELECT r.id, r.company_id, r.status, r.pos_x AS x, r.pos_y AS y,
                r.passenger_count, r.description, r.created_at,
-               t.name AS type_name, t.icon AS type_icon,
+               t.name AS type_name, t.icon AS type_icon, t.count_label,
                (r.employee_identifier = ?) AS is_mine
         FROM phone_services_plus_requests r
         JOIN phone_services_plus_request_types t ON t.id = r.request_type_id
@@ -587,7 +599,7 @@ RegisterCallback("getMyRequests", function(source, reply, page)
 
     local rows = MySQL.query.await([[
         SELECT r.id, r.status, r.created_at, r.description, r.passenger_count,
-               t.name AS type_name, t.icon AS type_icon,
+               t.name AS type_name, t.icon AS type_icon, t.count_label,
                c.name AS company_name, c.icon AS company_icon
         FROM phone_services_plus_requests r
         JOIN phone_services_plus_request_types t ON t.id = r.request_type_id

@@ -8,6 +8,7 @@ const MAP = {
   wrench: '🔧',
   'tow-truck': '🚛',
   bank: '🏛️',
+  news: '📰',
 }
 
 export default function CategoryIcon({ icon, className }) {

@@ -199,7 +199,10 @@ CREATE TABLE IF NOT EXISTS `phone_services_plus_request_types` (
 
     `location_mode` VARCHAR(10) NOT NULL DEFAULT 'auto',
     `passenger_count` TINYINT(1) NOT NULL DEFAULT 0,
+    `passenger_mode` ENUM('disabled', 'optional', 'required') NOT NULL DEFAULT 'disabled',
+    `count_label` VARCHAR(50) NOT NULL DEFAULT 'Passenger count',
     `description_enabled` TINYINT(1) NOT NULL DEFAULT 0,
+    `note_mode` ENUM('disabled', 'optional', 'required') NOT NULL DEFAULT 'disabled',
     `competition_enabled` TINYINT(1) NOT NULL DEFAULT 0,
 
     -- Soft-delete only (plan review round 3 §9): request_type_id on

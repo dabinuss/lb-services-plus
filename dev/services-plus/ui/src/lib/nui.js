@@ -56,6 +56,7 @@ const paginate = (list, page) => list.slice((page || 0) * FIXTURE_PAGE_SIZE, ((p
 // but potentially-dead specific Unsplash id, and this data never ships
 // (devMode only).
 const bg = (seed) => `https://picsum.photos/seed/${seed}/800/450`
+const requestTypeIdentifier = (name) => name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'request_type'
 
 const fixtures = {
   bootstrap: {
@@ -64,6 +65,7 @@ const fixtures = {
       { id: 2, key: 'medical', name: 'Medical', icon: 'medical', sort_order: 20 },
       { id: 3, key: 'taxi', name: 'Taxi', icon: 'taxi', sort_order: 30 },
       { id: 4, key: 'mechanic', name: 'Mechanic', icon: 'wrench', sort_order: 40 },
+      { id: 5, key: 'news', name: 'News', icon: 'news', sort_order: 70 },
     ],
     companies: [
       {
@@ -156,26 +158,33 @@ const fixtures = {
   requestTypes: {
     4: [
       {
-        id: 1, category_id: 4, name: 'Roadside Assistance', icon: 'wrench',
-        description: 'Request on-site repairs.', passenger_count: 0, description_enabled: 1,
+        id: 1, category_id: 4, name: 'Roadside Assistance', icon: 'roadside_assistance',
+        description: 'Request on-site repairs.', passenger_count: 0, passenger_mode: 'disabled', description_enabled: 1, note_mode: 'required',
       },
     ],
     3: [
       {
-        id: 2, category_id: 3, name: 'Taxi Pickup', icon: 'taxi',
-        description: 'Request a ride from your current location.', passenger_count: 1, description_enabled: 1,
+        id: 2, category_id: 3, name: 'Taxi Pickup', icon: 'taxi_pickup',
+        description: 'Request a ride from your current location.', passenger_count: 1, passenger_mode: 'required', count_label: 'Passenger count', description_enabled: 1, note_mode: 'optional',
       },
     ],
     1: [
       {
-        id: 3, category_id: 1, name: 'Request Backup', icon: 'police',
-        description: 'Flag down the nearest available unit.', passenger_count: 0, description_enabled: 1,
+        id: 3, category_id: 1, name: 'Request Backup', icon: 'request_backup',
+        description: 'Flag down the nearest available unit.', passenger_count: 0, passenger_mode: 'disabled', description_enabled: 1, note_mode: 'optional',
       },
     ],
     2: [
       {
-        id: 4, category_id: 2, name: 'Medical Emergency', icon: 'medical',
-        description: 'Request an ambulance to your location.', passenger_count: 0, description_enabled: 1,
+        id: 4, category_id: 2, name: 'Medical Emergency', icon: 'medical_emergency',
+        description: 'Request an ambulance to your location.', passenger_count: 1, passenger_mode: 'required', count_label: 'Number of injured people', description_enabled: 0, note_mode: 'disabled',
+      },
+    ],
+    5: [
+      {
+        id: 5, category_id: 5, name: 'Breaking News', icon: 'breaking_news',
+        description: 'Report breaking news at your current location.', passenger_count: 0,
+        passenger_mode: 'disabled', description_enabled: 0, note_mode: 'disabled',
       },
     ],
   },
@@ -324,6 +333,7 @@ let fixtureAdminCategories = [
   { id: 2, key: 'medical', name: 'Medical', icon: 'medical', sort_order: 20, competition_allowed: 0 },
   { id: 3, key: 'taxi', name: 'Taxi', icon: 'taxi', sort_order: 30, competition_allowed: 1 },
   { id: 4, key: 'mechanic', name: 'Mechanic', icon: 'wrench', sort_order: 40, competition_allowed: 1 },
+  { id: 5, key: 'news', name: 'News', icon: 'news', sort_order: 70, competition_allowed: 0 },
 ]
 
 // Mirrors fixtures.bootstrap.companies above (same ids/backgrounds) so the
@@ -368,20 +378,26 @@ let fixtureAdminCompanies = [
 // Mirrors fixtures.requestTypes above, one per category.
 let fixtureAdminRequestTypes = [
   {
-    id: 1, category_id: 4, name: 'Roadside Assistance', icon: 'wrench', description: 'Request on-site repairs.',
-    passenger_count: 0, description_enabled: 1, competition_enabled: 0, enabled: 1,
+    id: 1, category_id: 4, name: 'Roadside Assistance', icon: 'roadside_assistance', description: 'Request on-site repairs.',
+    passenger_count: 0, passenger_mode: 'disabled', description_enabled: 1, note_mode: 'required', competition_enabled: 0, enabled: 1,
   },
   {
-    id: 2, category_id: 3, name: 'Taxi Pickup', icon: 'taxi', description: 'Request a ride.',
-    passenger_count: 1, description_enabled: 1, competition_enabled: 1, enabled: 1,
+    id: 2, category_id: 3, name: 'Taxi Pickup', icon: 'taxi_pickup', description: 'Request a ride.',
+    passenger_count: 1, passenger_mode: 'required', description_enabled: 1, note_mode: 'optional', competition_enabled: 1, enabled: 1,
   },
   {
-    id: 3, category_id: 1, name: 'Request Backup', icon: 'police', description: 'Flag down the nearest available unit.',
-    passenger_count: 0, description_enabled: 1, competition_enabled: 0, enabled: 1,
+    id: 3, category_id: 1, name: 'Request Backup', icon: 'request_backup', description: 'Flag down the nearest available unit.',
+    passenger_count: 0, passenger_mode: 'disabled', description_enabled: 1, note_mode: 'optional', competition_enabled: 0, enabled: 1,
   },
   {
-    id: 4, category_id: 2, name: 'Medical Emergency', icon: 'medical', description: 'Request an ambulance.',
-    passenger_count: 0, description_enabled: 1, competition_enabled: 0, enabled: 1,
+    id: 4, category_id: 2, name: 'Medical Emergency', icon: 'medical_emergency', description: 'Request an ambulance.',
+    passenger_count: 1, passenger_mode: 'required', count_label: 'Number of injured people',
+    description_enabled: 0, note_mode: 'disabled', competition_enabled: 0, enabled: 1,
+  },
+  {
+    id: 5, category_id: 5, name: 'Breaking News', icon: 'breaking_news',
+    description: 'Report breaking news at your current location.', passenger_count: 0, passenger_mode: 'disabled',
+    description_enabled: 0, note_mode: 'disabled', competition_enabled: 0, enabled: 1,
   },
 ]
 
@@ -625,8 +641,10 @@ async function fetchNuiFixture(action, data) {
       fixtureAdminRequestTypes = [
         ...fixtureAdminRequestTypes,
         {
-          id: fixtureAdminRequestTypes.length + 1, category_id: data.categoryId, passenger_count: data.passengerCount ? 1 : 0,
-          description_enabled: data.descriptionEnabled ? 1 : 0, competition_enabled: data.competitionEnabled ? 1 : 0,
+          id: fixtureAdminRequestTypes.length + 1, category_id: data.categoryId,
+          passenger_count: data.passengerMode !== 'disabled' ? 1 : 0, passenger_mode: data.passengerMode,
+          count_label: data.countLabel || 'Passenger count', icon: requestTypeIdentifier(data.name), note_mode: data.noteMode,
+          description_enabled: data.noteMode !== 'disabled' ? 1 : 0, competition_enabled: data.competitionEnabled ? 1 : 0,
           enabled: 1, ...data,
         },
       ]
@@ -635,8 +653,10 @@ async function fetchNuiFixture(action, data) {
       fixtureAdminRequestTypes = fixtureAdminRequestTypes.map((t) =>
         t.id === data.id
           ? {
-              ...t, ...data, category_id: data.categoryId, passenger_count: data.passengerCount ? 1 : 0,
-              description_enabled: data.descriptionEnabled ? 1 : 0, competition_enabled: data.competitionEnabled ? 1 : 0,
+              ...t, ...data, category_id: data.categoryId,
+              passenger_count: data.passengerMode !== 'disabled' ? 1 : 0, passenger_mode: data.passengerMode,
+              count_label: data.countLabel || 'Passenger count', icon: requestTypeIdentifier(data.name), note_mode: data.noteMode,
+              description_enabled: data.noteMode !== 'disabled' ? 1 : 0, competition_enabled: data.competitionEnabled ? 1 : 0,
               enabled: data.enabled !== false ? 1 : 0,
             }
           : t,

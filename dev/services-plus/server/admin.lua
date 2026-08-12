@@ -378,20 +378,38 @@ adminCallback("admin:getRequestTypes", function(_, reply)
 end)
 
 local function requestTypeParams(data)
+    local name = type(data.name) == "string" and data.name:match("^%s*(.-)%s*$") or ""
+    local identifier = name:lower():gsub("[^%w]+", "_"):gsub("^_+", ""):gsub("_+$", "")
+    if identifier == "" then identifier = "request_type" end
+
+    local noteMode = ({ disabled = true, optional = true, required = true })[data.noteMode]
+        and data.noteMode or "disabled"
+    local passengerMode = ({ disabled = true, optional = true, required = true })[data.passengerMode]
+        and data.passengerMode or "disabled"
+    local countLabel = type(data.countLabel) == "string" and data.countLabel:match("^%s*(.-)%s*$") or ""
+    if countLabel == "" then countLabel = "Passenger count" end
+
     return {
-        data.categoryId or json.null, data.name, data.icon or json.null, data.description or json.null,
-        data.locationMode or "auto", data.passengerCount and 1 or 0, data.descriptionEnabled and 1 or 0,
+        data.categoryId or json.null, name, identifier:sub(1, 100), data.description or json.null,
+        data.locationMode or "auto", passengerMode ~= "disabled" and 1 or 0, passengerMode, countLabel:sub(1, 50),
+        noteMode ~= "disabled" and 1 or 0, noteMode,
         data.competitionEnabled and 1 or 0,
     }
 end
 
+local function hasRequestTypeName(data)
+    return type(data) == "table"
+        and type(data.name) == "string"
+        and data.name:match("^%s*(.-)%s*$") ~= ""
+end
+
 adminCallback("admin:createRequestType", function(_, reply, data)
-    if type(data.name) ~= "string" or data.name == "" then return reply(false) end
+    if not hasRequestTypeName(data) then return reply(false) end
 
     local id = MySQL.insert.await([[
         INSERT INTO phone_services_plus_request_types
-            (category_id, name, icon, description, location_mode, passenger_count, description_enabled, competition_enabled)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            (category_id, name, icon, description, location_mode, passenger_count, passenger_mode, count_label, description_enabled, note_mode, competition_enabled)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ]], requestTypeParams(data))
 
     Requests.Reload()
@@ -399,6 +417,7 @@ adminCallback("admin:createRequestType", function(_, reply, data)
 end)
 
 adminCallback("admin:updateRequestType", function(_, reply, data)
+    if not hasRequestTypeName(data) then return reply(false) end
     local params = requestTypeParams(data)
     params[#params + 1] = data.enabled ~= false and 1 or 0
     params[#params + 1] = data.id
@@ -406,7 +425,7 @@ adminCallback("admin:updateRequestType", function(_, reply, data)
     MySQL.update.await([[
         UPDATE phone_services_plus_request_types SET
             category_id = ?, name = ?, icon = ?, description = ?, location_mode = ?,
-            passenger_count = ?, description_enabled = ?, competition_enabled = ?, enabled = ?
+            passenger_count = ?, passenger_mode = ?, count_label = ?, description_enabled = ?, note_mode = ?, competition_enabled = ?, enabled = ?
         WHERE id = ?
     ]], params)
 

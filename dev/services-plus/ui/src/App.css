@@ -1073,6 +1073,22 @@
   margin-top: 0;
 }
 
+.request-type-setting {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.request-type-setting .search-input {
+  font-weight: 400;
+}
+
+.hotline-info .hint {
+  line-height: 1.35;
+}
+
 /* status pills */
 
 .status-row {

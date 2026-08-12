@@ -10,6 +10,9 @@ export default function RequestSheet({ company, onClose }) {
   const [passengerCount, setPassengerCount] = useState('')
   const [description, setDescription] = useState('')
   const [state, setState] = useState('form') // form | sending | sent | queued | failed
+  const passengerMode = type?.passenger_mode || (type?.passenger_count === 1 ? 'required' : 'disabled')
+  const noteMode = type?.note_mode || (type?.description_enabled === 1 ? 'optional' : 'disabled')
+  const countLabel = type?.count_label || 'Passenger count'
 
   useEffect(() => {
     fetchNui('getRequestTypes', { categoryId: company.categoryId }).then((result) => {
@@ -20,6 +23,8 @@ export default function RequestSheet({ company, onClose }) {
   }, [company])
 
   const submit = async () => {
+    if (passengerMode === 'required' && !passengerCount) return
+    if (noteMode === 'required' && !description.trim()) return
     setState('sending')
     const result = await fetchNui('createRequest', {
       companyId: company.id,
@@ -63,27 +68,33 @@ export default function RequestSheet({ company, onClose }) {
           <div className="request-form-title">{type.name}</div>
           {type.description && <div className="request-form-description">{type.description}</div>}
 
-          {type.passenger_count === 1 && (
+          {passengerMode !== 'disabled' && (
             <input
               className="search-input"
               type="number"
               min="1"
-              placeholder="Passenger count"
+              placeholder={`${countLabel}${passengerMode === 'optional' ? ' (optional)' : ' (required)'}`}
               value={passengerCount}
               onChange={(e) => setPassengerCount(e.target.value)}
+              required={passengerMode === 'required'}
             />
           )}
 
-          {type.description_enabled === 1 && (
+          {noteMode !== 'disabled' && (
             <input
               className="search-input"
-              placeholder="Note (optional)"
+              placeholder={`Additional note${noteMode === 'required' ? ' (required)' : ' (optional)'}`}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
+              required={noteMode === 'required'}
             />
           )}
 
-          <button className="login-button" onClick={submit}>
+          <button
+            className="login-button"
+            disabled={(passengerMode === 'required' && !passengerCount) || (noteMode === 'required' && !description.trim())}
+            onClick={submit}
+          >
             Send request
           </button>
         </div>

@@ -74,7 +74,7 @@ export default function RequestsTab() {
             <div className="request-info">
               <div className="request-type">{r.type_name}</div>
               <div className="request-meta">
-                {r.passenger_count ? `${r.passenger_count} passengers · ` : ''}
+                {r.passenger_count ? `${r.count_label || 'Passenger count'}: ${r.passenger_count} · ` : ''}
                 {r.description || 'No description'}
               </div>
             </div>
@@ -121,7 +121,7 @@ export default function RequestsTab() {
             </div>
             {details.passenger_count != null && (
               <div className="request-detail-row">
-                <span className="hint">Passengers</span>
+                <span className="hint">{details.count_label || 'Passenger count'}</span>
                 <span>{details.passenger_count}</span>
               </div>
             )}

@@ -5,8 +5,8 @@ import ConfirmButton from '../../components/ConfirmButton.jsx'
 import Switch from '../../components/Switch.jsx'
 
 const EMPTY = {
-  categoryId: '', name: '', icon: '', description: '',
-  passengerCount: false, descriptionEnabled: false, competitionEnabled: false, enabled: true,
+  categoryId: '', name: '', description: '',
+  passengerMode: 'disabled', countLabel: 'Passenger count', noteMode: 'disabled', competitionEnabled: false, enabled: true,
 }
 
 // Request type CRUD (plan §55). Location is always automatic (plan §14) -
@@ -54,7 +54,8 @@ export default function RequestTypesTab() {
               <div className="admin-row-title">{t.name}</div>
               <div className="admin-row-meta">
                 {categoryName(t.category_id)} · {t.competition_enabled ? 'competition' : 'exclusive'}
-                {t.passenger_count ? ' · passengers' : ''} · {t.enabled ? 'enabled' : 'disabled'}
+                {(t.passenger_mode || (t.passenger_count ? 'required' : 'disabled')) !== 'disabled' ? ' · passengers' : ''}
+                {' · '}{t.enabled ? 'enabled' : 'disabled'}
               </div>
             </div>
             <div className="admin-row-actions">
@@ -62,9 +63,12 @@ export default function RequestTypesTab() {
                 className="request-action complete"
                 onClick={() =>
                   setEditing({
-                    id: t.id, categoryId: t.category_id || '', name: t.name, icon: t.icon || '',
-                    description: t.description || '', passengerCount: t.passenger_count === 1,
-                    descriptionEnabled: t.description_enabled === 1, competitionEnabled: t.competition_enabled === 1,
+                    id: t.id, categoryId: t.category_id || '', name: t.name,
+                    description: t.description || '',
+                    passengerMode: t.passenger_mode || (t.passenger_count === 1 ? 'required' : 'disabled'),
+                    countLabel: t.count_label || 'Passenger count',
+                    noteMode: t.note_mode || (t.description_enabled === 1 ? 'optional' : 'disabled'),
+                    competitionEnabled: t.competition_enabled === 1,
                     enabled: t.enabled === 1,
                   })
                 }
@@ -101,26 +105,51 @@ export default function RequestTypesTab() {
           />
           <input
             className="search-input"
-            placeholder="Icon"
-            value={editing.icon}
-            onChange={(e) => setEditing({ ...editing, icon: e.target.value })}
-          />
-          <input
-            className="search-input"
             placeholder="Description shown to the requester"
             value={editing.description}
             onChange={(e) => setEditing({ ...editing, description: e.target.value })}
           />
-          <div className="hotline-row">
-            <span>Ask for passenger count</span>
-            <Switch checked={editing.passengerCount} onChange={(next) => setEditing({ ...editing, passengerCount: next })} />
+          <div className="request-type-setting">
+            <label htmlFor="request-type-passenger-mode">Passenger count</label>
+            <select
+              id="request-type-passenger-mode"
+              className="search-input"
+              value={editing.passengerMode}
+              onChange={(e) => setEditing({ ...editing, passengerMode: e.target.value })}
+            >
+              <option value="disabled">Disabled</option>
+              <option value="optional">Optional</option>
+              <option value="required">Required</option>
+            </select>
+          </div>
+          {editing.passengerMode !== 'disabled' && (
+            <input
+              className="search-input"
+              placeholder="Number field label"
+              value={editing.countLabel}
+              onChange={(e) => setEditing({ ...editing, countLabel: e.target.value })}
+            />
+          )}
+          <div className="request-type-setting">
+            <label htmlFor="request-type-note-mode">Additional note</label>
+            <select
+              id="request-type-note-mode"
+              className="search-input"
+              value={editing.noteMode}
+              onChange={(e) => setEditing({ ...editing, noteMode: e.target.value })}
+            >
+              <option value="disabled">Disabled</option>
+              <option value="optional">Optional</option>
+              <option value="required">Required</option>
+            </select>
           </div>
           <div className="hotline-row">
-            <span>Allow an optional note</span>
-            <Switch checked={editing.descriptionEnabled} onChange={(next) => setEditing({ ...editing, descriptionEnabled: next })} />
-          </div>
-          <div className="hotline-row">
-            <span>Competition (broadcast to every company in the category)</span>
+            <div className="hotline-info">
+              <span>Competition request</span>
+              <span className="hint">
+                Send this request to all available companies in this category. The first company to accept gets the request.
+              </span>
+            </div>
             <Switch checked={editing.competitionEnabled} onChange={(next) => setEditing({ ...editing, competitionEnabled: next })} />
           </div>
           {editing.id && (
