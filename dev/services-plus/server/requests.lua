@@ -102,6 +102,18 @@ local OPEN_REQUEST_TTL_MS = 30 * 60000
 -- and no leak risk from a mid-flight disconnect either: MySQL.await still
 -- resumes and completes this coroutine even after the player's gone.
 local acceptLocks = {}
+-- source -> { identifier, requestId } for accepted/rehydrated requests. The
+-- stable identifier is captured while the framework player object still
+-- exists, because it may already be gone when playerDropped runs.
+local activeAssignments = {}
+
+local function getDisconnectGraceMinutes()
+    local value = tonumber(MySQL.scalar.await(
+        "SELECT value FROM phone_services_plus_settings WHERE `key` = 'active_request_disconnect_grace_minutes'"
+    )) or 5
+
+    return math.max(1, math.min(60, math.floor(value)))
+end
 
 --- Notifies every eligible employee for `company`'s request routing mode via
 --- the Sibling-NUI request card (plan §42-44) and returns how many were
@@ -313,11 +325,24 @@ RegisterCallback("acceptRequest", function(source, reply, requestId)
         -- means only one of any number of concurrent accepts can ever
         -- affect a row.
         local affected = MySQL.update.await(
-            "UPDATE phone_services_plus_requests SET status = 'active', company_id = ?, employee_identifier = ? WHERE id = ? AND status = 'open'",
+            "UPDATE phone_services_plus_requests SET status = 'active', company_id = ?, employee_identifier = ?, employee_disconnected_at = NULL WHERE id = ? AND status = 'open'",
             { company.id, identifier, requestId }
         )
 
         if affected == 0 then return false end
+
+        if GetPlayerName(source) == nil then
+            -- The disconnect may land while the awaited accept UPDATE is in
+            -- flight. Mark that newly-active row immediately so it cannot
+            -- escape the playerDropped handler that already ran.
+            MySQL.update.await([[
+                UPDATE phone_services_plus_requests
+                SET employee_disconnected_at = NOW()
+                WHERE id = ? AND status = 'active'
+            ]], { requestId })
+        else
+            activeAssignments[source] = { identifier = identifier, requestId = requestId }
+        end
 
         clearNotifications(requestId, source)
 
@@ -364,6 +389,25 @@ end)
 -- still 'active' in the database, so the overlay asks for it back on load.
 RegisterCallback("getActiveRequest", function(source, reply)
     local identifier = Framework.GetIdentifier(source)
+    local graceMinutes = getDisconnectGraceMinutes()
+
+    -- Expired assignments are cancelled here too, before rehydration. This
+    -- matters after a server/resource restart where the periodic cleanup
+    -- may not have had its first chance to run yet.
+    MySQL.update.await([[
+        UPDATE phone_services_plus_requests
+        SET status = 'cancelled'
+        WHERE employee_identifier = ? AND status = 'active'
+          AND employee_disconnected_at IS NOT NULL
+          AND TIMESTAMPADD(MINUTE, ?, employee_disconnected_at) <= NOW()
+    ]], { identifier, graceMinutes })
+
+    -- Rejoining inside the configured grace period keeps the assignment.
+    MySQL.update.await([[
+        UPDATE phone_services_plus_requests
+        SET employee_disconnected_at = NULL
+        WHERE employee_identifier = ? AND status = 'active'
+    ]], { identifier })
 
     local request = MySQL.single.await([[
         SELECT r.id AS requestId, r.pos_x AS x, r.pos_y AS y, r.passenger_count AS passengerCount, r.description,
@@ -375,6 +419,12 @@ RegisterCallback("getActiveRequest", function(source, reply)
         ORDER BY r.updated_at DESC
         LIMIT 1
     ]], { identifier })
+
+    if request then
+        activeAssignments[source] = { identifier = identifier, requestId = request.requestId }
+    else
+        activeAssignments[source] = nil
+    end
 
     reply(request)
 end)
@@ -390,6 +440,7 @@ RegisterCallback("completeRequest", function(source, reply, requestId)
     -- too regardless of which one Complete was actually pressed on (plan
     -- review round 3 §2, mirrors the requestAccepted pattern above).
     if affected > 0 then
+        activeAssignments[source] = nil
         TriggerClientEvent("services-plus:client:requestEnded", source, requestId)
     end
 
@@ -400,9 +451,12 @@ RegisterCallback("cancelRequest", function(source, reply, requestId)
     -- Grabbed before the update so a customer-initiated cancel can still
     -- resolve who the request was assigned to (source here is the customer,
     -- not the employee, in that case).
-    local row = MySQL.single.await(
-        "SELECT employee_identifier, company_id FROM phone_services_plus_requests WHERE id = ?", { requestId }
-    )
+    local row = MySQL.single.await([[
+        SELECT r.employee_identifier, c.job AS company_job
+        FROM phone_services_plus_requests r
+        LEFT JOIN phone_services_plus_companies c ON c.id = r.company_id
+        WHERE r.id = ?
+    ]], { requestId })
 
     local affected = MySQL.update.await(
         "UPDATE phone_services_plus_requests SET status = 'cancelled' WHERE id = ? AND status IN ('open', 'active') AND (requester_number = ? OR employee_identifier = ?)",
@@ -417,10 +471,11 @@ RegisterCallback("cancelRequest", function(source, reply, requestId)
         -- covers the employee's own surfaces when they cancel their own
         -- accepted request (plan review round 3 §2).
         if row and row.employee_identifier then
-            local company = row.company_id and Companies.GetById(row.company_id)
-            local employeeSource = company and Employees.FindSourceByIdentifier(company.job, row.employee_identifier)
+            local employeeSource = row.company_job
+                and Employees.FindSourceByIdentifier(row.company_job, row.employee_identifier)
 
             if employeeSource then
+                activeAssignments[employeeSource] = nil
                 TriggerClientEvent("services-plus:client:requestEnded", employeeSource, requestId)
             end
         end
@@ -439,17 +494,23 @@ RegisterCallback("getCompanyRequests", function(source, reply, page)
     local identifier = Framework.GetIdentifier(source)
 
     local rows = MySQL.query.await([[
-        SELECT r.*, r.pos_x AS x, r.pos_y AS y, t.name AS type_name, t.icon AS type_icon
+        SELECT r.id, r.company_id, r.status, r.pos_x AS x, r.pos_y AS y,
+               r.passenger_count, r.description, r.created_at,
+               t.name AS type_name, t.icon AS type_icon,
+               (r.employee_identifier = ?) AS is_mine
         FROM phone_services_plus_requests r
         JOIN phone_services_plus_request_types t ON t.id = r.request_type_id
         WHERE r.company_id = ? OR (r.company_id IS NULL AND t.category_id = ? AND r.status = 'open')
         ORDER BY (r.status = 'open') DESC, r.created_at DESC, r.id DESC
         LIMIT ?, ?
-    ]], { company.id, company.category_id, ClampPage(page) * Config.PageSize.requests, Config.PageSize.requests })
+    ]], {
+        identifier, company.id, company.category_id,
+        ClampPage(page) * Config.PageSize.requests, Config.PageSize.requests,
+    })
 
     rows = rows or {}
     for i = 1, #rows do
-        rows[i].is_mine = rows[i].employee_identifier == identifier
+        rows[i].is_mine = rows[i].is_mine == 1
     end
 
     reply(rows)
@@ -483,7 +544,20 @@ end)
 -- a "source:N" placeholder instead of the real identifier, this is simply a
 -- no-op rather than clearing the wrong lock.
 AddEventHandler("playerDropped", function()
-    acceptLocks[Framework.GetIdentifier(source)] = nil
+    local assignment = activeAssignments[source]
+    local identifier = assignment and assignment.identifier or Framework.GetIdentifier(source)
+
+    acceptLocks[identifier] = nil
+    activeAssignments[source] = nil
+
+    -- Mark instead of immediately cancelling. The periodic cleanup applies
+    -- the admin-configured grace period; getActiveRequest clears this again
+    -- when the same character reconnects in time.
+    MySQL.update([[
+        UPDATE phone_services_plus_requests
+        SET employee_disconnected_at = NOW()
+        WHERE employee_identifier = ? AND status = 'active'
+    ]], { identifier })
 end)
 
 CreateThread(function()
@@ -508,6 +582,22 @@ CreateThread(function()
                 clearNotifications(requestId)
             end
         end
+    end
+end)
+
+CreateThread(function()
+    while true do
+        Wait(30000)
+
+        local graceMinutes = getDisconnectGraceMinutes()
+
+        MySQL.update.await([[
+            UPDATE phone_services_plus_requests
+            SET status = 'cancelled'
+            WHERE status = 'active'
+              AND employee_disconnected_at IS NOT NULL
+              AND TIMESTAMPADD(MINUTE, ?, employee_disconnected_at) <= NOW()
+        ]], { graceMinutes })
     end
 end)
 

@@ -246,3 +246,34 @@ SET @ddl := IF(@idx_exists = 0,
     'ALTER TABLE `phone_services_plus_messages` ADD INDEX `channel_id_id` (`channel_id`, `id`)',
     'SELECT 1');
 PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- ---------------------------------------------------------------------------
+-- Active-request disconnect grace period and persistent admin settings.
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS `phone_services_plus_settings` (
+    `key` VARCHAR(50) NOT NULL,
+    `value` VARCHAR(255) NOT NULL,
+    PRIMARY KEY (`key`)
+) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+INSERT IGNORE INTO `phone_services_plus_settings` (`key`, `value`)
+VALUES ('active_request_disconnect_grace_minutes', '5');
+
+SET @col_exists := (
+    SELECT COUNT(*) FROM information_schema.columns
+    WHERE table_schema = DATABASE() AND table_name = 'phone_services_plus_requests' AND column_name = 'employee_disconnected_at'
+);
+SET @ddl := IF(@col_exists = 0,
+    'ALTER TABLE `phone_services_plus_requests` ADD COLUMN `employee_disconnected_at` TIMESTAMP NULL DEFAULT NULL AFTER `employee_identifier`',
+    'SELECT 1');
+PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @idx_exists := (
+    SELECT COUNT(*) FROM information_schema.statistics
+    WHERE table_schema = DATABASE() AND table_name = 'phone_services_plus_requests' AND index_name = 'disconnected_status'
+);
+SET @ddl := IF(@idx_exists = 0,
+    'ALTER TABLE `phone_services_plus_requests` ADD INDEX `disconnected_status` (`status`, `employee_disconnected_at`)',
+    'SELECT 1');
+PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;

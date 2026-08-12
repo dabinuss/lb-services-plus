@@ -1052,6 +1052,16 @@
   padding: 0.5rem 0.7rem;
 }
 
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.settings-section .section-title {
+  margin-top: 0;
+}
+
 /* status pills */
 
 .status-row {

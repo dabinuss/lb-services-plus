@@ -2,11 +2,13 @@ import { useState } from 'react'
 import CompaniesTab from './admin/CompaniesTab.jsx'
 import CategoriesTab from './admin/CategoriesTab.jsx'
 import RequestTypesTab from './admin/RequestTypesTab.jsx'
+import ServiceSettingsTab from './admin/ServiceSettingsTab.jsx'
 
 const TABS = [
   { key: 'companies', label: 'Companies' },
   { key: 'categories', label: 'Categories' },
   { key: 'requestTypes', label: 'Request Types' },
+  { key: 'settings', label: 'Settings' },
 ]
 
 // Services+ admin area (plan §50-58) - independent of company boss rights.
@@ -29,6 +31,7 @@ export default function AdminScreen() {
         {tab === 'companies' && <CompaniesTab />}
         {tab === 'categories' && <CategoriesTab />}
         {tab === 'requestTypes' && <RequestTypesTab />}
+        {tab === 'settings' && <ServiceSettingsTab />}
       </div>
     </div>
   )

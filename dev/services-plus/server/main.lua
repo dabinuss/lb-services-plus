@@ -47,6 +47,7 @@ RegisterCallback("bootstrap", function(source, reply)
         myNumber = Framework.GetPhoneNumber(source),
         admin = Admin.IsAdmin(source),
         employee = company and {
+            memberId = source,
             companyId = company.id,
             job = job.name,
             jobLabel = job.label,
@@ -248,6 +249,7 @@ RegisterCallback("companyLogin", function(source, reply, companyId)
     reply({
         company = { id = company.id, name = company.name, job = company.job, icon = company.icon },
         employee = {
+            memberId = source,
             name = Framework.GetPlayerName(source),
             grade = job.grade,
             gradeLabel = job.gradeLabel,

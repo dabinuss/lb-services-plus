@@ -313,6 +313,7 @@ end)
 -- Every admin:* server callback takes the NUI payload as a single table, so
 -- these all forward it as-is instead of unpacking individual fields.
 local ADMIN_ACTIONS = {
+    "admin:getServiceSettings", "admin:updateServiceSettings",
     "admin:getCategories", "admin:createCategory", "admin:updateCategory", "admin:deleteCategory",
     "admin:getCompanies", "admin:createCompany", "admin:updateCompany", "admin:deleteCompany",
     "admin:setCompanyCeiling", "admin:assignBoss",

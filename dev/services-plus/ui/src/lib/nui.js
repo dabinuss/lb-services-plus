@@ -139,6 +139,7 @@ const fixtures = {
     // by companyLogin/getTeam/getCompanyConversations/etc. below too, keep
     // any future id changes here in sync with those.
     employee: {
+      memberId: 1,
       companyId: 3,
       job: 'mechanic',
       jobLabel: 'Mechanic',
@@ -289,11 +290,13 @@ let fixtureHotlines = [
 // that needs filling out. A few members with varied grade/status/hotlines
 // to actually exercise the search bar and list.
 const fixtureTeam = [
-  { name: 'Dabi', gradeLabel: 'Boss', status: 'available', hotlines: ['Main Hotline'], phoneNumber: '5559001' },
-  { name: 'John', gradeLabel: 'Worker', status: 'busy', hotlines: ['Main Hotline', 'Workshop'], phoneNumber: '5559002' },
-  { name: 'Mia Torres', gradeLabel: 'Senior Mechanic', status: 'pause', hotlines: ['Workshop'], phoneNumber: '5559003' },
-  { name: 'Tom Reyes', gradeLabel: 'Mechanic', status: 'available', hotlines: ['Main Hotline'], phoneNumber: '5559004' },
+  { memberId: 1, name: 'Dabi', gradeLabel: 'Boss', status: 'available', hotlines: ['Main Hotline'], phoneNumber: '5559001' },
+  { memberId: 2, name: 'John', gradeLabel: 'Worker', status: 'busy', hotlines: ['Main Hotline', 'Workshop'], phoneNumber: '5559002' },
+  { memberId: 3, name: 'Mia Torres', gradeLabel: 'Senior Mechanic', status: 'pause', hotlines: ['Workshop'], phoneNumber: '5559003' },
+  { memberId: 4, name: 'Tom Reyes', gradeLabel: 'Mechanic', status: 'available', hotlines: ['Main Hotline'], phoneNumber: '5559004' },
 ]
+
+let fixtureServiceSettings = { activeRequestDisconnectGraceMinutes: 5 }
 
 let fixtureSettings = {
   callsEnabled: true, messagesEnabled: true, requestsEnabled: true,
@@ -391,7 +394,7 @@ async function fetchNuiFixture(action, data) {
     case 'companyLogin':
       return {
         company: { id: 3, name: 'Downtown Cab Co.', job: 'mechanic', icon: fixtures.bootstrap.companies[2].icon },
-        employee: { name: 'Dabi', grade: 4, gradeLabel: 'Boss', isBoss: true, onDuty: true },
+        employee: { memberId: 1, name: 'Dabi', grade: 4, gradeLabel: 'Boss', isBoss: true, onDuty: true },
       }
     case 'toggleDuty':
     case 'setStatus':
@@ -517,6 +520,11 @@ async function fetchNuiFixture(action, data) {
       return true
 
     // -- admin --------------------------------------------------------
+    case 'admin:getServiceSettings':
+      return fixtureServiceSettings
+    case 'admin:updateServiceSettings':
+      fixtureServiceSettings = { ...fixtureServiceSettings, ...data }
+      return true
     case 'admin:getCategories':
       return fixtureAdminCategories
     case 'admin:createCategory':

@@ -11,7 +11,7 @@ const STATUSES = [
 ]
 
 // Duty, status and hotlines (plan §19-23).
-export default function DashboardHome({ initialOnDuty, initialStatus, employeeName, employeeGrade, onLogout, teamUpdate }) {
+export default function DashboardHome({ initialOnDuty, initialStatus, employeeMemberId, employeeName, employeeGrade, onLogout, teamUpdate }) {
   const [onDuty, setOnDuty] = useState(initialOnDuty)
   const [status, setStatus] = useState(initialStatus)
   const [hotlines, setHotlines] = useState(null)
@@ -31,14 +31,12 @@ export default function DashboardHome({ initialOnDuty, initialStatus, employeeNa
   // upserting it - the one transition that doesn't produce a normal row
   // from the server (GetTeamMemberRow returns nil for "not on duty").
   //
-  // Matched by phoneNumber, not name (plan review round 6 §4) - two
-  // colleagues sharing a display name used to mean a push for one could
-  // silently update (or remove) the other's row instead. Falls back to name
-  // only if phoneNumber is missing on either side (no phone equipped).
+  // Player source is a stable identity for this online/session-only list.
+  // It remains available to playerDropped even when phone/name lookups no
+  // longer do, and duplicate names can never affect another row.
   useEffect(() => {
     if (!teamUpdate) return
-    const matches = (m) =>
-      teamUpdate.phoneNumber && m.phoneNumber ? m.phoneNumber === teamUpdate.phoneNumber : m.name === teamUpdate.name
+    const matches = (m) => m.memberId === teamUpdate.memberId
     setTeam((prev) => {
       if (!prev) return prev
       if (teamUpdate.removed) return prev.filter((m) => !matches(m))
@@ -86,7 +84,7 @@ export default function DashboardHome({ initialOnDuty, initialStatus, employeeNa
   const changeStatus = async (next) => {
     if (await fetchNui('setStatus', { status: next })) {
       setStatus(next)
-      setTeam((prev) => prev?.map((m) => (m.name === employeeName ? { ...m, status: next } : m)))
+      setTeam((prev) => prev?.map((m) => (m.memberId === employeeMemberId ? { ...m, status: next } : m)))
     }
   }
 
@@ -96,7 +94,7 @@ export default function DashboardHome({ initialOnDuty, initialStatus, employeeNa
       setHotlines(result.hotlines)
       setNotice('')
       const activeLabels = result.hotlines.filter((h) => h.active).map((h) => h.label)
-      setTeam((prev) => prev?.map((m) => (m.name === employeeName ? { ...m, hotlines: activeLabels } : m)))
+      setTeam((prev) => prev?.map((m) => (m.memberId === employeeMemberId ? { ...m, hotlines: activeLabels } : m)))
     } else if (result?.reason === 'sole_employee') {
       setNotice("Main hotline stays on while you're the only one on duty.")
     }
@@ -167,8 +165,8 @@ export default function DashboardHome({ initialOnDuty, initialStatus, employeeNa
           <div className="team-list">
             {team === null && <div className="empty-state">Loading…</div>}
             {team !== null && visibleTeam.length === 0 && <div className="empty-state">Nobody on duty.</div>}
-            {visibleTeam?.map((member, i) => (
-              <div key={i} className="team-row">
+            {visibleTeam?.map((member) => (
+              <div key={member.memberId} className="team-row">
                 <div className="team-row-main">
                   <div className="team-info">
                     <div className="team-name">{member.name}</div>

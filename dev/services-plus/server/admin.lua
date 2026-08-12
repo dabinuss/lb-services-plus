@@ -32,6 +32,31 @@ local function adminCallback(name, fn)
     end)
 end
 
+-- Persistent service-wide settings. The request cleanup reads the value
+-- from the same table, so changes apply without a resource restart.
+adminCallback("admin:getServiceSettings", function(_, reply)
+    local graceMinutes = tonumber(MySQL.scalar.await(
+        "SELECT value FROM phone_services_plus_settings WHERE `key` = 'active_request_disconnect_grace_minutes'"
+    )) or 5
+
+    reply({ activeRequestDisconnectGraceMinutes = math.max(1, math.min(60, math.floor(graceMinutes))) })
+end)
+
+adminCallback("admin:updateServiceSettings", function(_, reply, data)
+    local graceMinutes = data and tonumber(data.activeRequestDisconnectGraceMinutes)
+    if not graceMinutes or graceMinutes % 1 ~= 0 or graceMinutes < 1 or graceMinutes > 60 then
+        return reply(false)
+    end
+
+    MySQL.update.await([[
+        INSERT INTO phone_services_plus_settings (`key`, value)
+        VALUES ('active_request_disconnect_grace_minutes', ?)
+        ON DUPLICATE KEY UPDATE value = VALUES(value)
+    ]], { tostring(graceMinutes) })
+
+    reply(true)
+end)
+
 -- Company branding is rendered directly by every player's NUI. Keep it
 -- flexible (no domain allowlist), but only accept well-formed HTTPS URLs
 -- that fit the DB column and don't point at obvious local/private targets.

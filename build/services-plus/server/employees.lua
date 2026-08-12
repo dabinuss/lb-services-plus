@@ -320,6 +320,7 @@ function Employees.GetTeam(companyId)
             end
 
             team[#team + 1] = {
+                memberId = source,
                 name = Framework.GetPlayerName(source),
                 grade = job.grade,
                 gradeLabel = job.gradeLabel,
@@ -361,6 +362,7 @@ function Employees.GetTeamMemberRow(source, companyId)
     end
 
     return {
+        memberId = source,
         name = Framework.GetPlayerName(source),
         grade = job.grade,
         gradeLabel = job.gradeLabel,
@@ -376,10 +378,7 @@ end
 --- Available -> Busy or flipping a hotline stayed invisible to everyone else
 --- already looking at that list until they happened to reload it. A small
 --- per-change delta instead of polling, scoped to just this one employee's
---- row - not a full team re-broadcast. Duty on/off itself isn't covered
---- here (out of scope for this round - see plan review round 5 §8), so a
---- colleague going off duty still only disappears from others' lists on
---- their next reload.
+--- row - not a full team re-broadcast.
 ---@param source number
 function Employees.BroadcastStateChanged(source)
     local job = Framework.GetJob(source)
@@ -412,7 +411,7 @@ function Employees.BroadcastRemoved(source, job)
     local company = Companies.GetByJob(job)
     if not company then return end
 
-    local payload = { removed = true, phoneNumber = Framework.GetPhoneNumber(source), name = Framework.GetPlayerName(source) }
+    local payload = { removed = true, memberId = source }
 
     local staff = Framework.GetPlayersByJob(job)
     for i = 1, #staff do
@@ -428,6 +427,7 @@ local function employeeSnapshot(source)
     if not company then return nil end
 
     return {
+        memberId = source,
         companyId = company.id,
         job = job.name,
         jobLabel = job.label,
@@ -465,6 +465,11 @@ AddEventHandler("services-plus:internal:dutyChanged", function(source)
 end)
 
 AddEventHandler("playerDropped", function()
+    -- Use the maintained index: by this point the framework player object
+    -- may already be unavailable, while source is still the exact identity
+    -- used by every online Team row.
+    local job = Framework.GetIndexedJob(source)
+    if job then Employees.BroadcastRemoved(source, job) end
     state[source] = nil
 end)
 

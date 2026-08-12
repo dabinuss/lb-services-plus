@@ -279,7 +279,7 @@ end
 -- QBCore/Qbox already track this on the job object. ESX has no universal
 -- concept of duty, so - like standalone - Services+ keeps a small manual
 -- toggle that defaults to "on duty" whenever the player has the job.
-local manualDuty = {} -- identifier -> boolean
+local manualDuty = {} -- source -> boolean (session-scoped for ESX/standalone)
 
 ---@param source number
 ---@return boolean
@@ -292,9 +292,8 @@ function Framework.GetOnDuty(source)
         return ok and player ~= nil and player.PlayerData.job.onduty ~= false
     end
 
-    local identifier = Framework.GetIdentifier(source)
-    if manualDuty[identifier] == nil then return true end
-    return manualDuty[identifier]
+    if manualDuty[source] == nil then return true end
+    return manualDuty[source]
 end
 
 ---@param source number
@@ -310,8 +309,14 @@ function Framework.SetDuty(source, state)
         return ok
     end
 
-    manualDuty[Framework.GetIdentifier(source)] = state
+    manualDuty[source] = state
     return true
+end
+
+---@param source number
+---@return string? last indexed job for this connection
+function Framework.GetIndexedJob(source)
+    return JobIndex.bySource[source]
 end
 
 -- Reconciles framework-owned duty with Services+ and suppresses duplicate
@@ -427,6 +432,7 @@ AddEventHandler("QBCore:Server:OnJobUpdate", function(source) refreshJobAndDuty(
 AddEventHandler("QBCore:Server:SetDuty", function(source) refreshJobAndDuty(source) end)
 
 AddEventHandler("playerDropped", function()
+    manualDuty[source] = nil
     DutyIndex[source] = nil
     JobIndex.Remove(source)
 end)

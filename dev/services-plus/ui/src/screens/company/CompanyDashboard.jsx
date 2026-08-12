@@ -63,6 +63,7 @@ export default function CompanyDashboard({ session, employee, company, onLogout,
             companyId={employee.companyId}
             initialOnDuty={employee.onDuty}
             initialStatus={employee.status}
+            employeeMemberId={employee.memberId}
             employeeName={session.employee.name}
             employeeGrade={session.employee.gradeLabel}
             onLogout={onLogout}

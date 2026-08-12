@@ -170,6 +170,18 @@ CREATE TABLE IF NOT EXISTS `phone_services_plus_standalone_jobs` (
     PRIMARY KEY (`identifier`)
 ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
+-- Service-wide admin settings. Values are strings so future settings can
+-- share this small table without one schema migration per new option.
+CREATE TABLE IF NOT EXISTS `phone_services_plus_settings` (
+    `key` VARCHAR(50) NOT NULL,
+    `value` VARCHAR(255) NOT NULL,
+
+    PRIMARY KEY (`key`)
+) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+INSERT IGNORE INTO `phone_services_plus_settings` (`key`, `value`)
+VALUES ('active_request_disconnect_grace_minutes', '5');
+
 -- ---------------------------------------------------------------------------
 -- Request system (plan §11-16, §36, phase 2). Request types are seeded per
 -- category the same way categories/companies are (see server/requests.lua);
@@ -208,6 +220,7 @@ CREATE TABLE IF NOT EXISTS `phone_services_plus_requests` (
 
     `requester_number` VARCHAR(15) NOT NULL,
     `employee_identifier` VARCHAR(100) DEFAULT NULL,
+    `employee_disconnected_at` TIMESTAMP NULL DEFAULT NULL,
     `status` VARCHAR(10) NOT NULL DEFAULT 'open',
 
     `pos_x` FLOAT DEFAULT NULL,
@@ -222,6 +235,7 @@ CREATE TABLE IF NOT EXISTS `phone_services_plus_requests` (
     KEY `company_status_created` (`company_id`, `status`, `created_at`),
     KEY `requester_created` (`requester_number`, `created_at`),
     KEY `employee_status` (`employee_identifier`, `status`),
+    KEY `disconnected_status` (`status`, `employee_disconnected_at`),
     FOREIGN KEY (`request_type_id`) REFERENCES `phone_services_plus_request_types`(`id`) ON DELETE CASCADE,
     FOREIGN KEY (`company_id`) REFERENCES `phone_services_plus_companies`(`id`) ON DELETE SET NULL
 ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
