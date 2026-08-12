@@ -148,7 +148,8 @@ function Companies.IsAvailable(companyId)
     local staff = Framework.GetPlayersByJob(company.job)
 
     for i = 1, #staff do
-        if Framework.GetOnDuty(staff[i]) then
+        if Framework.GetOnDuty(staff[i])
+            and (not Employees or Employees.GetStatus(staff[i]) == "available") then
             return true
         end
     end

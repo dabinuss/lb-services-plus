@@ -142,6 +142,11 @@ of smaller correctness/perf items):
 `Config.Framework` defaults to `"auto"` - set it explicitly if detection ever
 picks the wrong framework.
 
+## Public server API
+
+See [`API.md`](API.md) for all public server exports, return values, request
+lifecycle events, and integration examples.
+
 ## UI dev loop
 
 See [`ui/README.md`](ui/README.md). `npm run dev` (port 5173, matches

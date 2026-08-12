@@ -9,6 +9,8 @@
 --- happen if two requests for the very same (number, contact) land within
 --- the same tick, and the UNIQUE constraint (see sql/install.sql) turns that
 --- into a harmless duplicate-key error we just recover from with a re-SELECT.
+Messages = {}
+
 local function getOrCreateChannel(numberId, contactNumber)
     local channel = MySQL.single.await(
         "SELECT * FROM phone_services_plus_channels WHERE number_id = ? AND contact_number = ?",
@@ -31,6 +33,90 @@ local function getOrCreateChannel(numberId, contactNumber)
     end
 
     return { id = id, number_id = numberId, contact_number = contactNumber, last_message = nil }
+end
+
+--- Stores and delivers a message after its caller has resolved and
+--- authorized the channel participants. This is the single persistence and
+--- notification path used by the app and the public company-message export.
+---@param company table
+---@param number table
+---@param channel table
+---@param senderNumber string
+---@param senderType "company"|"customer"
+---@param content string
+---@return table|false
+function Messages.Send(company, number, channel, senderNumber, senderType, content)
+    if type(content) ~= "string" or content == "" or #content > 1000 then return false end
+    if not company or not number or not channel or not senderNumber then return false end
+
+    local messageId = MySQL.insert.await(
+        "INSERT INTO phone_services_plus_messages (channel_id, sender, sender_type, content) VALUES (?, ?, ?, ?)",
+        { channel.id, senderNumber, senderType, content }
+    )
+    if not messageId then return false end
+
+    MySQL.update.await(
+        "UPDATE phone_services_plus_channels SET last_message = ?, archived_by_contact = 0, archived_by_company = 0 WHERE id = ?",
+        { content:sub(1, 100), channel.id }
+    )
+
+    local payload = { channelId = channel.id, id = messageId, sender_type = senderType, content = content }
+
+    if senderType == "company" then
+        local ok, contactSource = pcall(function()
+            return exports["lb-phone"]:GetSourceFromNumber(channel.contact_number)
+        end)
+        if ok and contactSource then
+            TriggerClientEvent("services-plus:client:newMessage", contactSource, payload)
+        end
+
+        exports["lb-phone"]:SendNotification(channel.contact_number, {
+            app = Config.App.name,
+            title = company.name,
+            content = content,
+        })
+    else
+        local staff = Framework.GetPlayersByJob(company.job)
+        for i = 1, #staff do
+            if Framework.GetOnDuty(staff[i]) then
+                local staffNumber = Framework.GetPhoneNumber(staff[i])
+                if staffNumber then
+                    TriggerClientEvent("services-plus:client:newMessage", staff[i], payload)
+                    exports["lb-phone"]:SendNotification(staffNumber, {
+                        app = Config.App.name,
+                        title = ("%s (%s)"):format(company.name, number.label),
+                        content = content,
+                    })
+                end
+            end
+        end
+    end
+
+    return payload
+end
+
+--- Sends a normal Services+ company message without impersonating an
+--- employee's private phone number.
+---@param companyJob string
+---@param targetNumber string
+---@param content string
+---@return table|false
+function Messages.SendCompanyMessage(companyJob, targetNumber, content)
+    if type(companyJob) ~= "string" or type(targetNumber) ~= "string" then return false end
+    if type(content) ~= "string" or content == "" or #content > 1000 then return false end
+    targetNumber = targetNumber:match("^%s*(.-)%s*$")
+    if targetNumber == "" then return false end
+
+    local company = Companies.GetByJob(companyJob)
+    if not company or company.messages_enabled ~= 1 then return false end
+
+    local number = Companies.GetMainNumber(company.id)
+    if not number or number.messages_enabled ~= 1 or number.mailbox_enabled ~= 1 then return false end
+
+    local channel = getOrCreateChannel(number.id, targetNumber)
+    if not channel then return false end
+
+    return Messages.Send(company, number, channel, number.number, "company", content)
 end
 
 -- ---------------------------------------------------------------------------
@@ -68,16 +154,7 @@ RegisterCallback("setStatus", function(source, reply, status)
     -- round 4 §11: low severity, no other player/company data at stake),
     -- but there's no reason a non-employee should be able to call this at
     -- all - matches the same guard toggleDuty already has.
-    local job = Framework.GetJob(source)
-    if not job or not Companies.GetByJob(job.name) then return reply(false) end
-
-    if not Employees.SetStatus(source, status) then return reply(false) end
-
-    -- Lets colleagues' own Team views pick this up immediately instead of
-    -- staying stale until their next reload (plan review round 5 §8).
-    Employees.BroadcastStateChanged(source)
-
-    reply({ ok = true, onDuty = Framework.GetOnDuty(source), status = status })
+    reply(Employees.UpdateStatus(source, status))
 end)
 
 -- ---------------------------------------------------------------------------
@@ -371,66 +448,7 @@ RegisterCallback("sendMessage", function(source, reply, channelId, content)
     -- kept for logging/debugging, sender_type is what the UI actually uses.
     local senderType = isEmployee and "company" or "customer"
 
-    local messageId = MySQL.insert.await(
-        "INSERT INTO phone_services_plus_messages (channel_id, sender, sender_type, content) VALUES (?, ?, ?, ?)",
-        { channelId, senderNumber, senderType, content }
-    )
-
-    -- A new message un-archives the chat on both sides (plan review round
-    -- 4 §2) - otherwise a chat either side archived stays invisible in
-    -- their own inbox/Activity forever, even though the other side keeps
-    -- writing into it and gets a normal-looking notification each time.
-    MySQL.update(
-        "UPDATE phone_services_plus_channels SET last_message = ?, archived_by_contact = 0, archived_by_company = 0 WHERE id = ?",
-        { content:sub(1, 100), channelId }
-    )
-
-    -- sender_type (snake_case) matches the raw column name the SQL SELECTs
-    -- above return - this payload and those rows land in the same client-
-    -- side `messages` array and are read the same way, so the field name
-    -- has to match either way it arrived. `sender` (senderNumber) is
-    -- deliberately left out (plan review round 5 §5, same reasoning as the
-    -- SELECTs below) - the UI never reads it, and for a company-side message
-    -- it would hand every other client in this chat the specific replying
-    -- employee's private phone number.
-    local payload = { channelId = channelId, id = messageId, sender_type = senderType, content = content }
-
-    -- Push straight into an already-open conversation (plan review §15).
-    -- SendCustomAppMessage only exists as a CLIENT export (it targets the
-    -- caller's own NUI, no destination source) - the server just tells the
-    -- right client(s) to do that locally, see client/main.lua.
-    if isEmployee then
-        local ok, contactSource = pcall(function() return exports["lb-phone"]:GetSourceFromNumber(channel.contact_number) end)
-
-        if ok and contactSource then
-            TriggerClientEvent("services-plus:client:newMessage", contactSource, payload)
-        end
-
-        exports["lb-phone"]:SendNotification(channel.contact_number, {
-            app = Config.App.name,
-            title = company.name,
-            content = content,
-        })
-    else
-        local staff = Framework.GetPlayersByJob(company.job)
-
-        for i = 1, #staff do
-            if Framework.GetOnDuty(staff[i]) then
-                local staffNumber = Framework.GetPhoneNumber(staff[i])
-                if staffNumber then
-                    TriggerClientEvent("services-plus:client:newMessage", staff[i], payload)
-
-                    exports["lb-phone"]:SendNotification(staffNumber, {
-                        app = Config.App.name,
-                        title = ("%s (%s)"):format(company.name, number.label),
-                        content = content,
-                    })
-                end
-            end
-        end
-    end
-
-    reply(payload)
+    reply(Messages.Send(company, number, channel, senderNumber, senderType, content))
 end)
 
 -- `beforeId`, not a page number (plan review round 5 §6): OFFSET-based

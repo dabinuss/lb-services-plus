@@ -20,6 +20,7 @@ Requests = {}
 
 local typesByCategory = {} -- categoryId -> ordered list
 local typesById = {}
+local typesByIdentifier = {}
 
 local function seedIfEmpty()
     local count = MySQL.scalar.await("SELECT COUNT(*) FROM phone_services_plus_request_types")
@@ -50,10 +51,12 @@ function Requests.Reload()
 
     typesByCategory = {}
     typesById = {}
+    typesByIdentifier = {}
 
     for i = 1, #rows do
         local t = rows[i]
         typesById[t.id] = t
+        if t.icon then typesByIdentifier[t.icon:lower()] = t end
         if t.category_id ~= nil then
             typesByCategory[t.category_id] = typesByCategory[t.category_id] or {}
             table.insert(typesByCategory[t.category_id], t)
@@ -110,6 +113,7 @@ local acceptLocks = {}
 -- exists, because it may already be gone when playerDropped runs.
 local activeAssignments = {}
 local disconnectCleanupLocks = {} -- requestId -> true while one cleanup owns it
+local clearNotifications
 
 local function getDisconnectGraceMinutes()
     local value = tonumber(MySQL.scalar.await(
@@ -117,6 +121,33 @@ local function getDisconnectGraceMinutes()
     )) or 5
 
     return math.max(1, math.min(60, math.floor(value)))
+end
+
+--- Resolves either a numeric request-type id, its technical identifier, or
+--- a category key such as "medical". A category key selects the first
+--- enabled type deterministically, which keeps integrations independent of
+--- database ids while still leaving all routing decisions inside Services+.
+---@param reference number|string
+---@return table?
+function Requests.ResolveType(reference)
+    local numericId = tonumber(reference)
+    if numericId then return typesById[numericId] end
+    if type(reference) ~= "string" then return nil end
+
+    local key = reference:lower()
+    local exact = typesByIdentifier[key]
+    if exact then return exact end
+
+    local categories = Companies.GetCategories()
+    for i = 1, #categories do
+        if categories[i].key and categories[i].key:lower() == key then
+            local candidates = Requests.GetTypesForCategory(categories[i].id)
+            table.sort(candidates, function(a, b) return a.id < b.id end)
+            return candidates[1]
+        end
+    end
+
+    return nil
 end
 
 local function cancelExpiredDisconnectedRequests(identifier)
@@ -171,8 +202,11 @@ local function cancelExpiredDisconnectedRequests(identifier)
             WHERE id IN (%s) AND status = 'cancelled' AND employee_disconnected_at IS NULL
         ]=]):format(idList)) or {}
 
+        local cancelledIds = {}
         for i = 1, #cancelled do
             local row = claimed[tonumber(cancelled[i].id)]
+            cancelledIds[#cancelledIds + 1] = tonumber(cancelled[i].id)
+            clearNotifications(tonumber(cancelled[i].id))
             if row and row.requester_number then
                 pcall(function()
                     exports["lb-phone"]:SendNotification(row.requester_number, {
@@ -182,6 +216,11 @@ local function cancelExpiredDisconnectedRequests(identifier)
                     })
                 end)
             end
+        end
+
+        local publicRequests = Requests.GetMany(cancelledIds)
+        for i = 1, #publicRequests do
+            TriggerEvent("services-plus:requestCancelled", publicRequests[i])
         end
     end)
 
@@ -240,7 +279,7 @@ end
 --- acted on it) to drop it from their screen, then forgets the tracking.
 ---@param requestId number
 ---@param except number? a source to skip (the one who just accepted it)
-local function clearNotifications(requestId, except)
+clearNotifications = function(requestId, except)
     local entry = notifiedSources[requestId]
     notifiedSources[requestId] = nil
     if not entry then return end
@@ -252,118 +291,242 @@ local function clearNotifications(requestId, except)
     end
 end
 
-RegisterCallback("getRequestTypes", function(source, reply, categoryId)
-    reply(Requests.GetTypesForCategory(categoryId))
-end)
+local function sanitizeRequestRow(row)
+    if not row then return nil end
 
-RegisterCallback("createRequest", function(source, reply, companyId, requestTypeId, passengerCount, description)
-    local requestType = Requests.GetType(requestTypeId)
-    local company = Companies.GetById(companyId)
+    local employeeSource = row.company_job and row.employee_identifier
+        and Employees.FindSourceByIdentifier(row.company_job, row.employee_identifier) or nil
 
-    -- Requests.GetType() deliberately still resolves soft-deleted types too
-    -- (so already-open requests of a since-disabled type keep working) -
-    -- but that means it alone doesn't stop a client that still has the old
-    -- ID from creating brand new requests of a disabled type via a direct
-    -- RPC call (plan review round 4 §1). GetTypesForCategory() already
-    -- filters these out for the picker; this is the same filter enforced
-    -- at the point that actually matters.
-    if not requestType or requestType.enabled ~= 1 or not company or company.requests_enabled ~= 1 then
-        return reply(false)
+    return {
+        id = row.id,
+        type = row.type_identifier,
+        typeId = row.request_type_id,
+        typeName = row.type_name,
+        category = row.category_key,
+        categoryId = row.category_id,
+        status = row.status,
+        company = row.company_id and {
+            id = row.company_id,
+            job = row.company_job,
+            name = row.company_name,
+            icon = row.company_icon,
+        } or nil,
+        requesterNumber = row.requester_number,
+        employeeSource = employeeSource,
+        position = { x = row.pos_x, y = row.pos_y },
+        passengerCount = row.passenger_count,
+        countLabel = row.count_label,
+        description = row.description,
+        createdAt = row.created_at,
+        updatedAt = row.updated_at,
+    }
+end
+
+---@param requestId number
+---@return table?
+function Requests.Get(requestId)
+    local id = tonumber(requestId)
+    if not id then return nil end
+
+    return sanitizeRequestRow(MySQL.single.await([[
+        SELECT r.id, r.request_type_id, r.company_id, r.requester_number, r.status,
+               r.pos_x, r.pos_y, r.passenger_count, r.description, r.created_at, r.updated_at,
+               t.icon AS type_identifier, t.name AS type_name, t.category_id, t.count_label,
+               category.`key` AS category_key,
+               company.job AS company_job, company.name AS company_name, company.icon AS company_icon,
+               r.employee_identifier
+        FROM phone_services_plus_requests r
+        JOIN phone_services_plus_request_types t ON t.id = r.request_type_id
+        LEFT JOIN phone_services_plus_categories category ON category.id = t.category_id
+        LEFT JOIN phone_services_plus_companies company ON company.id = r.company_id
+        WHERE r.id = ?
+    ]], { id }))
+end
+
+---@param requestIds number[]
+---@return table[]
+function Requests.GetMany(requestIds)
+    local ids = {}
+    for i = 1, #(requestIds or {}) do
+        local id = tonumber(requestIds[i])
+        if id then ids[#ids + 1] = math.floor(id) end
     end
-    if requestType.category_id ~= company.category_id then return reply(false) end
+    if #ids == 0 then return {} end
+
+    local rows = MySQL.query.await(([=[
+        SELECT r.id, r.request_type_id, r.company_id, r.requester_number, r.status,
+               r.pos_x, r.pos_y, r.passenger_count, r.description, r.created_at, r.updated_at,
+               t.icon AS type_identifier, t.name AS type_name, t.category_id, t.count_label,
+               category.`key` AS category_key,
+               company.job AS company_job, company.name AS company_name, company.icon AS company_icon,
+               r.employee_identifier
+        FROM phone_services_plus_requests r
+        JOIN phone_services_plus_request_types t ON t.id = r.request_type_id
+        LEFT JOIN phone_services_plus_categories category ON category.id = t.category_id
+        LEFT JOIN phone_services_plus_companies company ON company.id = r.company_id
+        WHERE r.id IN (%s)
+    ]=]):format(table.concat(ids, ","))) or {}
+
+    local requests = {}
+    for i = 1, #rows do requests[#requests + 1] = sanitizeRequestRow(rows[i]) end
+    return requests
+end
+
+local function emitLifecycle(eventName, requestId)
+    local request = Requests.Get(requestId)
+    if request then TriggerEvent("services-plus:" .. eventName, request) end
+    return request
+end
+
+local function chooseCompany(requestType, options)
+    local requested
+    local selectorProvided = false
+    if type(options.companyJob) == "string" then
+        selectorProvided = true
+        requested = Companies.GetByJob(options.companyJob)
+    elseif tonumber(options.companyId) then
+        selectorProvided = true
+        requested = Companies.GetById(tonumber(options.companyId))
+    end
+
+    if selectorProvided and not requested then return nil end
+    if requested then
+        if requested.category_id ~= requestType.category_id or requested.requests_enabled ~= 1 then return nil end
+        return requested
+    end
+
+    local candidates = Companies.GetByCategory(requestType.category_id)
+    table.sort(candidates, function(a, b) return a.id < b.id end)
+
+    local fallback
+    for i = 1, #candidates do
+        if candidates[i].requests_enabled == 1 then
+            fallback = fallback or candidates[i]
+            if Companies.IsAvailable(candidates[i].id) then return candidates[i] end
+        end
+    end
+    return fallback
+end
+
+--- Single request-creation implementation used by both the Services+ app
+--- and public server API.
+---@param source number
+---@param requestTypeReference number|string
+---@param options? table
+---@return table|false
+function Requests.Create(source, requestTypeReference, options)
+    source = tonumber(source)
+    options = type(options) == "table" and options or {}
+    if not source or GetPlayerName(source) == nil then return false end
+
+    local requestType = Requests.ResolveType(requestTypeReference)
+    if not requestType or requestType.enabled ~= 1 then return false end
+
+    local company = chooseCompany(requestType, options)
+    if not company then return false end
 
     local requesterNumber = Framework.GetPhoneNumber(source)
-    if not requesterNumber then return reply(false) end
+    if not requesterNumber then return false end
 
-    local coords = GetEntityCoords(GetPlayerPed(source))
+    local ped = GetPlayerPed(source)
+    if not ped or ped == 0 then return false end
+    local coords = GetEntityCoords(ped)
 
-    -- Bounded, whole-number only - a bare tonumber() would accept negative
-    -- values, decimals or an absurd count (plan review round 2 §6).
     local passengerMode = requestType.passenger_mode
         or (requestType.passenger_count == 1 and "required" or "disabled")
-    local finalPassengerCount = nil
+    local finalPassengerCount
+    local passengerCount = options.passengerCount
     if passengerMode ~= "disabled" and passengerCount ~= nil and passengerCount ~= "" then
-        local n = tonumber(passengerCount)
-        if n and n == math.floor(n) and n >= 1 and n <= Config.MaxPassengerCount then
-            finalPassengerCount = n
-        else
-            -- A required field silently failing validation used to still
-            -- create the request, just with SQL NULL where the count
-            -- should be (plan review round 3 §6) - a manipulated -5, empty,
-            -- or 999999 all went through unnoticed instead of being
-            -- rejected outright.
-            return reply(false)
-        end
+        local count = tonumber(passengerCount)
+        if not count or count ~= math.floor(count) or count < 1 or count > Config.MaxPassengerCount then return false end
+        finalPassengerCount = count
     elseif passengerMode == "required" then
-        return reply(false)
+        return false
     end
 
-    local noteMode = requestType.note_mode or (requestType.description_enabled == 1 and "optional" or "disabled")
-    local note = type(description) == "string" and description:match("^%s*(.-)%s*$") or ""
-    if noteMode == "required" and note == "" then return reply(false) end
+    local noteMode = requestType.note_mode
+        or (requestType.description_enabled == 1 and "optional" or "disabled")
+    local note = type(options.description) == "string" and options.description:match("^%s*(.-)%s*$") or ""
+    if noteMode == "required" and note == "" then return false end
     local finalDescription = noteMode ~= "disabled" and note ~= "" and note:sub(1, 255) or nil
 
-    -- Competition needs both the category and the request type to allow it
-    -- (plan §16: configurable at either level).
     local category = Companies.GetCategory(requestType.category_id)
-    local competition = requestType.competition_enabled == 1 and category ~= nil and category.competition_allowed == 1
-    -- NB: `competition and nil or companyId` would NOT work here - Lua's
-    -- and/or idiom always falls through to the third operand when the
-    -- second one is nil, regardless of the condition. Needs a real branch.
-    -- json.null (not plain nil) for anything that isn't the table's last
-    -- field - a bare nil there leaves a hole that breaks positional
-    -- parameter binding.
-    local initialCompanyId = competition and json.null or companyId
+    local competition = requestType.competition_enabled == 1
+        and category ~= nil and category.competition_allowed == 1
+    local initialCompanyId = competition and json.null or company.id
 
     local requestId = MySQL.insert.await([[
         INSERT INTO phone_services_plus_requests
             (request_type_id, company_id, requester_number, status, pos_x, pos_y, passenger_count, description)
         VALUES (?, ?, ?, 'open', ?, ?, ?, ?)
     ]], {
-        requestTypeId, initialCompanyId, requesterNumber, coords.x, coords.y,
+        requestType.id, initialCompanyId, requesterNumber, coords.x, coords.y,
         finalPassengerCount or json.null, finalDescription,
     })
+    if not requestId then return false end
 
-    local request = {
-        id = requestId, description = finalDescription, passengerCount = finalPassengerCount,
-        x = coords.x, y = coords.y,
+    local routingRequest = {
+        id = requestId,
+        description = finalDescription,
+        passengerCount = finalPassengerCount,
+        x = coords.x,
+        y = coords.y,
     }
     local reached = 0
-
     if competition then
         local companies = Companies.GetByCategory(company.category_id)
         for i = 1, #companies do
             if companies[i].requests_enabled == 1 then
-                reached = reached + distribute(companies[i], requestType, request)
+                reached = reached + distribute(companies[i], requestType, routingRequest)
             end
         end
     else
-        reached = distribute(company, requestType, request)
+        reached = distribute(company, requestType, routingRequest)
     end
 
-    reply({ id = requestId, reached = reached > 0 })
+    local request = emitLifecycle("requestCreated", requestId)
+    return { id = requestId, reached = reached > 0, request = request }
+end
+
+RegisterCallback("getRequestTypes", function(source, reply, categoryId)
+    reply(Requests.GetTypesForCategory(categoryId))
 end)
 
-RegisterCallback("acceptRequest", function(source, reply, requestId)
+RegisterCallback("createRequest", function(source, reply, companyId, requestTypeId, passengerCount, description)
+    reply(Requests.Create(source, requestTypeId, {
+        companyId = companyId,
+        passengerCount = passengerCount,
+        description = description,
+    }))
+end)
+
+---@param source number
+---@param requestId number
+---@return table|false
+function Requests.Accept(source, requestId)
+    source = tonumber(source)
+    requestId = tonumber(requestId)
+    if not source or not requestId or GetPlayerName(source) == nil then return false end
+
     local job = Framework.GetJob(source)
     local company = job and Companies.GetByJob(job.name)
-    if not company then return reply(false) end
+    if not company then return false end
 
     local request = MySQL.single.await("SELECT * FROM phone_services_plus_requests WHERE id = ?", { requestId })
     local requestType = request and Requests.GetType(request.request_type_id)
-    if not request or not requestType then return reply(false) end
+    if not request or not requestType then return false end
 
     -- must already belong to this company, or be an unclaimed competition
     -- request in this company's category
     local allowed = request.company_id == company.id
         or (request.company_id == nil and requestType.category_id == company.category_id)
-    if not allowed then return reply(false) end
+    if not allowed then return false end
 
     -- Requests OFF must apply immediately (plan review round 5 §4) - without
     -- this, createRequest already refuses new requests once a company turns
     -- requests off, but an already-open request's id stays valid forever, so
     -- a direct acceptRequest call for it could still go through.
-    if company.requests_enabled ~= 1 then return reply(false) end
+    if company.requests_enabled ~= 1 then return false end
 
     -- Re-check the exact same eligibility distribute() used (plan review
     -- §9) - duty, pause/busy and hotline can all have changed since the
@@ -372,12 +535,12 @@ RegisterCallback("acceptRequest", function(source, reply, requestId)
     local mainNumber = Companies.GetMainNumber(company.id)
     local requireHotline = company.request_routing == "hotline"
     if not mainNumber or not Employees.IsEligible(source, company.id, mainNumber.id, requireHotline) then
-        return reply(false)
+        return false
     end
 
     local identifier = Framework.GetIdentifier(source)
 
-    if acceptLocks[identifier] then return reply(false) end
+    if acceptLocks[identifier] then return false end
     acceptLocks[identifier] = true
 
     -- Wrapped in its own pcall (plan review round 6 §1) - without this, an
@@ -453,6 +616,8 @@ RegisterCallback("acceptRequest", function(source, reply, requestId)
         -- pressed (plan review round 2 §4).
         TriggerClientEvent("services-plus:client:requestAccepted", source, activePayload)
 
+        emitLifecycle("requestAccepted", requestId)
+
         return activePayload
     end)
 
@@ -464,103 +629,134 @@ RegisterCallback("acceptRequest", function(source, reply, requestId)
     -- guaranteed unlock above.
     if not ok then error(result) end
 
-    reply(result)
+    return result
+end
+
+RegisterCallback("acceptRequest", function(source, reply, requestId)
+    reply(Requests.Accept(source, requestId))
 end)
 
--- Rehydration for the Sibling-NUI overlay (plan review §14): a client
--- resource restart loses `active` from memory even though the request is
--- still 'active' in the database, so the overlay asks for it back on load.
-RegisterCallback("getActiveRequest", function(source, reply)
-    local identifier = Framework.GetIdentifier(source)
+---@param source number
+---@return table?
+function Requests.GetActive(source)
+    source = tonumber(source)
+    if not source or GetPlayerName(source) == nil then return nil end
 
-    -- Expired assignments are cancelled here too, before rehydration. This
-    -- matters after a server/resource restart where the periodic cleanup
-    -- may not have had its first chance to run yet. It shares the same
-    -- batched cleanup path and customer notification as the timer.
+    local identifier = Framework.GetIdentifier(source)
     cancelExpiredDisconnectedRequests(identifier)
 
-    -- Rejoining inside the configured grace period keeps the assignment.
     MySQL.update.await([[
         UPDATE phone_services_plus_requests
         SET employee_disconnected_at = NULL
         WHERE employee_identifier = ? AND status = 'active'
     ]], { identifier })
 
-    local request = MySQL.single.await([[
-        SELECT r.id AS requestId, r.pos_x AS x, r.pos_y AS y, r.passenger_count AS passengerCount, r.description,
-               t.name AS typeName, t.count_label AS countLabel, c.name AS companyName, c.icon AS companyIcon
-        FROM phone_services_plus_requests r
-        JOIN phone_services_plus_request_types t ON t.id = r.request_type_id
-        LEFT JOIN phone_services_plus_companies c ON c.id = r.company_id
-        WHERE r.employee_identifier = ? AND r.status = 'active'
-        ORDER BY r.updated_at DESC
-        LIMIT 1
+    local requestId = MySQL.scalar.await([[
+        SELECT id FROM phone_services_plus_requests
+        WHERE employee_identifier = ? AND status = 'active'
+        ORDER BY updated_at DESC LIMIT 1
     ]], { identifier })
 
-    if request then
-        activeAssignments[source] = { identifier = identifier, requestId = request.requestId }
-    else
-        activeAssignments[source] = nil
+    if requestId then
+        activeAssignments[source] = { identifier = identifier, requestId = requestId }
+        return Requests.Get(requestId)
     end
 
-    reply(request)
+    activeAssignments[source] = nil
+    return nil
+end
+
+local function toOverlayPayload(request)
+    if not request then return nil end
+    return {
+        requestId = request.id,
+        typeName = request.typeName,
+        companyName = request.company and request.company.name or nil,
+        companyIcon = request.company and request.company.icon or nil,
+        passengerCount = request.passengerCount,
+        countLabel = request.countLabel or "Passenger count",
+        description = request.description,
+        x = request.position.x,
+        y = request.position.y,
+    }
+end
+
+---@param requestId number
+---@param actorSource? number nil allows the trusted server export to complete any active request
+---@return table|false
+function Requests.Complete(requestId, actorSource)
+    local id = tonumber(requestId)
+    if not id then return false end
+
+    local before = Requests.Get(id)
+    if not before or before.status ~= "active" then return false end
+
+    local sql = "UPDATE phone_services_plus_requests SET status = 'completed', employee_disconnected_at = NULL WHERE id = ? AND status = 'active'"
+    local params = { id }
+    if actorSource then
+        sql = sql .. " AND employee_identifier = ?"
+        params[#params + 1] = Framework.GetIdentifier(actorSource)
+    end
+
+    if MySQL.update.await(sql, params) == 0 then return false end
+
+    if before.employeeSource then
+        activeAssignments[before.employeeSource] = nil
+        TriggerClientEvent("services-plus:client:requestEnded", before.employeeSource, id)
+    end
+    if actorSource and actorSource ~= before.employeeSource then
+        activeAssignments[actorSource] = nil
+        TriggerClientEvent("services-plus:client:requestEnded", actorSource, id)
+    end
+
+    return emitLifecycle("requestCompleted", id) or false
+end
+
+---@param requestId number
+---@param actorSource? number nil allows the trusted server export to cancel any open/active request
+---@return table|false
+function Requests.Cancel(requestId, actorSource)
+    local id = tonumber(requestId)
+    if not id then return false end
+
+    local before = Requests.Get(id)
+    if not before or (before.status ~= "open" and before.status ~= "active") then return false end
+
+    local sql = "UPDATE phone_services_plus_requests SET status = 'cancelled', employee_disconnected_at = NULL WHERE id = ? AND status IN ('open', 'active')"
+    local params = { id }
+    if actorSource then
+        sql = sql .. " AND (requester_number = ? OR employee_identifier = ?)"
+        params[#params + 1] = Framework.GetPhoneNumber(actorSource) or ""
+        params[#params + 1] = Framework.GetIdentifier(actorSource)
+    end
+
+    if MySQL.update.await(sql, params) == 0 then return false end
+
+    clearNotifications(id)
+    if before.employeeSource then
+        activeAssignments[before.employeeSource] = nil
+        TriggerClientEvent("services-plus:client:requestEnded", before.employeeSource, id)
+    end
+    if actorSource and actorSource ~= before.employeeSource then
+        TriggerClientEvent("services-plus:client:requestEnded", actorSource, id)
+    end
+
+    return emitLifecycle("requestCancelled", id) or false
+end
+
+-- Rehydration for the Sibling-NUI overlay (plan review §14): a client
+-- resource restart loses `active` from memory even though the request is
+-- still 'active' in the database, so the overlay asks for it back on load.
+RegisterCallback("getActiveRequest", function(source, reply)
+    reply(toOverlayPayload(Requests.GetActive(source)))
 end)
 
 RegisterCallback("completeRequest", function(source, reply, requestId)
-    local affected = MySQL.update.await(
-        "UPDATE phone_services_plus_requests SET status = 'completed' WHERE id = ? AND employee_identifier = ? AND status = 'active'",
-        { requestId, Framework.GetIdentifier(source) }
-    )
-
-    -- Whichever surface (overlay or in-app Requests tab) this came from,
-    -- push the same event so the Sibling-NUI overlay clears its active card
-    -- too regardless of which one Complete was actually pressed on (plan
-    -- review round 3 §2, mirrors the requestAccepted pattern above).
-    if affected > 0 then
-        activeAssignments[source] = nil
-        TriggerClientEvent("services-plus:client:requestEnded", source, requestId)
-    end
-
-    reply(affected > 0)
+    reply(Requests.Complete(requestId, source) ~= false)
 end)
 
 RegisterCallback("cancelRequest", function(source, reply, requestId)
-    -- Grabbed before the update so a customer-initiated cancel can still
-    -- resolve who the request was assigned to (source here is the customer,
-    -- not the employee, in that case).
-    local row = MySQL.single.await([[
-        SELECT r.employee_identifier, c.job AS company_job
-        FROM phone_services_plus_requests r
-        LEFT JOIN phone_services_plus_companies c ON c.id = r.company_id
-        WHERE r.id = ?
-    ]], { requestId })
-
-    local affected = MySQL.update.await(
-        "UPDATE phone_services_plus_requests SET status = 'cancelled' WHERE id = ? AND status IN ('open', 'active') AND (requester_number = ? OR employee_identifier = ?)",
-        { requestId, Framework.GetPhoneNumber(source), Framework.GetIdentifier(source) }
-    )
-
-    if affected > 0 then
-        clearNotifications(requestId)
-
-        -- The assigned employee's overlay/active card needs clearing even
-        -- when a *customer* is the one who cancelled - `source` alone only
-        -- covers the employee's own surfaces when they cancel their own
-        -- accepted request (plan review round 3 §2).
-        if row and row.employee_identifier then
-            local employeeSource = row.company_job
-                and Employees.FindSourceByIdentifier(row.company_job, row.employee_identifier)
-
-            if employeeSource then
-                activeAssignments[employeeSource] = nil
-                TriggerClientEvent("services-plus:client:requestEnded", employeeSource, requestId)
-            end
-        end
-
-        TriggerClientEvent("services-plus:client:requestEnded", source, requestId)
-    end
-
-    reply(affected > 0)
+    reply(Requests.Cancel(requestId, source) ~= false)
 end)
 
 RegisterCallback("getCompanyRequests", function(source, reply, page)
@@ -674,8 +870,31 @@ CreateThread(function()
     while true do
         Wait(5 * 60000)
 
-        MySQL.update(
-            "UPDATE phone_services_plus_requests SET status = 'cancelled' WHERE status = 'open' AND created_at < NOW() - INTERVAL 30 MINUTE"
-        )
+        local expired = MySQL.query.await([[
+            SELECT id FROM phone_services_plus_requests
+            WHERE status = 'open' AND created_at < NOW() - INTERVAL 30 MINUTE
+        ]]) or {}
+        local ids = {}
+        for i = 1, #expired do
+            local id = tonumber(expired[i].id)
+            if id then ids[#ids + 1] = id end
+        end
+
+        if #ids > 0 then
+            local idList = table.concat(ids, ",")
+            MySQL.update.await((
+                "UPDATE phone_services_plus_requests SET status = 'cancelled' " ..
+                "WHERE status = 'open' AND created_at < NOW() - INTERVAL 30 MINUTE AND id IN (%s)"
+            ):format(idList))
+
+            local requests = Requests.GetMany(ids)
+            for i = 1, #requests do
+                if requests[i].status == "cancelled" then
+                    clearNotifications(requests[i].id)
+                    TriggerEvent("services-plus:requestExpired", requests[i])
+                    TriggerEvent("services-plus:requestCancelled", requests[i])
+                end
+            end
+        end
     end
 end)

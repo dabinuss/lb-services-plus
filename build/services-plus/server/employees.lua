@@ -446,6 +446,30 @@ local function pushOwnDutyState(source, jobChanged)
     })
 end
 
+--- Applies a Services+ status change through the complete employee update
+--- path. Both the NUI callback and public server export use this function,
+--- so team deltas and the player's native LB-Phone company-call state stay
+--- synchronized regardless of where the change originated.
+---@param source number
+---@param status "available"|"pause"|"busy"
+---@return table|false
+function Employees.UpdateStatus(source, status)
+    source = tonumber(source)
+    if not source or GetPlayerName(source) == nil then return false end
+    local job = Framework.GetJob(source)
+    if not job or not Companies.GetByJob(job.name) then return false end
+    if not Employees.SetStatus(source, status) then return false end
+
+    Employees.BroadcastStateChanged(source)
+    pushOwnDutyState(source, false)
+
+    return {
+        ok = true,
+        onDuty = Framework.GetOnDuty(source),
+        status = status,
+    }
+end
+
 -- Common downstream path for duty changes originating inside Services+ or
 -- in another QB/Qbox duty resource. Routing already reads framework state
 -- live; this keeps Main-hotline materialization, Team realtime and the
