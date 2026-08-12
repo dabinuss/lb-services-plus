@@ -293,7 +293,7 @@ local ADMIN_ACTIONS = {
     "admin:getCategories", "admin:createCategory", "admin:updateCategory", "admin:deleteCategory",
     "admin:getCompanies", "admin:createCompany", "admin:updateCompany", "admin:deleteCompany",
     "admin:setCompanyCeiling", "admin:assignBoss",
-    "admin:createNumber", "admin:deleteNumber", "admin:enableNumber",
+    "admin:createNumber", "admin:updateNumber", "admin:deleteNumber", "admin:enableNumber",
     "admin:getRequestTypes", "admin:createRequestType", "admin:updateRequestType", "admin:deleteRequestType",
 }
 

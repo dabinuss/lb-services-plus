@@ -19,6 +19,12 @@ function CompanyRow({ company, categories, onChanged, onEdit }) {
   const [expanded, setExpanded] = useState(false)
   const [playerId, setPlayerId] = useState('')
   const [newNumber, setNewNumber] = useState({ label: '', number: '' })
+  // { id, label, number } of whichever number row is currently being
+  // edited, or null - includes the main number (plan review round 6 §1),
+  // there used to be no way to fix a typo'd label/number on an existing
+  // entry at all, main number least of all since that one can't be deleted
+  // and recreated the way a secondary one could.
+  const [editingNumber, setEditingNumber] = useState(null)
 
   const categoryName = categories.find((c) => c.id === company.category_id)?.name || 'Uncategorized'
 
@@ -60,6 +66,17 @@ function CompanyRow({ company, categories, onChanged, onEdit }) {
     if (await fetchNui('admin:enableNumber', { id })) onChanged()
   }
 
+  // Server re-checks uniqueness itself (plan review round 6 §2) - this is
+  // just so a plain typo/duplicate doesn't round-trip for nothing.
+  const saveNumber = async () => {
+    if (!editingNumber.label || !editingNumber.number) return
+    const ok = await fetchNui('admin:updateNumber', editingNumber)
+    if (ok) {
+      setEditingNumber(null)
+      onChanged()
+    }
+  }
+
   // Soft-delete only server-side (plan review round 4 §9) - this disables
   // the company instead of removing it, so its message/call history survives.
   const disableCompany = async () => {
@@ -97,24 +114,55 @@ function CompanyRow({ company, categories, onChanged, onEdit }) {
           <CeilingToggle label="Requests" allowed={company.admin_requests_allowed === 1} onToggle={() => setCeiling({ requestsAllowed: company.admin_requests_allowed !== 1 })} />
 
           <div className="section-title">Phone numbers</div>
-          {company.numbers.map((n) => (
-            <div key={n.id} className="number-row">
-              <div className="dashboard-label">
-                {n.label} <span className="hint">{n.number}</span> {n.is_main === 1 && <span className="hint">(main)</span>}
-                {n.enabled !== 1 && <span className="hint"> (disabled)</span>}
+          {company.numbers.map((n) =>
+            editingNumber?.id === n.id ? (
+              <div key={n.id} className="admin-inline-form">
+                <input
+                  className="search-input"
+                  placeholder="Label"
+                  value={editingNumber.label}
+                  onChange={(e) => setEditingNumber({ ...editingNumber, label: e.target.value })}
+                />
+                <input
+                  className="search-input"
+                  placeholder="Number"
+                  value={editingNumber.number}
+                  onChange={(e) => setEditingNumber({ ...editingNumber, number: e.target.value })}
+                />
+                <button className="request-action accept" onClick={saveNumber}>
+                  Save
+                </button>
+                <button className="icon-button subtle" onClick={() => setEditingNumber(null)}>
+                  ✕
+                </button>
               </div>
-              {n.is_main !== 1 &&
-                (n.enabled === 1 ? (
-                  <ConfirmButton className="icon-button subtle" onConfirm={() => deleteNumber(n.id)}>
-                    ✕
-                  </ConfirmButton>
-                ) : (
-                  <button className="request-action complete" onClick={() => enableNumber(n.id)}>
-                    Re-enable
+            ) : (
+              <div key={n.id} className="number-row">
+                <div className="dashboard-label">
+                  {n.label} <span className="hint">{n.number}</span> {n.is_main === 1 && <span className="hint">(main)</span>}
+                  {n.enabled !== 1 && <span className="hint"> (disabled)</span>}
+                </div>
+                <div className="admin-row-actions">
+                  <button
+                    className="request-action complete"
+                    onClick={() => setEditingNumber({ id: n.id, label: n.label, number: n.number })}
+                  >
+                    Edit
                   </button>
-                ))}
-            </div>
-          ))}
+                  {n.is_main !== 1 &&
+                    (n.enabled === 1 ? (
+                      <ConfirmButton className="icon-button subtle" onConfirm={() => deleteNumber(n.id)}>
+                        ✕
+                      </ConfirmButton>
+                    ) : (
+                      <button className="request-action complete" onClick={() => enableNumber(n.id)}>
+                        Re-enable
+                      </button>
+                    ))}
+                </div>
+              </div>
+            ),
+          )}
           <div className="admin-inline-form">
             <input className="search-input" placeholder="Label" value={newNumber.label} onChange={(e) => setNewNumber({ ...newNumber, label: e.target.value })} />
             <input className="search-input" placeholder="Number" value={newNumber.number} onChange={(e) => setNewNumber({ ...newNumber, number: e.target.value })} />

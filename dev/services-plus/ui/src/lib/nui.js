@@ -502,13 +502,31 @@ async function fetchNuiFixture(action, data) {
       return true
     case 'admin:assignBoss':
       return true
-    case 'admin:createNumber':
+    case 'admin:createNumber': {
+      // Mirrors the server's UNIQUE KEY `number` check (plan review round 6
+      // §2) - global across every company's numbers, not just this one.
+      const clash = fixtureAdminCompanies.some((c) => c.numbers.some((n) => n.number === data.number))
+      if (clash) return false
+
       fixtureAdminCompanies = fixtureAdminCompanies.map((c) =>
         c.id === data.companyId
           ? { ...c, numbers: [...c.numbers, { id: Date.now(), label: data.label, number: data.number, is_main: 0, enabled: 1 }] }
           : c,
       )
       return true
+    }
+    // Editing a number - including the main one (plan review round 6 §1).
+    // Same uniqueness check as create, excluding this number's own row.
+    case 'admin:updateNumber': {
+      const clash = fixtureAdminCompanies.some((c) => c.numbers.some((n) => n.number === data.number && n.id !== data.id))
+      if (clash) return false
+
+      fixtureAdminCompanies = fixtureAdminCompanies.map((c) => ({
+        ...c,
+        numbers: c.numbers.map((n) => (n.id === data.id ? { ...n, label: data.label, number: data.number } : n)),
+      }))
+      return true
+    }
     // Mirrors the server: soft-delete only (plan review round 5 §1), so
     // chat/call history for this number isn't wiped along with it.
     case 'admin:deleteNumber':

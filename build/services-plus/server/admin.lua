@@ -213,6 +213,32 @@ adminCallback("admin:createNumber", function(_, reply, data)
     reply(id ~= nil)
 end)
 
+-- Editing a number - including the main one (plan review round 6 §1: admin
+-- previously had no way to fix a typo'd label or number on an existing
+-- entry short of disabling it and creating a new one, which for the main
+-- number wasn't even possible at all since that can't be deleted). Same
+-- uniqueness check as admin:createNumber above, just excluding this number's
+-- own row so saving it unchanged doesn't trip over itself.
+adminCallback("admin:updateNumber", function(_, reply, data)
+    if type(data.label) ~= "string" or data.label == "" or type(data.number) ~= "string" or data.number == "" then
+        return reply(false)
+    end
+
+    local existing = MySQL.scalar.await(
+        "SELECT id FROM phone_services_plus_numbers WHERE number = ? AND id != ?",
+        { data.number, data.id }
+    )
+    if existing then return reply(false) end
+
+    MySQL.update.await(
+        "UPDATE phone_services_plus_numbers SET label = ?, number = ? WHERE id = ?",
+        { data.label, data.number, data.id }
+    )
+
+    Companies.Reload()
+    reply(true)
+end)
+
 -- Soft-delete only (plan review round 5 §1, same reasoning as companies and
 -- request types): number_id cascades all the way down to channels, messages
 -- and call history, so a real DELETE here used to take that number's entire
