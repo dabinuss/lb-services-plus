@@ -218,25 +218,25 @@ let fixtureRequests = [
 // Own call history across companies/states, for Activity > Calls.
 const fixtureCalls = [
   {
-    id: 1, customer_number: '5559876', employee_number: null, state: 'missed', label: 'Main Hotline',
+    id: 1, customer_number: '5559876', state: 'missed', label: 'Main Hotline',
     company_id: 3, number_id: 3,
     company_name: 'Downtown Cab Co.', company_icon: 'https://cdn-icons-png.flaticon.com/128/10281/10281554.png',
     created_at: new Date(Date.now() - 3600000).toISOString(),
   },
   {
-    id: 2, customer_number: '5550100', employee_number: '5559050', state: 'answered', label: 'Main Hotline',
+    id: 2, customer_number: '5550100', state: 'answered', label: 'Main Hotline',
     company_id: 1, number_id: 1,
     company_name: 'Los Santos Police Department', company_icon: 'https://cdn-icons-png.flaticon.com/512/7211/7211100.png',
     created_at: new Date(Date.now() - 7 * 3600000).toISOString(),
   },
   {
-    id: 3, customer_number: '5550100', employee_number: null, state: 'ringing', label: 'Main Hotline',
+    id: 3, customer_number: '5550100', state: 'ringing', label: 'Main Hotline',
     company_id: 2, number_id: 2,
     company_name: 'Pillbox Medical', company_icon: 'https://cdn-icons-png.flaticon.com/128/1032/1032989.png',
     created_at: new Date(Date.now() - 20 * 60000).toISOString(),
   },
   {
-    id: 4, customer_number: '5550100', employee_number: '5559070', state: 'answered', label: 'Airport Line',
+    id: 4, customer_number: '5550100', state: 'answered', label: 'Airport Line',
     company_id: 4, number_id: 6,
     company_name: 'Coastal Taxi Co.', company_icon: 'https://cdn-icons-png.flaticon.com/128/3079/3079165.png',
     created_at: new Date(Date.now() - 3 * 86400000).toISOString(),
@@ -371,7 +371,7 @@ async function fetchNuiFixture(action, data) {
       // reads it.
       const newestFirst = [...fixtureMessages].sort((a, b) => b.id - a.id)
       const slice = data.beforeId ? newestFirst.filter((m) => m.id < data.beforeId) : newestFirst
-      const messages = slice.slice(0, FIXTURE_PAGE_SIZE).map(({ sender, ...rest }) => rest)
+      const messages = slice.slice(0, FIXTURE_PAGE_SIZE).map(({ sender: _sender, ...rest }) => rest)
       return { channelId: 1, contactNumber: '5550100', viewerRole: 'customer', messages }
     }
     case 'sendMessage': {
@@ -380,7 +380,7 @@ async function fetchNuiFixture(action, data) {
         created_at: new Date(Date.now()).toISOString(),
       }
       fixtureMessages.push(message)
-      const { sender, ...withoutSender } = message
+      const { sender: _sender, ...withoutSender } = message
       return withoutSender
     }
     case 'getActivity':
@@ -495,6 +495,10 @@ async function fetchNuiFixture(action, data) {
       )
       return true
     case 'admin:deleteCategory':
+      if (
+        fixtureAdminCompanies.some((c) => c.category_id === data.id)
+        || fixtureAdminRequestTypes.some((t) => t.category_id === data.id)
+      ) return false
       fixtureAdminCategories = fixtureAdminCategories.filter((c) => c.id !== data.id)
       return true
 

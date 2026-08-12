@@ -266,26 +266,9 @@ RegisterCallback("toggleDuty", function(source, reply, state)
     if not job or not Companies.GetByJob(job.name) then return reply(false) end
 
     if not Framework.SetDuty(source, state == true) then return reply(false) end
+    Framework.RefreshDuty(source)
 
-    -- Materialize the sole-employee Main Hotline guarantee immediately on
-    -- both directions of a duty change - going on duty alone, or leaving
-    -- someone else newly alone by going off duty (plan review round 3 §3).
-    Employees.SyncMainHotline(job.name)
-
-    -- Team realtime (plan review round 6 §4): going on duty is just another
-    -- state change colleagues should see immediately, same as a status or
-    -- hotline change. Going off duty is the one transition
-    -- BroadcastStateChanged can't express on its own - GetTeamMemberRow
-    -- returns nil once not on duty, so it would just silently send nothing
-    -- - BroadcastRemoved is the explicit "take this row out" signal for
-    -- exactly that case.
-    if state == true then
-        Employees.BroadcastStateChanged(source)
-    else
-        Employees.BroadcastRemoved(source, job.name)
-    end
-
-    reply({ ok = true, onDuty = state == true, status = Employees.GetStatus(source) })
+    reply({ ok = true, onDuty = Framework.GetOnDuty(source), status = Employees.GetStatus(source) })
 end)
 
 -- ---------------------------------------------------------------------------

@@ -422,6 +422,48 @@ function Employees.BroadcastRemoved(source, job)
     end
 end
 
+local function employeeSnapshot(source)
+    local job = Framework.GetJob(source)
+    local company = job and Companies.GetByJob(job.name)
+    if not company then return nil end
+
+    return {
+        companyId = company.id,
+        job = job.name,
+        jobLabel = job.label,
+        grade = job.grade,
+        gradeLabel = job.gradeLabel,
+        isBoss = Framework.IsBoss(source, job.name, company.boss_grade),
+        onDuty = Framework.GetOnDuty(source),
+        status = Employees.GetStatus(source),
+    }
+end
+
+local function pushOwnDutyState(source, jobChanged)
+    TriggerClientEvent("services-plus:client:employeeDutyChanged", source, {
+        employee = employeeSnapshot(source),
+        jobChanged = jobChanged == true,
+    })
+end
+
+-- Common downstream path for duty changes originating inside Services+ or
+-- in another QB/Qbox duty resource. Routing already reads framework state
+-- live; this keeps Main-hotline materialization, Team realtime and the
+-- affected client's native LB-Phone calls state equally current.
+AddEventHandler("services-plus:internal:dutyChanged", function(source)
+    local job = Framework.GetJob(source)
+    local company = job and Companies.GetByJob(job.name)
+    if not company then return end
+
+    Employees.SyncMainHotline(job.name)
+    if Framework.GetOnDuty(source) then
+        Employees.BroadcastStateChanged(source)
+    else
+        Employees.BroadcastRemoved(source, job.name)
+    end
+    pushOwnDutyState(source, false)
+end)
+
 AddEventHandler("playerDropped", function()
     state[source] = nil
 end)
@@ -440,7 +482,10 @@ end)
 AddEventHandler("services-plus:internal:jobChanged", function(source, oldJob, newJob)
     if oldJob then Employees.BroadcastRemoved(source, oldJob) end
     Employees.Reset(source)
+    if oldJob then Employees.SyncMainHotline(oldJob) end
+    if newJob then Employees.SyncMainHotline(newJob) end
     Employees.BroadcastStateChanged(source)
+    pushOwnDutyState(source, true)
 end)
 
 -- Belt-and-suspenders self-heal for the sole-employee Main Hotline

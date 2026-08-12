@@ -68,6 +68,18 @@ export default function App() {
     onNuiEvent('employeeStateChanged', (data) => setTeamUpdate(data))
   }, [])
 
+  // External framework duty/job changes bypass the app's toggle callback.
+  // Keep the employee bootstrap/session current from the server push; the
+  // client-side Lua handler separately applies the same snapshot to native
+  // LB-Phone company calls.
+  useEffect(() => {
+    onNuiEvent('employeeDutyChanged', (data) => {
+      const employee = data.employee || null
+      setBootstrap((prev) => (prev ? { ...prev, employee } : prev))
+      if (data.jobChanged || !employee?.onDuty) setCompanySession(null)
+    })
+  }, [])
+
   const visibleTabs = TABS.filter((t) => !t.requires || bootstrap?.[t.requires])
 
   useEffect(() => {

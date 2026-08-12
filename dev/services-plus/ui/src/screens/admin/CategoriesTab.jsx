@@ -11,6 +11,7 @@ const EMPTY = { key: '', name: '', icon: '', sort: 0, competitionAllowed: false 
 export default function CategoriesTab() {
   const [categories, setCategories] = useState(null)
   const [editing, setEditing] = useState(null) // { ...EMPTY, id? }
+  const [notice, setNotice] = useState('')
 
   const load = () => fetchNui('admin:getCategories').then((r) => r && setCategories(r))
 
@@ -27,7 +28,12 @@ export default function CategoriesTab() {
   }
 
   const remove = async (id) => {
-    if (await fetchNui('admin:deleteCategory', { id })) load()
+    if (await fetchNui('admin:deleteCategory', { id })) {
+      setNotice('')
+      load()
+    } else {
+      setNotice('Category is still assigned to a company or request type and cannot be deleted.')
+    }
   }
 
   return (
@@ -37,6 +43,7 @@ export default function CategoriesTab() {
       </button>
 
       {categories === null && <div className="empty-state">Loading…</div>}
+      {notice && <div className="notice">{notice}</div>}
 
       <div className="admin-list">
         {categories?.map((cat) => (

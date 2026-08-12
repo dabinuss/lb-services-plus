@@ -62,6 +62,7 @@ end)
 -- the app self-heals the index for that one player regardless of events.
 -- ---------------------------------------------------------------------------
 local JobIndex = { byJob = {}, bySource = {} }
+local DutyIndex = {} -- source -> last duty state observed through framework events
 
 function JobIndex.Set(source, job)
     if JobIndex.bySource[source] == job then return end
@@ -72,6 +73,10 @@ function JobIndex.Set(source, job)
     end
 
     JobIndex.bySource[source] = job
+    -- Capture the duty value that belongs to this new job immediately. A
+    -- second compatibility event for the same framework update can then be
+    -- ignored instead of repeating the jobChanged push.
+    DutyIndex[source] = job and Framework.GetOnDuty and Framework.GetOnDuty(source) or nil
 
     if job then
         JobIndex.byJob[job] = JobIndex.byJob[job] or {}
@@ -309,6 +314,19 @@ function Framework.SetDuty(source, state)
     return true
 end
 
+-- Reconciles framework-owned duty with Services+ and suppresses duplicate
+-- pushes when QB/Qbox emit more than one compatible event for one change.
+-- Also called explicitly after Services+'s own SetDuty so ESX/standalone,
+-- which have no universal duty event, use the exact same downstream path.
+---@param source number
+function Framework.RefreshDuty(source)
+    local onDuty = Framework.GetOnDuty(source)
+    if DutyIndex[source] == onDuty then return end
+
+    DutyIndex[source] = onDuty
+    TriggerEvent("services-plus:internal:dutyChanged", source)
+end
+
 -- ---------------------------------------------------------------------------
 -- Standalone fallback: a tiny job table for servers without ESX/QBCore/Qbox.
 -- Persisted in `phone_services_plus_standalone_jobs` (see sql/install.sql).
@@ -366,28 +384,52 @@ end)
 -- disconnect cleanup, and the one-time initial build.
 -- ---------------------------------------------------------------------------
 
-AddEventHandler("esx:playerLoaded", function(playerId) Framework.GetJob(playerId) end)
-AddEventHandler("esx:setJob", function(source) Framework.GetJob(source) end)
+local function refreshJobAndDuty(source)
+    if type(source) ~= "number" then return end
+
+    local oldJob = JobIndex.bySource[source]
+    local job = Framework.GetJob(source)
+    local newJob = job and job.name or nil
+
+    -- JobIndex.Set already emitted jobChanged (which includes the player's
+    -- own duty/native-call push). Only a stable job can represent a pure
+    -- external duty update here.
+    if oldJob == newJob then
+        Framework.RefreshDuty(source)
+    else
+        -- jobChanged already pushed the complete new snapshot; remember its
+        -- duty value so a second compatibility event for the same framework
+        -- update cannot immediately repeat that work.
+        DutyIndex[source] = Framework.GetOnDuty(source)
+    end
+end
+
+AddEventHandler("esx:playerLoaded", function(playerId) refreshJobAndDuty(playerId) end)
+AddEventHandler("esx:setJob", function(source) refreshJobAndDuty(source) end)
 
 AddEventHandler("QBCore:Server:PlayerLoaded", function(player)
-    if player and player.PlayerData then Framework.GetJob(player.PlayerData.source) end
+    if player and player.PlayerData then refreshJobAndDuty(player.PlayerData.source) end
 end)
 -- Belt-and-suspenders for Qbox: current qbx_core fires the same
 -- "QBCore:Server:PlayerLoaded" above, but this also catches it on setups
 -- where that isn't the case (plan review round 3 §1) - inert otherwise.
 AddEventHandler("QBCore:Server:OnPlayerLoaded", function(player)
     if player and player.PlayerData then
-        Framework.GetJob(player.PlayerData.source)
+        refreshJobAndDuty(player.PlayerData.source)
     else
-        Framework.GetJob(source)
+        refreshJobAndDuty(source)
     end
 end)
 AddEventHandler("QBCore:Server:OnPlayerUpdated", function(source, key)
-    if key == "job" then Framework.GetJob(source) end
+    if key == "job" or key == "all" then refreshJobAndDuty(source) end
 end)
-AddEventHandler("QBCore:Server:OnJobUpdate", function(source) Framework.GetJob(source) end)
+AddEventHandler("QBCore:Server:OnJobUpdate", function(source) refreshJobAndDuty(source) end)
+AddEventHandler("QBCore:Server:SetDuty", function(source) refreshJobAndDuty(source) end)
 
-AddEventHandler("playerDropped", function() JobIndex.Remove(source) end)
+AddEventHandler("playerDropped", function()
+    DutyIndex[source] = nil
+    JobIndex.Remove(source)
+end)
 
 -- Initial build, then a slow periodic re-sync as a framework-agnostic
 -- safety net (plan review round 3 §1): the exact "player finished loading"

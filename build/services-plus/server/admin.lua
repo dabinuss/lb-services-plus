@@ -65,7 +65,17 @@ adminCallback("admin:updateCategory", function(_, reply, data)
 end)
 
 adminCallback("admin:deleteCategory", function(_, reply, data)
-    MySQL.update.await("DELETE FROM phone_services_plus_categories WHERE id = ?", { data.id })
+    -- Keep existing company/request-type assignments intact. The guarded
+    -- DELETE is atomic, so a category cannot become used between a separate
+    -- pre-check and the write and then be nulled by ON DELETE SET NULL.
+    local affected = MySQL.update.await([[
+        DELETE FROM phone_services_plus_categories
+        WHERE id = ?
+          AND NOT EXISTS (SELECT 1 FROM phone_services_plus_companies WHERE category_id = ?)
+          AND NOT EXISTS (SELECT 1 FROM phone_services_plus_request_types WHERE category_id = ?)
+    ]], { data.id, data.id, data.id })
+
+    if not affected or affected == 0 then return reply(false) end
     Companies.Reload()
     reply(true)
 end)

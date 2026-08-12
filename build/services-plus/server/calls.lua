@@ -179,7 +179,7 @@ RegisterCallback("getCallHistory", function(source, reply, page)
     if not company then return reply(false) end
 
     local rows = MySQL.query.await([[
-        SELECT c.id, c.customer_number, c.employee_number, c.state, c.created_at, n.label
+        SELECT c.id, c.customer_number, c.state, c.created_at, n.label
         FROM phone_services_plus_calls c
         JOIN phone_services_plus_numbers n ON n.id = c.number_id
         WHERE c.company_id = ?

@@ -68,16 +68,6 @@ AddEventHandler("onResourceStart", function(resource)
     end
 end)
 
--- Symmetric cleanup (plan review round 3 §12): without this, restarting
--- just services-plus (not lb-phone) leaves a stale AddCustomApp
--- registration behind - lb-phone has no other way to find out this app is
--- gone until its own next restart.
-AddEventHandler("onResourceStop", function(resource)
-    if resource == resourceName then
-        pcall(function() exports["lb-phone"]:RemoveCustomApp(Config.App.identifier) end)
-    end
-end)
-
 -- Every handler below just forwards to the matching server RPC (see
 -- server/main.lua) and hands the raw result back to the UI. The UI never
 -- talks to the server directly - only through these.
@@ -92,8 +82,8 @@ end
 -- server/calls.lua's doc comment), which has no idea about Services+'s own
 -- Busy/Pause state - ToggleCompanyCalls is the only integration point
 -- lb-phone exposes for that (plan review round 2 §3). Only ever called
--- right after the player's own setStatus/toggleDuty action (computed from
--- that exact result) or on bootstrap - never speculatively.
+-- right after the player's own setStatus/toggleDuty action, on bootstrap,
+-- or from an authoritative server push after an external duty/job change.
 --
 -- Trade-off worth knowing: ToggleCompanyCalls is global per player, not
 -- scoped to a single job/company - a player also employed at a *native*
@@ -142,22 +132,55 @@ local function syncNativeCompanyCalls(result)
                 exports["lb-phone"]:ToggleCompanyCalls(prior)
                 clearPriorNativeCompanyCalls()
             end
-            -- Nothing captured to restore (e.g. fresh client state after a
-            -- restart while Busy) - deliberately left alone rather than
-            -- guessing `true` (plan review round 4 §7). An earlier version
+            -- Nothing captured to restore (e.g. a legacy/missing KVP) -
+            -- deliberately left alone rather than guessing `true` (plan
+            -- review round 4 §7). An earlier version
             -- forced it on once per bootstrap to self-heal that exact case,
             -- but that just re-introduced the original bug: a player who'd
             -- deliberately left native company calls off, then opened
             -- Services+ available+on-duty after a restart, got them
-            -- silently switched back on. Worth knowing: this does mean a
-            -- restart mid-Busy can leave calls off until the next real
-            -- Busy/Pause/off-duty -> Available transition.
+            -- silently switched back on.
         elseif getPriorNativeCompanyCalls() == nil then
             setPriorNativeCompanyCalls(exports["lb-phone"]:GetCompanyCallsStatus())
             exports["lb-phone"]:ToggleCompanyCalls(false)
         end
     end)
 end
+
+-- Framework-side duty/job changes can happen without going through this
+-- app's NUI callbacks. The server pushes the resulting employee snapshot so
+-- native company calls and an already-open app both follow those external
+-- changes immediately, without polling.
+RegisterNetEvent("services-plus:client:employeeDutyChanged", function(payload)
+    local employee = type(payload) == "table" and payload.employee or nil
+
+    -- Leaving every Services+ company must release a native calls toggle
+    -- that may still be held from the old job's Busy/Pause/off-duty state.
+    syncNativeCompanyCalls(employee or { onDuty = true, status = "available" })
+
+    exports["lb-phone"]:SendCustomAppMessage(Config.App.identifier, {
+        type = "employeeDutyChanged",
+        employee = employee or false,
+        jobChanged = payload and payload.jobChanged == true,
+    })
+end)
+
+-- Restore lb-phone before unregistering the app. Client KVPs survive a
+-- resource restart, so merely removing the custom app used to leave a
+-- Services+-set ToggleCompanyCalls(false) active until a later state change.
+AddEventHandler("onResourceStop", function(resource)
+    if resource ~= resourceName then return end
+
+    local prior = getPriorNativeCompanyCalls()
+    if prior ~= nil then
+        local restored = pcall(function()
+            exports["lb-phone"]:ToggleCompanyCalls(prior)
+        end)
+        if restored then clearPriorNativeCompanyCalls() end
+    end
+
+    pcall(function() exports["lb-phone"]:RemoveCustomApp(Config.App.identifier) end)
+end)
 
 RegisterNUICallback("bootstrap", function(_, cb)
     local result = bridge("bootstrap")
