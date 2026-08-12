@@ -39,18 +39,6 @@ export default function SettingsTab() {
 
   return (
     <div className="tab-panel settings-tab">
-      <div className="section-title">Features</div>
-      {[
-        ['callsEnabled', 'Calls'],
-        ['messagesEnabled', 'Messages'],
-        ['requestsEnabled', 'Requests'],
-      ].map(([key, label]) => (
-        <div className="dashboard-row" key={key}>
-          <div className="dashboard-label">{label}</div>
-          <Switch checked={settings[key]} onChange={(next) => save({ [key]: next })} small={false} />
-        </div>
-      ))}
-
       <div className="section-title">Call routing</div>
       <div className="category-row subtab-row">
         {ROUTING_OPTIONS.map((o) => (
