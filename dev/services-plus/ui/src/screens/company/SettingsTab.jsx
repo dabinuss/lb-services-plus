@@ -39,33 +39,38 @@ export default function SettingsTab() {
 
   return (
     <div className="tab-panel settings-tab">
-      <div className="section-title">Call routing</div>
-      <div className="category-row subtab-row">
-        {ROUTING_OPTIONS.map((o) => (
-          <button
-            key={o.key}
-            className={`category-chip${settings.callRouting === o.key ? ' active' : ''}`}
-            onClick={() => save({ callRouting: o.key })}
-          >
-            {o.label}
-          </button>
-        ))}
+      <div className="section-title compact-title">Routing</div>
+      <div className="routing-row">
+        <div className="routing-label">Call routing</div>
+        <div className="category-row subtab-row routing-options">
+          {ROUTING_OPTIONS.map((o) => (
+            <button
+              key={o.key}
+              className={`category-chip${settings.callRouting === o.key ? ' active' : ''}`}
+              onClick={() => save({ callRouting: o.key })}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      <div className="section-title">Request routing</div>
-      <div className="category-row subtab-row">
-        {ROUTING_OPTIONS.map((o) => (
-          <button
-            key={o.key}
-            className={`category-chip${settings.requestRouting === o.key ? ' active' : ''}`}
-            onClick={() => save({ requestRouting: o.key })}
-          >
-            {o.label}
-          </button>
-        ))}
+      <div className="routing-row">
+        <div className="routing-label">Request routing</div>
+        <div className="category-row subtab-row routing-options">
+          {ROUTING_OPTIONS.map((o) => (
+            <button
+              key={o.key}
+              className={`category-chip${settings.requestRouting === o.key ? ' active' : ''}`}
+              onClick={() => save({ requestRouting: o.key })}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      <div className="section-title">Phone numbers</div>
+      <div className="section-title compact-title">Phone numbers</div>
       <div className="number-list">
         {settings.numbers.map((n) => (
           <div key={n.id} className="number-row">
