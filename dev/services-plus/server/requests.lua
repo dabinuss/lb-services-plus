@@ -158,7 +158,16 @@ RegisterCallback("createRequest", function(source, reply, companyId, requestType
     local requestType = Requests.GetType(requestTypeId)
     local company = Companies.GetById(companyId)
 
-    if not requestType or not company or company.requests_enabled ~= 1 then return reply(false) end
+    -- Requests.GetType() deliberately still resolves soft-deleted types too
+    -- (so already-open requests of a since-disabled type keep working) -
+    -- but that means it alone doesn't stop a client that still has the old
+    -- ID from creating brand new requests of a disabled type via a direct
+    -- RPC call (plan review round 4 §1). GetTypesForCategory() already
+    -- filters these out for the picker; this is the same filter enforced
+    -- at the point that actually matters.
+    if not requestType or requestType.enabled ~= 1 or not company or company.requests_enabled ~= 1 then
+        return reply(false)
+    end
     if requestType.category_id ~= company.category_id then return reply(false) end
 
     local requesterNumber = Framework.GetPhoneNumber(source)
@@ -252,6 +261,17 @@ RegisterCallback("acceptRequest", function(source, reply, requestId)
     end
 
     local identifier = Framework.GetIdentifier(source)
+
+    -- One active request per employee at a time (plan review round 4 §4):
+    -- without this, accepting a second request while the first is still
+    -- active just silently buries the first one - getActiveRequest() only
+    -- ever returns the newest via LIMIT 1, so it'd never resurface on the
+    -- overlay/rehydration even though it's still sitting there `active`.
+    local existingActive = MySQL.scalar.await(
+        "SELECT id FROM phone_services_plus_requests WHERE employee_identifier = ? AND status = 'active' LIMIT 1",
+        { identifier }
+    )
+    if existingActive then return reply(false) end
 
     -- Atomic first-accept-wins (plan §15): the WHERE status = 'open' means
     -- only one of any number of concurrent accepts can ever affect a row.

@@ -54,7 +54,9 @@ function CompanyRow({ company, categories, onChanged, onEdit }) {
     if (await fetchNui('admin:deleteNumber', { id })) onChanged()
   }
 
-  const deleteCompany = async () => {
+  // Soft-delete only server-side (plan review round 4 §9) - this disables
+  // the company instead of removing it, so its message/call history survives.
+  const disableCompany = async () => {
     if (await fetchNui('admin:deleteCompany', { id: company.id })) onChanged()
   }
 
@@ -77,7 +79,7 @@ function CompanyRow({ company, categories, onChanged, onEdit }) {
           >
             Edit
           </button>
-          <ConfirmButton onConfirm={deleteCompany} />
+          {company.enabled === 1 && <ConfirmButton onConfirm={disableCompany}>Disable</ConfirmButton>}
         </div>
       </div>
 

@@ -94,7 +94,7 @@ const fixtures = {
 }
 
 let fixtureMessages = [
-  { id: 1, sender: '5550100', content: 'Hey, is anyone there?', created_at: new Date(Date.now() - 60000).toISOString() },
+  { id: 1, sender: '5550100', sender_type: 'customer', content: 'Hey, is anyone there?', created_at: new Date(Date.now() - 60000).toISOString() },
 ]
 
 let fixtureActivity = [
@@ -187,9 +187,11 @@ async function fetchNuiFixture(action, data) {
       return true
     case 'openConversation':
     case 'getMessages':
-      return { channelId: 1, contactNumber: '5550100', messages: [...fixtureMessages].reverse() }
+      return { channelId: 1, contactNumber: '5550100', viewerRole: 'customer', messages: [...fixtureMessages].reverse() }
     case 'sendMessage': {
-      const message = { id: fixtureMessages.length + 1, sender: fixtures.bootstrap.myNumber, content: data.content }
+      const message = {
+        id: fixtureMessages.length + 1, sender: fixtures.bootstrap.myNumber, sender_type: 'customer', content: data.content,
+      }
       fixtureMessages.push(message)
       return message
     }
@@ -290,7 +292,9 @@ async function fetchNuiFixture(action, data) {
       )
       return true
     case 'admin:deleteCompany':
-      fixtureAdminCompanies = fixtureAdminCompanies.filter((c) => c.id !== data.id)
+      // Mirrors the server: soft-delete only (plan review round 4 §9), so
+      // message/call history for this company isn't wiped along with it.
+      fixtureAdminCompanies = fixtureAdminCompanies.map((c) => (c.id === data.id ? { ...c, enabled: 0 } : c))
       return true
     case 'admin:setCompanyCeiling':
       fixtureAdminCompanies = fixtureAdminCompanies.map((c) =>

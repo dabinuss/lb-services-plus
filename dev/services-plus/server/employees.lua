@@ -142,6 +142,22 @@ function Employees.ToggleHotline(source, numberId, active)
     local company = job and Companies.GetByJob(job.name)
     if not company then return false, "not_employee" end
 
+    -- Employment alone isn't enough - numberId also has to actually belong
+    -- to this employee's own company, or a direct RPC call could toggle a
+    -- hotline flag for a completely unrelated company's number (plan
+    -- review round 4 §11; harmless on its own since nothing reads a
+    -- hotline flag outside its owning company's own eligibility checks,
+    -- but still unintended access with no reason to allow it).
+    local numbers = Companies.GetNumbers(company.id)
+    local numberBelongsToCompany = false
+    for i = 1, #numbers do
+        if numbers[i].id == numberId then
+            numberBelongsToCompany = true
+            break
+        end
+    end
+    if not numberBelongsToCompany then return false, "not_employee" end
+
     if not active and numberId == mainNumberId(company.id) then
         -- Blocking this needs more than "someone else happens to be on
         -- duty" (plan review round 3 §3) - it has to be someone who

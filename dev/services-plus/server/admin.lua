@@ -147,8 +147,15 @@ adminCallback("admin:updateCompany", function(_, reply, data)
     reply(true)
 end)
 
+-- Soft-delete only (plan review round 4 §9, same reasoning as request
+-- types): company_id/number_id cascade all the way down to messages and
+-- call history, so a real DELETE here would take a company's entire chat
+-- and call history down with it. Disabling instead just drops it out of
+-- Companies.Reload()'s cache (and therefore the public app), while
+-- admin:getCompanies still shows it (no WHERE enabled=1 there) so it can
+-- be re-enabled later.
 adminCallback("admin:deleteCompany", function(_, reply, data)
-    MySQL.update.await("DELETE FROM phone_services_plus_companies WHERE id = ?", { data.id })
+    MySQL.update.await("UPDATE phone_services_plus_companies SET enabled = 0 WHERE id = ?", { data.id })
     Companies.Reload()
     reply(true)
 end)

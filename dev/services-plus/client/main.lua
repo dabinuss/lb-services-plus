@@ -100,16 +100,8 @@ end
 -- switched back on.
 local priorNativeCompanyCalls = nil
 
--- Only the very first bootstrap after this script started is allowed to
--- fall back to a hard `true` below - later app-opens with nothing left to
--- restore mean the player is simply still available with nothing Services+
--- ever touched, and must not have their own lb-phone toggle overridden
--- just for reopening the app (plan review round 3 §10).
-local hasSyncedOnce = false
-
 ---@param result table
----@param isBootstrap? boolean
-local function syncNativeCompanyCalls(result, isBootstrap)
+local function syncNativeCompanyCalls(result)
     if type(result) ~= "table" then return end
 
     local shouldReceive = result.onDuty == true and result.status == "available"
@@ -119,26 +111,27 @@ local function syncNativeCompanyCalls(result, isBootstrap)
             if priorNativeCompanyCalls ~= nil then
                 exports["lb-phone"]:ToggleCompanyCalls(priorNativeCompanyCalls)
                 priorNativeCompanyCalls = nil
-            elseif isBootstrap and not hasSyncedOnce then
-                -- Nothing to restore on the very first sync - most likely a
-                -- fresh client state (a services-plus restart while Busy
-                -- left the native toggle off with no memory of what it was
-                -- before). Rather than leave calls silently stuck off
-                -- forever, resync to the straightforward default once.
-                exports["lb-phone"]:ToggleCompanyCalls(true)
             end
+            -- Nothing captured to restore (e.g. fresh client state after a
+            -- restart while Busy) - deliberately left alone rather than
+            -- guessing `true` (plan review round 4 §7). An earlier version
+            -- forced it on once per bootstrap to self-heal that exact case,
+            -- but that just re-introduced the original bug: a player who'd
+            -- deliberately left native company calls off, then opened
+            -- Services+ available+on-duty after a restart, got them
+            -- silently switched back on. Worth knowing: this does mean a
+            -- restart mid-Busy can leave calls off until the next real
+            -- Busy/Pause/off-duty -> Available transition.
         elseif priorNativeCompanyCalls == nil then
             priorNativeCompanyCalls = exports["lb-phone"]:GetCompanyCallsStatus()
             exports["lb-phone"]:ToggleCompanyCalls(false)
         end
     end)
-
-    if isBootstrap then hasSyncedOnce = true end
 end
 
 RegisterNUICallback("bootstrap", function(_, cb)
     local result = bridge("bootstrap")
-    if result and result.employee then syncNativeCompanyCalls(result.employee, true) end
+    if result and result.employee then syncNativeCompanyCalls(result.employee) end
     cb(result)
 end)
 

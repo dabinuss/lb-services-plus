@@ -63,6 +63,13 @@ end)
 -- client can decide whether to sync lb-phone's own native company-call
 -- toggle (plan review round 2 §3 - see client/main.lua).
 RegisterCallback("setStatus", function(source, reply, status)
+    -- Only ever touches this player's own in-memory status (plan review
+    -- round 4 §11: low severity, no other player/company data at stake),
+    -- but there's no reason a non-employee should be able to call this at
+    -- all - matches the same guard toggleDuty already has.
+    local job = Framework.GetJob(source)
+    if not job or not Companies.GetByJob(job.name) then return reply(false) end
+
     if not Employees.SetStatus(source, status) then return reply(false) end
 
     reply({ ok = true, onDuty = Framework.GetOnDuty(source), status = status })
@@ -271,6 +278,14 @@ RegisterCallback("openConversation", function(source, reply, numberId, page)
     local company = Companies.GetById(number.company_id)
     if not company or company.messages_enabled ~= 1 then return reply(false) end
 
+    -- Config.MessageOffline actually did nothing here before - true or
+    -- false made no difference to this callback (plan review round 4 §6).
+    -- Only gates the customer side; an employee reopening their own
+    -- company's inbox obviously isn't affected by their own availability.
+    if not Config.MessageOffline and not Companies.IsAvailable(company.id) then
+        return reply(false)
+    end
+
     local contactNumber = Framework.GetPhoneNumber(source)
     if not contactNumber then return reply(false) end
 
@@ -278,11 +293,15 @@ RegisterCallback("openConversation", function(source, reply, numberId, page)
     if not channel then return reply(false) end
 
     local messages = MySQL.query.await(
-        "SELECT id, sender, content, created_at FROM phone_services_plus_messages WHERE channel_id = ? ORDER BY created_at DESC, id DESC LIMIT ?, ?",
+        "SELECT id, sender, sender_type, content, created_at FROM phone_services_plus_messages WHERE channel_id = ? ORDER BY created_at DESC, id DESC LIMIT ?, ?",
         { channel.id, ClampPage(page) * Config.PageSize.messages, Config.PageSize.messages }
     )
 
-    reply({ channelId = channel.id, contactNumber = contactNumber, messages = messages or {} })
+    -- Always the customer here - a fresh/reopened conversation only ever
+    -- starts from openConversation(numberId) on the customer's own side,
+    -- the employee-side equivalent is getMessages(channelId) below (plan
+    -- review round 4 §3).
+    reply({ channelId = channel.id, contactNumber = contactNumber, viewerRole = "customer", messages = messages or {} })
 end)
 
 RegisterCallback("sendMessage", function(source, reply, channelId, content)
@@ -309,16 +328,39 @@ RegisterCallback("sendMessage", function(source, reply, channelId, content)
         if not job or job.name ~= company.job then
             return reply(false)
         end
+    elseif not Config.MessageOffline and not Companies.IsAvailable(company.id) then
+        -- Same rule as openConversation (plan review round 4 §6) - only
+        -- gates the customer sending in, not an employee replying.
+        return reply(false)
     end
 
+    -- The customer's own personal number used to be the only signal the UI
+    -- had for "which side is this message from" - broke as soon as a
+    -- *different* employee than the sender opened the same company chat,
+    -- and needlessly exposed the sending employee's private number to
+    -- every other client in that chat (plan review round 4 §3). sender is
+    -- kept for logging/debugging, sender_type is what the UI actually uses.
+    local senderType = isEmployee and "company" or "customer"
+
     local messageId = MySQL.insert.await(
-        "INSERT INTO phone_services_plus_messages (channel_id, sender, content) VALUES (?, ?, ?)",
-        { channelId, senderNumber, content }
+        "INSERT INTO phone_services_plus_messages (channel_id, sender, sender_type, content) VALUES (?, ?, ?, ?)",
+        { channelId, senderNumber, senderType, content }
     )
 
-    MySQL.update("UPDATE phone_services_plus_channels SET last_message = ? WHERE id = ?", { content:sub(1, 100), channelId })
+    -- A new message un-archives the chat on both sides (plan review round
+    -- 4 §2) - otherwise a chat either side archived stays invisible in
+    -- their own inbox/Activity forever, even though the other side keeps
+    -- writing into it and gets a normal-looking notification each time.
+    MySQL.update(
+        "UPDATE phone_services_plus_channels SET last_message = ?, archived_by_contact = 0, archived_by_company = 0 WHERE id = ?",
+        { content:sub(1, 100), channelId }
+    )
 
-    local payload = { channelId = channelId, id = messageId, sender = senderNumber, content = content }
+    -- sender_type (snake_case) matches the raw column name the SQL SELECTs
+    -- above return - this payload and those rows land in the same client-
+    -- side `messages` array and are read the same way, so the field name
+    -- has to match either way it arrived.
+    local payload = { channelId = channelId, id = messageId, sender = senderNumber, sender_type = senderType, content = content }
 
     -- Push straight into an already-open conversation (plan review §15).
     -- SendCustomAppMessage only exists as a CLIENT export (it targets the
@@ -371,11 +413,18 @@ RegisterCallback("getMessages", function(source, reply, channelId, page)
     if not owns then return reply(false) end
 
     local messages = MySQL.query.await(
-        "SELECT id, sender, content, created_at FROM phone_services_plus_messages WHERE channel_id = ? ORDER BY created_at DESC, id DESC LIMIT ?, ?",
+        "SELECT id, sender, sender_type, content, created_at FROM phone_services_plus_messages WHERE channel_id = ? ORDER BY created_at DESC, id DESC LIMIT ?, ?",
         { channelId, ClampPage(page) * Config.PageSize.messages, Config.PageSize.messages }
     )
 
-    reply({ channelId = channelId, contactNumber = channel.contact_number, messages = messages or {} })
+    -- Whichever side reopened this (customer's own Activity vs an
+    -- employee's company inbox) needs to know which sender_type is "mine" -
+    -- comparing raw phone numbers broke as soon as a *different* employee
+    -- than the one who actually sent it opened the same company chat (plan
+    -- review round 4 §3).
+    local viewerRole = myNum == channel.contact_number and "customer" or "employee"
+
+    reply({ channelId = channelId, contactNumber = channel.contact_number, viewerRole = viewerRole, messages = messages or {} })
 end)
 
 -- ---------------------------------------------------------------------------

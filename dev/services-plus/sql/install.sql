@@ -88,6 +88,11 @@ CREATE TABLE IF NOT EXISTS `phone_services_plus_messages` (
     `channel_id` INT UNSIGNED NOT NULL,
 
     `sender` VARCHAR(15) NOT NULL,
+    -- Which *side* sent this - the UI aligns chat bubbles by this, not by
+    -- comparing `sender` against the viewer's own number (that only ever
+    -- worked for the one employee who actually sent it, plan review round
+    -- 4 §3). `sender` itself is kept for logging/debugging only.
+    `sender_type` ENUM('customer', 'company') NOT NULL DEFAULT 'customer',
     `content` VARCHAR(1000) NOT NULL,
     `pos_x` FLOAT DEFAULT NULL,
     `pos_y` FLOAT DEFAULT NULL,
@@ -222,8 +227,15 @@ DELETE dup FROM `phone_services_plus_channels` dup
         AND keep.contact_number = dup.contact_number
         AND keep.id < dup.id;
 
+-- `number_contact` itself is NOT added here (plan review round 4 §10) - the
+-- fresh CREATE TABLE above already declares it directly, so adding it again
+-- here is both redundant for any install using this version of the file
+-- and, worse, plain MySQL doesn't support "ADD ... IF NOT EXISTS" for
+-- keys/indexes at all (syntax error, not a harmless no-op like on MariaDB)
+-- - a fresh install would fail outright on this line despite genuinely
+-- needing nothing done. Installs that upgraded through an earlier version
+-- of this file already picked it up from *that* run of this exact line.
 ALTER TABLE `phone_services_plus_channels`
-    ADD UNIQUE KEY IF NOT EXISTS `number_contact` (`number_id`, `contact_number`),
     ADD INDEX IF NOT EXISTS `contact_archived_updated` (`contact_number`, `archived_by_contact`, `updated_at`),
     ADD INDEX IF NOT EXISTS `number_archived_updated` (`number_id`, `archived_by_company`, `updated_at`);
 
@@ -246,3 +258,17 @@ ALTER TABLE `phone_services_plus_requests`
 -- ---------------------------------------------------------------------------
 ALTER TABLE `phone_services_plus_request_types`
     ADD COLUMN IF NOT EXISTS `enabled` TINYINT(1) NOT NULL DEFAULT 1 AFTER `competition_enabled`;
+
+-- ---------------------------------------------------------------------------
+-- Round 4 review migration. Safe to re-run.
+-- ---------------------------------------------------------------------------
+ALTER TABLE `phone_services_plus_messages`
+    ADD COLUMN IF NOT EXISTS `sender_type` ENUM('customer', 'company') NOT NULL DEFAULT 'customer' AFTER `sender`;
+
+-- Backfill existing rows for installs that had messages before sender_type
+-- existed - anything not sent by the channel's own contact number was sent
+-- by the company side.
+UPDATE `phone_services_plus_messages` m
+    JOIN `phone_services_plus_channels` c ON c.id = m.channel_id
+SET m.sender_type = 'company'
+WHERE m.sender <> c.contact_number;

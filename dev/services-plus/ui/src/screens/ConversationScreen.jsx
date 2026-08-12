@@ -1,24 +1,44 @@
 import { useEffect, useRef, useState } from 'react'
 import { fetchNui } from '../lib/nui.js'
 
+// Mirrors Config.PageSize.messages in shared/config.lua - a page shorter
+// than this means there's nothing older left to load (plan review round 4 §5).
+const PAGE_SIZE = 25
+
 // Full-screen chat, opened either from a company's Message button
 // (numberId, no channel yet) or by reopening an Activity entry (channelId
 // already known). Behaviour intentionally mirrors native LB-Phone messaging
 // (plan §37).
-export default function ConversationScreen({ target, myNumber, incoming, onClose }) {
+export default function ConversationScreen({ target, incoming, onClose }) {
   const [channelId, setChannelId] = useState(target.channelId ?? null)
   const [messages, setMessages] = useState(null)
   const [text, setText] = useState('')
+  const [hasOlder, setHasOlder] = useState(false)
+  const [loadingOlder, setLoadingOlder] = useState(false)
+  // 'customer' or 'employee' - which sender_type this viewer's own messages
+  // carry. The server decides this (it already knows which side `source`
+  // is), not a raw phone-number comparison - that broke as soon as a
+  // *different* employee than the sender opened the same company chat
+  // (plan review round 4 §3).
+  const [viewerRole, setViewerRole] = useState(target.viewerRole || null)
   const listRef = useRef(null)
+  const pageRef = useRef(0)
+  // Prepending older messages must not trigger the scroll-to-bottom effect
+  // below (that's only for "a new message just arrived") - this flag tells
+  // that effect to instead restore the pre-prepend scroll offset.
+  const prependRef = useRef(false)
 
   useEffect(() => {
     const action = target.channelId ? 'getMessages' : 'openConversation'
     const payload = target.channelId ? { channelId: target.channelId } : { numberId: target.numberId }
 
+    pageRef.current = 0
     fetchNui(action, payload).then((result) => {
       if (!result) return
       setChannelId(result.channelId)
+      setViewerRole(result.viewerRole)
       setMessages([...result.messages].reverse())
+      setHasOlder(result.messages.length === PAGE_SIZE)
     })
   }, [target])
 
@@ -34,8 +54,51 @@ export default function ConversationScreen({ target, myNumber, incoming, onClose
   }, [incoming])
 
   useEffect(() => {
-    listRef.current?.scrollTo({ top: listRef.current.scrollHeight })
+    const el = listRef.current
+    if (!el) return
+
+    if (prependRef.current) {
+      // Keep whatever was on screen in place instead of jumping - only the
+      // scroll *offset* changed (more content above), not what the user
+      // was looking at.
+      prependRef.current = false
+    } else {
+      el.scrollTo({ top: el.scrollHeight })
+    }
   }, [messages])
+
+  // Backend pagination already existed for getMessages, but nothing here
+  // ever asked for page > 0 - everything before the most recent 25 messages
+  // was simply unreachable (plan review round 4 §5). Loading older on
+  // scroll-to-top mirrors how the rest of the app's lists got "Load more".
+  const loadOlder = async () => {
+    if (!channelId || loadingOlder || !hasOlder) return
+
+    setLoadingOlder(true)
+    const nextPage = pageRef.current + 1
+    const result = await fetchNui('getMessages', { channelId, page: nextPage })
+    setLoadingOlder(false)
+    if (!result) return
+
+    const older = [...result.messages].reverse()
+    const el = listRef.current
+    const prevScrollHeight = el?.scrollHeight || 0
+
+    prependRef.current = true
+    pageRef.current = nextPage
+    setHasOlder(result.messages.length === PAGE_SIZE)
+    setMessages((prev) => [...older, ...(prev || [])])
+
+    // Restore scroll position once the prepended messages have actually
+    // been laid out - a plain synchronous assignment races the render.
+    requestAnimationFrame(() => {
+      if (el) el.scrollTop = el.scrollHeight - prevScrollHeight
+    })
+  }
+
+  const onScroll = (e) => {
+    if (e.target.scrollTop < 60) loadOlder()
+  }
 
   const send = async () => {
     const content = text.trim()
@@ -56,13 +119,17 @@ export default function ConversationScreen({ target, myNumber, incoming, onClose
         <div className="conversation-title">{target.title}</div>
       </div>
 
-      <div className="conversation-messages" ref={listRef}>
+      <div className="conversation-messages" ref={listRef} onScroll={onScroll}>
         {messages === null && <div className="empty-state">Loading…</div>}
-        {messages?.map((m) => (
-          <div key={m.id} className={`bubble ${m.sender === myNumber ? 'mine' : 'theirs'}`}>
-            {m.content}
-          </div>
-        ))}
+        {loadingOlder && <div className="empty-state">Loading older messages…</div>}
+        {messages?.map((m) => {
+          const mine = viewerRole === 'employee' ? m.sender_type === 'company' : m.sender_type === 'customer'
+          return (
+            <div key={m.id} className={`bubble ${mine ? 'mine' : 'theirs'}`}>
+              {m.content}
+            </div>
+          )
+        })}
       </div>
 
       <div className="conversation-input">

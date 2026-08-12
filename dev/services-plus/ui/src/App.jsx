@@ -145,7 +145,6 @@ export default function App() {
       {conversation && (
         <ConversationScreen
           target={conversation}
-          myNumber={bootstrap?.myNumber}
           incoming={incomingMessage}
           onClose={() => setConversation(null)}
         />

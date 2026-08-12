@@ -39,13 +39,27 @@ export default function DashboardHome({ initialOnDuty, initialStatus, employeeNa
 
     if (next) {
       setOnDuty(true)
+      // The mount-time getTeam() fetch may predate this player actually
+      // being on duty (logged in while off, then flipped on) - refetch so
+      // their own row (and anyone else who joined meanwhile) is accurate
+      // instead of stale from before they existed in it.
+      fetchNui('getTeam').then((result) => result && setTeam(result))
     } else {
       onLogout()
     }
   }
 
+  // Own status/hotline changes only ever patched `status`/`hotlines` state,
+  // never the already-loaded `team` list's own row for this player - it
+  // could show "available" underneath while "Busy" was selected right
+  // above (plan review round 4 §8). No polling/new event system for
+  // colleagues' changes per review guidance - just keep this player's own
+  // row in sync locally, the same data already in hand either way.
   const changeStatus = async (next) => {
-    if (await fetchNui('setStatus', { status: next })) setStatus(next)
+    if (await fetchNui('setStatus', { status: next })) {
+      setStatus(next)
+      setTeam((prev) => prev?.map((m) => (m.name === employeeName ? { ...m, status: next } : m)))
+    }
   }
 
   const toggleHotline = async (line) => {
@@ -53,6 +67,8 @@ export default function DashboardHome({ initialOnDuty, initialStatus, employeeNa
     if (result?.ok) {
       setHotlines(result.hotlines)
       setNotice('')
+      const activeLabels = result.hotlines.filter((h) => h.active).map((h) => h.label)
+      setTeam((prev) => prev?.map((m) => (m.name === employeeName ? { ...m, hotlines: activeLabels } : m)))
     } else if (result?.reason === 'sole_employee') {
       setNotice("Main hotline stays on while you're the only one on duty.")
     }

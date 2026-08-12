@@ -48,4 +48,5 @@ files {
 
 dependencies {
     'lb-phone',
+    'oxmysql', -- server_scripts pulls in @oxmysql/lib/MySQL.lua directly (plan review round 4 §10)
 }
