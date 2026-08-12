@@ -4,29 +4,96 @@ import Sheet from '../../components/Sheet.jsx'
 import ConfirmButton from '../../components/ConfirmButton.jsx'
 import Switch from '../../components/Switch.jsx'
 
-const EMPTY = { job: '', name: '', categoryId: '', icon: '', background: '', bossGrade: 100, mainNumber: '' }
+const EMPTY_FORM = { job: '', name: '', categoryId: '', icon: '', background: '', bossGrade: 100, mainNumber: '', enabled: true }
 
+// One compact tile instead of a full-width row - three of these side by
+// side fit on one line instead of stacking three separate rows just for
+// three toggles.
 function CeilingToggle({ label, allowed, onToggle }) {
   return (
-    <div className="hotline-row">
+    <div className="ceiling-item">
       <span>{label}</span>
       <Switch checked={allowed} onChange={onToggle} />
     </div>
   )
 }
 
-function CompanyRow({ company, categories, onChanged, onEdit }) {
-  const [expanded, setExpanded] = useState(false)
+// Company CRUD, numbers, feature ceilings and boss assignment (plan §51-53,
+// §56-57). One Edit button, one Sheet with everything about that company in
+// it (plan review round 6 §3) - this used to be split across a separate
+// click-to-expand row (ceilings/numbers/leader) *and* the Edit button's own
+// Sheet (name/icon/etc.), two different "edit"-shaped surfaces for the same
+// company that stayed confusing even after the first pass just added a
+// dedicated chevron button for the expand side. Now there's exactly one:
+// Edit opens the Sheet, everything editable about that company lives in it.
+export default function CompaniesTab() {
+  const [companies, setCompanies] = useState(null)
+  const [categories, setCategories] = useState([])
+  const [editingId, setEditingId] = useState(null) // company id, 'new', or null (Sheet closed)
+  const [form, setForm] = useState(null) // draft identity fields, meaningful only while editingId is set
   const [playerId, setPlayerId] = useState('')
   const [newNumber, setNewNumber] = useState({ label: '', number: '' })
   // { id, label, number } of whichever number row is currently being
-  // edited, or null - includes the main number (plan review round 6 §1),
-  // there used to be no way to fix a typo'd label/number on an existing
-  // entry at all, main number least of all since that one can't be deleted
-  // and recreated the way a secondary one could.
+  // renamed inline, or null - includes the main number, which can be
+  // relabeled/renumbered but never deleted.
   const [editingNumber, setEditingNumber] = useState(null)
 
-  const categoryName = categories.find((c) => c.id === company.category_id)?.name || 'Uncategorized'
+  const load = () => fetchNui('admin:getCompanies').then((r) => r && setCompanies(r))
+
+  useEffect(() => {
+    load()
+    fetchNui('admin:getCategories').then((r) => r && setCategories(r))
+  }, [])
+
+  // Always read live from `companies` (refreshed via load() after every
+  // mutation below) rather than a stale snapshot captured when the Sheet
+  // opened - so toggling a ceiling or adding a number reflects immediately
+  // without needing its own separate refresh/resync logic.
+  const company = editingId && editingId !== 'new' ? companies?.find((c) => c.id === editingId) : null
+  const categoryName = (id) => categories.find((c) => c.id === id)?.name || 'Uncategorized'
+
+  const openNew = () => {
+    setEditingId('new')
+    setForm({ ...EMPTY_FORM })
+  }
+
+  const openEdit = (c) => {
+    setEditingId(c.id)
+    setForm({
+      name: c.name, categoryId: c.category_id || '', icon: c.icon || '',
+      background: c.background || '', bossGrade: c.boss_grade, enabled: c.enabled === 1,
+    })
+    setPlayerId('')
+    setEditingNumber(null)
+    setNewNumber({ label: '', number: '' })
+  }
+
+  const closeSheet = () => {
+    setEditingId(null)
+    setForm(null)
+  }
+
+  const save = async () => {
+    if (editingId === 'new') {
+      const result = await fetchNui('admin:createCompany', { ...form, categoryId: form.categoryId || null })
+      if (result) {
+        closeSheet()
+        load()
+      }
+    } else {
+      const ok = await fetchNui('admin:updateCompany', { id: editingId, ...form, categoryId: form.categoryId || null })
+      if (ok) {
+        closeSheet()
+        load()
+      }
+    }
+  }
+
+  // Soft-delete only server-side - this disables the company instead of
+  // removing it, so its message/call history survives.
+  const disableCompany = async (id) => {
+    if (await fetchNui('admin:deleteCompany', { id })) load()
+  }
 
   const setCeiling = async (patch) => {
     await fetchNui('admin:setCompanyCeiling', {
@@ -36,7 +103,7 @@ function CompanyRow({ company, categories, onChanged, onEdit }) {
       requestsAllowed: company.admin_requests_allowed === 1,
       ...patch,
     })
-    onChanged()
+    load()
   }
 
   const assignBoss = async () => {
@@ -52,170 +119,33 @@ function CompanyRow({ company, categories, onChanged, onEdit }) {
     })
     if (ok) {
       setNewNumber({ label: '', number: '' })
-      onChanged()
+      load()
     }
   }
 
-  // Soft-delete only server-side (plan review round 5 §1) - same reasoning
-  // as disableCompany below, keeps that number's chat/call history intact.
+  // Soft-delete only server-side - keeps that number's chat/call history intact.
   const deleteNumber = async (id) => {
-    if (await fetchNui('admin:deleteNumber', { id })) onChanged()
+    if (await fetchNui('admin:deleteNumber', { id })) load()
   }
 
   const enableNumber = async (id) => {
-    if (await fetchNui('admin:enableNumber', { id })) onChanged()
+    if (await fetchNui('admin:enableNumber', { id })) load()
   }
 
-  // Server re-checks uniqueness itself (plan review round 6 §2) - this is
-  // just so a plain typo/duplicate doesn't round-trip for nothing.
+  // Server re-checks uniqueness itself - this is just so a plain
+  // typo/duplicate doesn't round-trip for nothing.
   const saveNumber = async () => {
     if (!editingNumber.label || !editingNumber.number) return
     const ok = await fetchNui('admin:updateNumber', editingNumber)
     if (ok) {
       setEditingNumber(null)
-      onChanged()
-    }
-  }
-
-  // Soft-delete only server-side (plan review round 4 §9) - this disables
-  // the company instead of removing it, so its message/call history survives.
-  const disableCompany = async () => {
-    if (await fetchNui('admin:deleteCompany', { id: company.id })) onChanged()
-  }
-
-  return (
-    <div className="admin-row-block">
-      <div className="admin-row" onClick={() => setExpanded(!expanded)}>
-        <div className="admin-row-info">
-          <div className="admin-row-title">{company.name}</div>
-          <div className="admin-row-meta">
-            {company.job} · {categoryName} · {company.enabled ? 'enabled' : 'disabled'}
-          </div>
-        </div>
-        <div className="admin-row-actions">
-          <button
-            className="request-action complete"
-            onClick={(e) => {
-              e.stopPropagation()
-              onEdit(company)
-            }}
-          >
-            Edit
-          </button>
-          {company.enabled === 1 && <ConfirmButton onConfirm={disableCompany}>Disable</ConfirmButton>}
-        </div>
-      </div>
-
-      {expanded && (
-        <div className="admin-detail">
-          <div className="section-title">Feature ceiling</div>
-          <CeilingToggle label="Calls" allowed={company.admin_calls_allowed === 1} onToggle={() => setCeiling({ callsAllowed: company.admin_calls_allowed !== 1 })} />
-          <CeilingToggle label="Messages" allowed={company.admin_messages_allowed === 1} onToggle={() => setCeiling({ messagesAllowed: company.admin_messages_allowed !== 1 })} />
-          <CeilingToggle label="Requests" allowed={company.admin_requests_allowed === 1} onToggle={() => setCeiling({ requestsAllowed: company.admin_requests_allowed !== 1 })} />
-
-          <div className="section-title">Phone numbers</div>
-          {company.numbers.map((n) =>
-            editingNumber?.id === n.id ? (
-              <div key={n.id} className="admin-inline-form">
-                <input
-                  className="search-input"
-                  placeholder="Label"
-                  value={editingNumber.label}
-                  onChange={(e) => setEditingNumber({ ...editingNumber, label: e.target.value })}
-                />
-                <input
-                  className="search-input"
-                  placeholder="Number"
-                  value={editingNumber.number}
-                  onChange={(e) => setEditingNumber({ ...editingNumber, number: e.target.value })}
-                />
-                <button className="request-action accept" onClick={saveNumber}>
-                  Save
-                </button>
-                <button className="icon-button subtle" onClick={() => setEditingNumber(null)}>
-                  ✕
-                </button>
-              </div>
-            ) : (
-              <div key={n.id} className="number-row">
-                <div className="dashboard-label">
-                  {n.label} <span className="hint">{n.number}</span> {n.is_main === 1 && <span className="hint">(main)</span>}
-                  {n.enabled !== 1 && <span className="hint"> (disabled)</span>}
-                </div>
-                <div className="admin-row-actions">
-                  <button
-                    className="request-action complete"
-                    onClick={() => setEditingNumber({ id: n.id, label: n.label, number: n.number })}
-                  >
-                    Edit
-                  </button>
-                  {n.is_main !== 1 &&
-                    (n.enabled === 1 ? (
-                      <ConfirmButton className="icon-button subtle" onConfirm={() => deleteNumber(n.id)}>
-                        ✕
-                      </ConfirmButton>
-                    ) : (
-                      <button className="request-action complete" onClick={() => enableNumber(n.id)}>
-                        Re-enable
-                      </button>
-                    ))}
-                </div>
-              </div>
-            ),
-          )}
-          <div className="admin-inline-form">
-            <input className="search-input" placeholder="Label" value={newNumber.label} onChange={(e) => setNewNumber({ ...newNumber, label: e.target.value })} />
-            <input className="search-input" placeholder="Number" value={newNumber.number} onChange={(e) => setNewNumber({ ...newNumber, number: e.target.value })} />
-            <button className="request-action accept" onClick={addNumber}>
-              Add
-            </button>
-          </div>
-
-          <div className="section-title">Company leader</div>
-          <div className="admin-inline-form">
-            <input className="search-input" placeholder="Player ID" value={playerId} onChange={(e) => setPlayerId(e.target.value)} />
-            <button className="request-action accept" onClick={assignBoss}>
-              Make leader
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-// Company CRUD, numbers, feature ceilings and boss assignment (plan §51-53, §56-57).
-export default function CompaniesTab() {
-  const [companies, setCompanies] = useState(null)
-  const [categories, setCategories] = useState([])
-  const [editing, setEditing] = useState(null)
-
-  const load = () => fetchNui('admin:getCompanies').then((r) => r && setCompanies(r))
-
-  useEffect(() => {
-    load()
-    fetchNui('admin:getCategories').then((r) => r && setCategories(r))
-  }, [])
-
-  const save = async () => {
-    if (editing.id) {
-      const ok = await fetchNui('admin:updateCompany', { ...editing, categoryId: editing.categoryId || null })
-      if (ok) {
-        setEditing(null)
-        load()
-      }
-    } else {
-      const result = await fetchNui('admin:createCompany', { ...editing, categoryId: editing.categoryId || null })
-      if (result) {
-        setEditing(null)
-        load()
-      }
+      load()
     }
   }
 
   return (
     <div className="tab-panel">
-      <button className="login-button" onClick={() => setEditing({ ...EMPTY })}>
+      <button className="login-button" onClick={openNew}>
         + New company
       </button>
 
@@ -223,42 +153,43 @@ export default function CompaniesTab() {
 
       <div className="admin-list">
         {companies?.map((c) => (
-          <CompanyRow
-            key={c.id}
-            company={c}
-            categories={categories}
-            onChanged={load}
-            onEdit={(company) =>
-              setEditing({
-                id: company.id, job: company.job, name: company.name, categoryId: company.category_id || '',
-                icon: company.icon || '', background: company.background || '', bossGrade: company.boss_grade,
-                enabled: company.enabled === 1,
-              })
-            }
-          />
+          <div key={c.id} className="admin-row">
+            <div className="admin-row-info">
+              <div className="admin-row-title">{c.name}</div>
+              <div className="admin-row-meta">
+                {c.job} · {categoryName(c.category_id)} · {c.enabled ? 'enabled' : 'disabled'}
+              </div>
+            </div>
+            <div className="admin-row-actions">
+              <button className="request-action complete" onClick={() => openEdit(c)}>
+                Edit
+              </button>
+              {c.enabled === 1 && <ConfirmButton onConfirm={() => disableCompany(c.id)}>Disable</ConfirmButton>}
+            </div>
+          </div>
         ))}
       </div>
 
-      {editing && (
-        <Sheet title={editing.id ? 'Edit company' : 'New company'} onClose={() => setEditing(null)}>
-          {!editing.id && (
+      {editingId && form && (
+        <Sheet title={editingId === 'new' ? 'New company' : 'Edit company'} onClose={closeSheet}>
+          {editingId === 'new' && (
             <input
               className="search-input"
               placeholder="Framework job"
-              value={editing.job}
-              onChange={(e) => setEditing({ ...editing, job: e.target.value })}
+              value={form.job}
+              onChange={(e) => setForm({ ...form, job: e.target.value })}
             />
           )}
           <input
             className="search-input"
             placeholder="Name"
-            value={editing.name}
-            onChange={(e) => setEditing({ ...editing, name: e.target.value })}
+            value={form.name}
+            onChange={(e) => setForm({ ...form, name: e.target.value })}
           />
           <select
             className="search-input"
-            value={editing.categoryId}
-            onChange={(e) => setEditing({ ...editing, categoryId: e.target.value ? Number(e.target.value) : '' })}
+            value={form.categoryId}
+            onChange={(e) => setForm({ ...form, categoryId: e.target.value ? Number(e.target.value) : '' })}
           >
             <option value="">No category</option>
             {categories.map((c) => (
@@ -270,39 +201,121 @@ export default function CompaniesTab() {
           <input
             className="search-input"
             placeholder="Icon URL"
-            value={editing.icon}
-            onChange={(e) => setEditing({ ...editing, icon: e.target.value })}
+            value={form.icon}
+            onChange={(e) => setForm({ ...form, icon: e.target.value })}
           />
           <input
             className="search-input"
             placeholder="Background image URL (optional)"
-            value={editing.background}
-            onChange={(e) => setEditing({ ...editing, background: e.target.value })}
+            value={form.background}
+            onChange={(e) => setForm({ ...form, background: e.target.value })}
           />
           <input
             className="search-input"
             type="number"
             placeholder="Boss grade (standalone only)"
-            value={editing.bossGrade}
-            onChange={(e) => setEditing({ ...editing, bossGrade: Number(e.target.value) })}
+            value={form.bossGrade}
+            onChange={(e) => setForm({ ...form, bossGrade: Number(e.target.value) })}
           />
-          {!editing.id && (
+          {editingId === 'new' && (
             <input
               className="search-input"
               placeholder="Main phone number"
-              value={editing.mainNumber}
-              onChange={(e) => setEditing({ ...editing, mainNumber: e.target.value })}
+              value={form.mainNumber}
+              onChange={(e) => setForm({ ...form, mainNumber: e.target.value })}
             />
           )}
-          {editing.id && (
+          {editingId !== 'new' && (
             <div className="hotline-row">
               <span>Enabled</span>
-              <Switch checked={editing.enabled} onChange={(next) => setEditing({ ...editing, enabled: next })} />
+              <Switch checked={form.enabled} onChange={(next) => setForm({ ...form, enabled: next })} />
             </div>
           )}
           <button className="login-button" onClick={save}>
             Save
           </button>
+
+          {/* Everything below needs a real company id, so it only shows up
+              once one exists - not for a brand new company still being
+              created above. Unlike the identity fields above, these apply
+              immediately on their own (no separate Save) - same as they
+              always have. */}
+          {company && (
+            <div className="sheet-section">
+              <div className="section-title">Feature ceiling</div>
+              <div className="ceiling-row">
+                <CeilingToggle label="Calls" allowed={company.admin_calls_allowed === 1} onToggle={() => setCeiling({ callsAllowed: company.admin_calls_allowed !== 1 })} />
+                <CeilingToggle label="Messages" allowed={company.admin_messages_allowed === 1} onToggle={() => setCeiling({ messagesAllowed: company.admin_messages_allowed !== 1 })} />
+                <CeilingToggle label="Requests" allowed={company.admin_requests_allowed === 1} onToggle={() => setCeiling({ requestsAllowed: company.admin_requests_allowed !== 1 })} />
+              </div>
+
+              <div className="section-title">Phone numbers</div>
+              {company.numbers.map((n) =>
+                editingNumber?.id === n.id ? (
+                  <div key={n.id} className="admin-inline-form">
+                    <input
+                      className="search-input"
+                      placeholder="Label"
+                      value={editingNumber.label}
+                      onChange={(e) => setEditingNumber({ ...editingNumber, label: e.target.value })}
+                    />
+                    <input
+                      className="search-input"
+                      placeholder="Number"
+                      value={editingNumber.number}
+                      onChange={(e) => setEditingNumber({ ...editingNumber, number: e.target.value })}
+                    />
+                    <button className="request-action accept" onClick={saveNumber}>
+                      Save
+                    </button>
+                    <button className="icon-button subtle" onClick={() => setEditingNumber(null)}>
+                      ✕
+                    </button>
+                  </div>
+                ) : (
+                  <div key={n.id} className="hotline-row">
+                    <span>
+                      {n.label} <span className="hint">{n.number}</span> {n.is_main === 1 && <span className="hint">(main)</span>}
+                      {n.enabled !== 1 && <span className="hint"> (disabled)</span>}
+                    </span>
+                    <div className="admin-row-actions">
+                      <button
+                        className="request-action complete"
+                        onClick={() => setEditingNumber({ id: n.id, label: n.label, number: n.number })}
+                      >
+                        Edit
+                      </button>
+                      {n.is_main !== 1 &&
+                        (n.enabled === 1 ? (
+                          <ConfirmButton className="icon-button subtle" onConfirm={() => deleteNumber(n.id)}>
+                            ✕
+                          </ConfirmButton>
+                        ) : (
+                          <button className="request-action complete" onClick={() => enableNumber(n.id)}>
+                            Re-enable
+                          </button>
+                        ))}
+                    </div>
+                  </div>
+                ),
+              )}
+              <div className="admin-inline-form">
+                <input className="search-input" placeholder="Label" value={newNumber.label} onChange={(e) => setNewNumber({ ...newNumber, label: e.target.value })} />
+                <input className="search-input" placeholder="Number" value={newNumber.number} onChange={(e) => setNewNumber({ ...newNumber, number: e.target.value })} />
+                <button className="request-action accept" onClick={addNumber}>
+                  Add
+                </button>
+              </div>
+
+              <div className="section-title">Company leader</div>
+              <div className="admin-inline-form">
+                <input className="search-input" placeholder="Player ID" value={playerId} onChange={(e) => setPlayerId(e.target.value)} />
+                <button className="request-action accept" onClick={assignBoss}>
+                  Make leader
+                </button>
+              </div>
+            </div>
+          )}
         </Sheet>
       )}
     </div>

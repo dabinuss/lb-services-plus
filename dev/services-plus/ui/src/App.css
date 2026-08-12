@@ -857,12 +857,40 @@
 
 .sheet {
   width: 100%;
+  /* The company Sheet in particular now holds everything about that
+     company in one place - identity fields plus feature ceilings, phone
+     numbers and boss assignment (plan review round 6 §3) - tall enough on
+     a company with several numbers that it needs to scroll internally
+     rather than push its own Cancel button off the bottom of the phone.
+     `%`, not `vh` - in-game, the custom app's iframe can be sized to the
+     full game screen while .app itself is only ever the actual phone-frame
+     size within it (lb-phone positions/clips the visible "phone" itself),
+     so `vh` measures the wrong box entirely: the sheet just grows past
+     .app's own bottom edge and gets silently clipped by .app's own
+     `overflow: hidden` before overflow-y:auto here ever gets a chance to
+     matter. .sheet-overlay's `inset: 0` gives it a definite (not auto)
+     height equal to .app's real height, so `%` here measures that instead. */
+  max-height: 90%;
+  overflow-y: auto;
   background: var(--sp-bg-secondary);
   border-radius: 1.1rem 1.1rem 0 0;
   padding: 0.9rem 1rem calc(0.9rem + env(safe-area-inset-bottom, 0px));
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+}
+
+/* Visually separates the "draft, needs Save" identity fields above from
+   the operational settings below that apply immediately on their own
+   (ceilings/numbers/leader) - same border-top-divider language as
+   .admin-detail used before this was folded into the Sheet. */
+.sheet-section {
+  border-top: 1px solid var(--sp-separator);
+  padding-top: 0.5rem;
+  margin-top: 0.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
 }
 
 .sheet-title {
@@ -979,7 +1007,16 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  position: relative;
+  /* Deliberately NOT position:relative - a Sheet opened from inside a tab
+     (e.g. CompaniesTab's company editor) is a DOM descendant of this, and
+     .sheet-overlay's `position: absolute; inset: 0` needs to escape all
+     the way out to .app to cover the full screen. With this positioned,
+     it became the containing block instead: the overlay - and the modal
+     itself - got trapped inside this element's own (smaller, independently
+     scrollable) box instead of covering the header/tabs above it, so
+     anything past its clipped bottom edge was simply unreachable
+     ("verschwunden"), no matter how the Sheet's own internal scrolling was
+     set up (plan review round 6 §3 follow-up). */
   z-index: 1;
 }
 
@@ -1378,19 +1415,36 @@
   gap: 0.5rem;
 }
 
-.admin-row-block {
-  background: var(--sp-bg-secondary);
-  border-radius: 0.8rem;
-  overflow: hidden;
-  box-shadow: var(--shadow-md);
-}
-
 .admin-row {
   display: flex;
   align-items: center;
   gap: 0.6rem;
   padding: 0.6rem 0.8rem;
-  cursor: pointer;
+}
+
+/* Three toggles on one line instead of three stacked full-width rows
+   (plan review round 6 §3). */
+.ceiling-row {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.ceiling-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  background: var(--sp-bg-secondary);
+  border-radius: 0.6rem;
+  padding: 0.5rem 0.4rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.ceiling-item span {
+  font-size: 0.66rem;
+  font-weight: 600;
+  color: var(--sp-text-secondary);
 }
 
 .admin-row-icon {
