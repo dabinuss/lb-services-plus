@@ -248,10 +248,12 @@ local function distribute(company, requestType, request)
         eligible = { eligible[math.random(1, #eligible)] }
     end
 
+    local category = Companies.GetCategory(requestType.category_id)
     local payload = {
         requestId = request.id,
         typeName = requestType.name,
         typeIcon = requestType.icon,
+        category = category and category.key or nil,
         companyName = company.name,
         companyIcon = company.icon,
         passengerCount = request.passengerCount,
@@ -598,9 +600,12 @@ function Requests.Accept(source, requestId)
             content = ("%s is on the way."):format(requestType.name),
         })
 
+        local category = Companies.GetCategory(requestType.category_id)
         local activePayload = {
             requestId = requestId,
             typeName = requestType.name,
+            typeIcon = requestType.icon,
+            category = category and category.key or nil,
             companyName = company.name,
             companyIcon = company.icon,
             passengerCount = request.passenger_count,
@@ -672,6 +677,8 @@ local function toOverlayPayload(request)
     return {
         requestId = request.id,
         typeName = request.typeName,
+        typeIcon = request.type,
+        category = request.category,
         companyName = request.company and request.company.name or nil,
         companyIcon = request.company and request.company.icon or nil,
         passengerCount = request.passengerCount,

@@ -56,6 +56,15 @@ local function cleanKey(value)
     return key
 end
 
+local function cleanHttpsImage(value)
+    if value == nil then return nil end
+    if type(value) ~= "string" or #value > 255 or value:find("[%s%c]") then return nil, "invalid_image_url" end
+    if value:sub(1, 8):lower() ~= "https://" then return nil, "invalid_image_url" end
+    local authority = value:sub(9):match("^([^/%?#]+)")
+    if not authority or authority:find("@", 1, true) then return nil, "invalid_image_url" end
+    return value
+end
+
 local function validateDetails(details)
     if details == nil then return nil end
     if type(details) ~= "table" or #details > limits.maxDetails then return nil, "invalid_details" end
@@ -65,9 +74,11 @@ local function validateDetails(details)
         if type(row) ~= "table" then return nil, "invalid_detail" end
         local label, labelError = cleanText(row.label, limits.textLimits.actionLabel, true)
         local value, valueError = cleanText(row.value, limits.textLimits.subtitle, true)
+        local icon, iconError = cleanKey(row.icon)
         if not label then return nil, labelError end
         if not value then return nil, valueError end
-        result[index] = { label = label, value = value }
+        if iconError then return nil, iconError end
+        result[index] = { label = label, value = value, icon = icon }
     end
     return result
 end
@@ -164,6 +175,17 @@ local function normalizeSpec(spec, partial, owner)
             if value == nil and err then return nil, err end
             result[field] = value
         end
+    end
+
+    if spec.icon ~= nil or not partial then
+        local icon, err = cleanKey(spec.icon)
+        if err then return nil, err end
+        result.icon = icon
+    end
+    if spec.iconUrl ~= nil or not partial then
+        local iconUrl, err = cleanHttpsImage(spec.iconUrl)
+        if err then return nil, err end
+        result.iconUrl = iconUrl
     end
 
     if spec.state ~= nil or not partial then
@@ -298,6 +320,8 @@ local function publicCard(card)
         title = card.title,
         subtitle = card.subtitle,
         description = card.description,
+        icon = card.icon,
+        iconUrl = card.iconUrl,
         variant = card.variant,
         layout = card.layout,
         template = card.template,

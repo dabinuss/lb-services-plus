@@ -1,5 +1,5 @@
 PeekPlusDefaults = {
-    version = "1.1.8",
+    version = "1.1.15",
     allowedStates = {
         queued = true,
         pending = true,
@@ -46,6 +46,7 @@ PeekPlusDefaults = {
         compact = "text",
         detail = "details",
         action = "actions",
+        ["active-request"] = "details",
         progress = "progress",
         timer = "timer",
     },

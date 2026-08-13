@@ -4,6 +4,20 @@ local requestByPeek = {}
 local activeRequestId = nil
 local distanceToken = 0
 
+local categoryIcons = {
+    police = "police",
+    medical = "medical",
+    taxi = "taxi",
+    mechanic = "wrench",
+    towing = "tow-truck",
+    government = "government",
+    news = "news",
+}
+
+local function requestIcon(payload)
+    return categoryIcons[tostring(payload.category or "")] or payload.typeIcon or "request"
+end
+
 local function requestId(payload)
     return payload and tonumber(payload.requestId)
 end
@@ -30,6 +44,8 @@ local function pendingCard(payload)
         state = "pending",
         variant = "info",
         template = "action",
+        icon = requestIcon(payload),
+        iconUrl = payload.companyIcon,
         title = tostring(payload.typeName or "New request"),
         subtitle = tostring(payload.companyName or Config.App.name),
         description = tostring(payload.description or ""),
@@ -66,11 +82,16 @@ local function activeDetails(payload, distance)
         details[#details + 1] = {
             label = tostring(payload.countLabel or "Passenger count"),
             value = tostring(payload.passengerCount),
+            icon = "people",
         }
     end
-    details[#details + 1] = { label = "Reported pickup", value = reportedPickup(payload) }
+    details[#details + 1] = { label = "Reported location", value = reportedPickup(payload), icon = "location" }
     if type(distance) == "number" then
-        details[#details + 1] = { label = "Distance", value = ("%.1f mi"):format(distance / 1609.34) }
+        details[#details + 1] = {
+            label = "Distance",
+            value = ("%.1f mi"):format(distance / 1609.34),
+            icon = "distance",
+        }
     end
     return details
 end
@@ -80,12 +101,14 @@ local function activeCard(payload)
         key = ("service-request:%s"):format(payload.requestId),
         state = "active",
         variant = "success",
-        template = "action",
+        template = "active-request",
+        icon = requestIcon(payload),
+        iconUrl = payload.companyIcon,
         layout = "details",
         title = tostring(payload.typeName or "Active request"),
         subtitle = tostring(payload.companyName or Config.App.name),
         description = type(payload.description) == "string" and payload.description ~= ""
-            and ("Customer note: %s"):format(payload.description) or "Active request",
+            and payload.description or nil,
         details = activeDetails(payload),
         duration = -1,
         hold = true,

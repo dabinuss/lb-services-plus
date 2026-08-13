@@ -74,10 +74,14 @@ Card options:
 - `layout`: content model: `text`, `details`, `actions`, `progress`, `timer`
   or the `custom` layout selected by a registered iframe template.
 - `template`: visual renderer. Built-ins are `default`, `compact`, `detail`,
-  `action`, `progress` and `timer`.
+  `action`, `active-request`, `progress` and `timer`.
 - `history`: `false` excludes this card from the local history; it defaults
   to `true`.
-- `details`: up to the configured number of `{ label, value }` rows.
+- `icon`: optional semantic card icon such as `taxi`, `medical`, `police`, or `wrench`.
+- `iconUrl`: optional HTTPS image URL shown as the card icon; `icon` remains its fallback.
+- `active-request`: built-in dispatch template for a persistent accepted request,
+  with branded header, compact icon/value details and two prominent actions.
+- `details`: up to the configured number of `{ label, value, icon? }` rows. If every row has an icon, PeekPlus uses the compact icon/value layout and keeps labels as accessibility text.
 - `progress`: `{ value, max, label }` for a progress layout.
 - `timer`: `{ elapsed, duration, countdown, label }`, using milliseconds.
 
@@ -251,6 +255,9 @@ scrape another app's DOM.
 - Exactly one PeekPlus card controls the closed-phone peek at a time.
 - Closed-phone cards have a bounded compact layout: optional text and detail
   rows truncate before action buttons can leave the visible peek area.
+- Card width is anchored to LB Phone's `.phone-container` display surface,
+  never to the wider `.full-phone` housing; the display itself is the hard
+  clipping boundary and cards may use exactly 100% of its inner width.
 - Opening the phone releases its geometry and inserts the card into LB Phone's
   lockscreen notification stack when that stack exists.
 - Home screens and apps are not covered.

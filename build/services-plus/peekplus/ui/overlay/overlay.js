@@ -2,7 +2,7 @@
 // .full-phone tree and owns LB's native .phoneVisbility peek position. It
 // does not enqueue an LB notification or edit any LB Phone files.
 ;(function () {
-    const CONTROLLER_VERSION = 'peekplus-1.1.9'
+    const CONTROLLER_VERSION = 'peekplus-1.1.15'
     const resourceName = typeof GetParentResourceName === 'function' ? GetParentResourceName() : 'services-plus'
     const OVERLAY_ID = 'services-plus-overlay'
     const STYLE_ID = 'services-plus-overlay-styles'
@@ -36,6 +36,29 @@
     let timerAnchorKey = null
     let timerAnchorStartedAt = 0
     const reportedCapabilities = new Set()
+    const ICON_PATHS = {
+        request: ['M5 5h14v14H5z', 'M8 9h8', 'M8 13h5'],
+        people: ['M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2', 'M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8', 'M22 21v-2a4 4 0 0 0-3-3.87', 'M16 3.13a4 4 0 0 1 0 7.75'],
+        location: ['M20 10c0 5-8 12-8 12S4 15 4 10a8 8 0 1 1 16 0', 'M12 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6'],
+        distance: ['M6 19V5', 'M18 19V5', 'M9 8h6', 'M9 16h6', 'M4 5h4', 'M16 19h4'],
+        taxi: ['M5 17h14l-1.5-7h-11z', 'M7 10l1-3h8l1 3', 'M7 17v2', 'M17 17v2', 'M7.5 14h.01', 'M16.5 14h.01', 'M9 7V5h6v2'],
+        police: ['M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10', 'M9 12l2 2 4-4'],
+        medical: ['M3 12h4l2-5 4 10 2-5h6', 'M12 21C5 17 2 13 3 8a5 5 0 0 1 9-2 5 5 0 0 1 9 2'],
+        wrench: ['M14.7 6.3a4 4 0 0 0-5-5l2.1 2.1-2.4 2.4-2.1-2.1a4 4 0 0 0 5 5L4 17a2.1 2.1 0 1 0 3 3l7.7-8.3a4 4 0 0 0 5-5l-2.1 2.1-2.4-2.4z'],
+        'tow-truck': ['M3 17V8h10v9', 'M13 11h4l4 4v2h-8', 'M6 17a2 2 0 1 0 0 4 2 2 0 0 0 0-4', 'M18 17a2 2 0 1 0 0 4 2 2 0 0 0 0-4', 'M3 5h7'],
+        government: ['M3 10h18', 'M5 10v8', 'M9 10v8', 'M15 10v8', 'M19 10v8', 'M2 21h20', 'M12 3l9 5H3z'],
+        news: ['M4 5h16v14H4z', 'M8 9h8', 'M8 13h8', 'M8 17h5'],
+    }
+    const ICON_ALIASES = {
+        'taxi-ride': 'taxi',
+        emergency_backup: 'police',
+        'emergency-backup': 'police',
+        medical_emergency: 'medical',
+        'medical-emergency': 'medical',
+        tow_truck: 'tow-truck',
+        breaking_news: 'news',
+        'breaking-news': 'news',
+    }
 
     function post(action, data) {
         return fetch(`https://${resourceName}/${action}`, {
@@ -104,58 +127,70 @@
         #${OVERLAY_ID}[data-host='phone'] .sp-card {
             display: flex;
             flex-direction: column;
-            max-height: 8.75rem;
+            width: 100%;
+            max-width: 100%;
+            max-height: 11.25rem;
             overflow: hidden;
-            padding: .58rem .78rem;
-            border-radius: .9rem;
+            padding: .72rem .82rem;
+            border-radius: 1rem;
         }
         #${OVERLAY_ID}[data-host='phone'] .sp-title,
         #${OVERLAY_ID}[data-host='phone'] .sp-sub,
         #${OVERLAY_ID}[data-host='phone'] .sp-meta,
-        #${OVERLAY_ID}[data-host='phone'] .sp-detail span {
+        #${OVERLAY_ID}[data-host='phone'] .sp-detail-label,
+        #${OVERLAY_ID}[data-host='phone'] .sp-detail-value {
             min-width: 0;
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
         }
-        #${OVERLAY_ID}[data-host='phone'] .sp-title { font-size: .84rem; line-height: 1.05; }
-        #${OVERLAY_ID}[data-host='phone'] .sp-sub { font-size: .69rem; line-height: 1.05; }
+        #${OVERLAY_ID}[data-host='phone'] .sp-title { font-size: .94rem; line-height: 1.08; }
+        #${OVERLAY_ID}[data-host='phone'] .sp-sub { font-size: .74rem; line-height: 1.08; }
+        #${OVERLAY_ID}[data-host='phone'] .sp-header { gap: .62rem; }
+        #${OVERLAY_ID}[data-host='phone'] .sp-card-icon { width: 2.35rem; height: 2.35rem; border-radius: .68rem; }
+        #${OVERLAY_ID}[data-host='phone'] .sp-card-icon .sp-icon { width: 1.48rem; height: 1.48rem; }
+        #${OVERLAY_ID}[data-host='phone'] .sp-status { padding: .28rem .46rem; font-size: .64rem; }
         #${OVERLAY_ID}[data-host='phone'] .sp-meta {
             flex: 0 0 auto;
-            margin-top: .2rem;
-            font-size: .69rem;
-            line-height: 1.1;
+            margin-top: .34rem;
+            font-size: .73rem;
+            line-height: 1.2;
         }
         #${OVERLAY_ID}[data-host='phone'] .sp-details {
             min-height: 0;
             overflow: hidden;
-            margin-top: .34rem;
-            gap: .08rem;
+            margin-top: .58rem;
+            gap: .3rem;
         }
         #${OVERLAY_ID}[data-host='phone'] .sp-detail {
             min-height: 0;
-            gap: .5rem;
-            font-size: .65rem;
-            line-height: 1.05;
+            gap: .42rem;
+            font-size: .75rem;
+            line-height: 1.15;
         }
-        #${OVERLAY_ID}[data-host='phone'] .sp-detail span:first-child { flex: 1 1 auto; }
-        #${OVERLAY_ID}[data-host='phone'] .sp-detail span:last-child {
+        #${OVERLAY_ID}[data-host='phone'] .sp-detail-label { flex: 1 1 auto; }
+        #${OVERLAY_ID}[data-host='phone'] .sp-detail-value {
             flex: 0 1 58%;
             max-width: 58%;
         }
+        #${OVERLAY_ID}[data-host='phone'] .sp-details.iconic { gap: .34rem; }
+        #${OVERLAY_ID}[data-host='phone'] .sp-details.iconic[data-count='3'] { grid-template-columns: .62fr minmax(0, 2.3fr) .82fr; }
+        #${OVERLAY_ID}[data-host='phone'] .sp-details.iconic[data-count='2'] { grid-template-columns: minmax(0, 2.5fr) .85fr; }
+        #${OVERLAY_ID}[data-host='phone'] .sp-details.iconic .sp-detail-value { flex: 1 1 auto; max-width: 100%; }
+        #${OVERLAY_ID}[data-host='phone'] .sp-detail-icon { width: 1.22rem; height: 1.22rem; }
         #${OVERLAY_ID}[data-host='phone'] .sp-progress,
         #${OVERLAY_ID}[data-host='phone'] .sp-timer,
         #${OVERLAY_ID}[data-host='phone'] .sp-template-frame { min-height: 0; overflow: hidden; }
         #${OVERLAY_ID}[data-host='phone'] .sp-buttons {
             flex: 0 0 auto;
-            margin-top: .38rem;
-            gap: .38rem;
+            margin-top: .62rem;
+            gap: .46rem;
         }
         #${OVERLAY_ID}[data-host='phone'] .sp-btn {
             min-width: 0;
             overflow: hidden;
-            padding: .38rem .2rem;
-            font-size: .67rem;
+            padding: .5rem .25rem;
+            font-size: .72rem;
             line-height: 1;
             text-overflow: ellipsis;
             white-space: nowrap;
@@ -170,6 +205,7 @@
             flex: 0 0 auto;
             width: 100%;
         }
+        #${OVERLAY_ID}[data-host='lockscreen'] .sp-card { width: 100%; max-width: 100%; }
         #${OVERLAY_ID}[data-call-priority='true'] .sp-card {
             pointer-events: none;
         }
@@ -194,6 +230,14 @@
         #${OVERLAY_ID} .sp-card[data-variant='success'] { border-left-color: #30d158; }
         #${OVERLAY_ID} .sp-card[data-variant='warning'] { border-left-color: #ff9f0a; }
         #${OVERLAY_ID} .sp-card[data-variant='error'] { border-left-color: #ff453a; }
+        #${OVERLAY_ID}[data-theme] .sp-card[data-state='active'] {
+            color: #f5f7fa;
+            background: linear-gradient(145deg, rgba(22,27,33,.985), rgba(10,13,17,.99));
+            border-top: 1px solid rgba(255,255,255,.09);
+            border-right: 1px solid rgba(255,255,255,.06);
+            border-bottom: 1px solid rgba(255,255,255,.06);
+            box-shadow: 0 .75rem 1.8rem rgba(0,0,0,.42), inset 0 1px 0 rgba(255,255,255,.025);
+        }
         #${OVERLAY_ID} .sp-card[data-template='compact'] { padding: .65rem .8rem; border-radius: .85rem; }
         #${OVERLAY_ID} .sp-card[data-template='compact'] .sp-title { font-size: .86rem; }
         #${OVERLAY_ID} .sp-card[data-template='compact'] .sp-meta { margin-top: .2rem; }
@@ -205,13 +249,85 @@
             background: rgb(28, 28, 30);
             color: #f2f2f7;
         }
+        /* Built-in persistent dispatch surface. Consumers select the
+           template; PeekPlus owns every pixel of its phone-safe layout. */
+        #${OVERLAY_ID}[data-theme] .sp-card[data-template='active-request'] {
+            width: 100%; max-width: 100%; padding: .9rem 1.35rem 1rem;
+            border: 0; border-radius: 0; color: #f7f8fa;
+            background: linear-gradient(180deg, #050607 0%, #020303 100%);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,.025);
+        }
+        #${OVERLAY_ID} .sp-card[data-template='active-request'] .sp-header { gap: .72rem; }
+        #${OVERLAY_ID} .sp-card[data-template='active-request'] .sp-card-icon {
+            width: 2.85rem; height: 2.85rem; border-radius: .78rem;
+            background: linear-gradient(145deg, #444950, #292d32);
+            border-color: rgba(255,255,255,.11);
+            box-shadow: 0 .22rem .55rem rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.08);
+        }
+        #${OVERLAY_ID} .sp-card[data-template='active-request'] .sp-card-icon .sp-icon { width: 1.7rem; height: 1.7rem; }
+        #${OVERLAY_ID} .sp-card[data-template='active-request'] .sp-title {
+            font-size: 1rem; line-height: 1.08; letter-spacing: -.015em;
+        }
+        #${OVERLAY_ID} .sp-card[data-template='active-request'] .sp-sub {
+            margin-top: .12rem; font-size: .74rem; color: rgba(255,255,255,.62); opacity: 1;
+        }
+        #${OVERLAY_ID} .sp-card[data-template='active-request'] .sp-status {
+            padding: .34rem .58rem; border-radius: .65rem; font-size: .67rem; color: #46e87a;
+            background: linear-gradient(180deg, rgba(36,110,62,.68), rgba(24,72,42,.68));
+            border-color: rgba(70,232,122,.25); box-shadow: inset 0 1px 0 rgba(255,255,255,.045);
+        }
+        #${OVERLAY_ID} .sp-card[data-template='active-request'] .sp-meta {
+            margin-top: .45rem; color: rgba(255,255,255,.72);
+        }
+        #${OVERLAY_ID} .sp-card[data-template='active-request'] .sp-details.iconic { margin-top: .72rem; gap: .5rem; }
+        #${OVERLAY_ID} .sp-card[data-template='active-request'] .sp-details.iconic .sp-detail {
+            gap: .46rem; font-size: .9rem; line-height: 1.15;
+        }
+        #${OVERLAY_ID} .sp-card[data-template='active-request'] .sp-details.iconic .sp-detail + .sp-detail {
+            padding-left: .58rem; border-left-color: rgba(255,255,255,.13);
+        }
+        #${OVERLAY_ID} .sp-card[data-template='active-request'] .sp-detail-icon {
+            width: 1.6rem; height: 1.6rem; color: rgba(255,255,255,.82); opacity: 1;
+        }
+        #${OVERLAY_ID} .sp-card[data-template='active-request'] .sp-detail-value {
+            color: #fff; font-weight: 720; font-variant-numeric: tabular-nums;
+        }
+        #${OVERLAY_ID} .sp-card[data-template='active-request'] .sp-buttons { gap: .62rem; margin-top: .82rem; }
+        #${OVERLAY_ID} .sp-card[data-template='active-request'] .sp-btn {
+            padding: .62rem .35rem; border-radius: .68rem; font-size: .76rem; letter-spacing: -.01em;
+        }
+        #${OVERLAY_ID} .sp-header { display: flex; align-items: center; gap: .65rem; min-width: 0; }
+        #${OVERLAY_ID} .sp-card-icon {
+            position: relative; display: grid; place-items: center; flex: 0 0 auto; overflow: hidden;
+            width: 2.35rem; height: 2.35rem; border-radius: .7rem;
+            background: linear-gradient(145deg, rgba(255,255,255,.14), rgba(255,255,255,.045));
+            border: 1px solid rgba(255,255,255,.12); box-shadow: inset 0 1px 0 rgba(255,255,255,.06);
+        }
+        #${OVERLAY_ID} .sp-card-icon .sp-icon { width: 1.55rem; height: 1.55rem; }
+        #${OVERLAY_ID} .sp-card-icon-fallback { display: grid; place-items: center; width: 100%; height: 100%; }
+        #${OVERLAY_ID} .sp-card-icon-image { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .16s ease; }
+        #${OVERLAY_ID} .sp-card-icon.has-image .sp-card-icon-image { opacity: 1; }
+        #${OVERLAY_ID} .sp-heading { min-width: 0; flex: 1 1 auto; }
+        #${OVERLAY_ID} .sp-status {
+            flex: 0 0 auto; display: flex; align-items: center; gap: .32rem;
+            padding: .3rem .48rem; border-radius: .55rem; font-size: .66rem; font-weight: 700;
+            color: #30d158; background: rgba(48,209,88,.13); border: 1px solid rgba(48,209,88,.22);
+        }
+        #${OVERLAY_ID} .sp-status::before { content: ''; width: .38rem; height: .38rem; border-radius: 50%; background: currentColor; }
+        #${OVERLAY_ID} .sp-icon { display: block; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
         #${OVERLAY_ID} .sp-title { font-size: .95rem; font-weight: 700; }
         #${OVERLAY_ID} .sp-sub { font-size: .78rem; opacity: .7; margin-top: .1rem; }
         #${OVERLAY_ID} .sp-meta { font-size: .78rem; opacity: .85; margin-top: .35rem; }
         #${OVERLAY_ID} .sp-details { margin-top: .55rem; display: grid; gap: .25rem; }
-        #${OVERLAY_ID} .sp-detail { display: flex; justify-content: space-between; gap: .75rem; font-size: .73rem; }
-        #${OVERLAY_ID} .sp-detail span:first-child { opacity: .65; }
-        #${OVERLAY_ID} .sp-detail span:last-child { font-weight: 650; text-align: right; }
+        #${OVERLAY_ID} .sp-detail { display: flex; justify-content: space-between; gap: .75rem; min-width: 0; font-size: .73rem; }
+        #${OVERLAY_ID} .sp-detail-label { opacity: .65; }
+        #${OVERLAY_ID} .sp-detail-value { min-width: 0; font-weight: 650; text-align: right; }
+        #${OVERLAY_ID} .sp-details.iconic { grid-template-columns: repeat(var(--detail-count), minmax(0, 1fr)); gap: .45rem; }
+        #${OVERLAY_ID} .sp-details.iconic .sp-detail { align-items: center; justify-content: flex-start; gap: .38rem; }
+        #${OVERLAY_ID} .sp-details.iconic .sp-detail + .sp-detail { border-left: 1px solid rgba(127,127,127,.22); padding-left: .45rem; }
+        #${OVERLAY_ID} .sp-details.iconic .sp-detail-value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+        #${OVERLAY_ID} .sp-detail-icon { display: grid; place-items: center; flex: 0 0 auto; width: 1.2rem; height: 1.2rem; opacity: .78; }
+        #${OVERLAY_ID} .sp-detail-icon .sp-icon { width: 100%; height: 100%; }
         #${OVERLAY_ID} .sp-progress { margin-top: .6rem; }
         #${OVERLAY_ID} .sp-progress-label { display: flex; justify-content: space-between; font-size: .7rem; opacity: .75; margin-bottom: .28rem; }
         #${OVERLAY_ID} .sp-progress-track { height: .32rem; border-radius: 999px; overflow: hidden; background: rgba(127,127,127,.25); }
@@ -231,19 +347,27 @@
         }
         #${OVERLAY_ID} .sp-btn.accept,
         #${OVERLAY_ID} .sp-btn.complete,
-        #${OVERLAY_ID} .sp-btn.success { background: #30d158; color: #fff; }
+        #${OVERLAY_ID} .sp-btn.success { background: linear-gradient(180deg, #35df65, #22b94e); color: #fff; box-shadow: 0 .18rem .5rem rgba(48,209,88,.2); }
         #${OVERLAY_ID} .sp-btn.decline,
         #${OVERLAY_ID} .sp-btn.cancel { background: #ff453a; color: #fff; }
-        #${OVERLAY_ID} .sp-btn.danger { background: #ff453a; color: #fff; }
+        #${OVERLAY_ID} .sp-btn.danger { background: linear-gradient(180deg, #ff5a52, #e63b34); color: #fff; box-shadow: 0 .18rem .5rem rgba(255,69,58,.16); }
         #${OVERLAY_ID} .sp-btn.primary { background: #0a84ff; color: #fff; }
         #${OVERLAY_ID} .sp-btn.default { background: rgba(127, 127, 127, .25); color: inherit; }
         #${OVERLAY_ID} .sp-btn:disabled { cursor: default; opacity: .55; }
+        #${OVERLAY_ID}[data-host='phone'] .sp-card[data-template='active-request'] {
+            max-height: 12.5rem;
+            padding: .78rem 1.3rem .88rem;
+        }
+        #${OVERLAY_ID}[data-host='phone'] .sp-card[data-template='active-request'] .sp-details.iconic[data-count='3'] {
+            grid-template-columns: 3.6rem minmax(0, 1fr) 6.8rem;
+            gap: .35rem;
+        }
         /* LB Phone itself uses this (misspelled) wrapper to move the complete
            device: closed = 60rem, notification = 45rem. Owning this single
            native property avoids iframe crops and preserves LB's animation. */
         .phoneVisbility[${LOCK_ATTRIBUTE}] {
             visibility: visible !important;
-            margin-top: 45rem !important;
+            margin-top: 42rem !important;
             transition: margin-top .5s ease-out !important;
         }
         /* A call banner occupies the top of the phone. Lift the same native
@@ -277,14 +401,15 @@
 
     function ensureContainer() {
         const fullPhone = lbDocument?.querySelector('.full-phone') || null
+        const displaySurface = fullPhone?.querySelector('.phone-container') || null
         const visibilityWrapper = lbDocument?.querySelector('.phoneVisbility') || null
-        const phoneCompatible = Boolean(fullPhone && visibilityWrapper)
+        const phoneCompatible = Boolean(fullPhone && displaySurface && visibilityWrapper)
         const domFallback = Boolean(lastState && !lastState.forceFallback && !phoneCompatible)
         const lockscreenHost = phoneIsOpen && phoneCompatible && !lastState?.forceFallback
             ? lbDocument?.querySelector('.lockscreen-notification-container')
             : null
         const phoneHost = !phoneIsOpen && phoneCompatible && !lastState?.forceFallback
-            ? fullPhone
+            ? displaySurface
             : null
         const useFallback = lastState?.forceFallback || domFallback
         const targetDocument = lockscreenHost || phoneHost ? lbDocument : useFallback ? rootDocument : null
@@ -318,6 +443,42 @@
         parent.appendChild(element)
     }
 
+    function addIcon(targetDocument, parent, name, className) {
+        const normalized = String(name || 'request').toLowerCase()
+        const key = ICON_ALIASES[normalized] || normalized
+        const paths = ICON_PATHS[key] || ICON_PATHS.request
+        const wrapper = targetDocument.createElement('span')
+        wrapper.className = className
+        const svg = targetDocument.createElementNS('http://www.w3.org/2000/svg', 'svg')
+        svg.classList.add('sp-icon')
+        svg.setAttribute('viewBox', '0 0 24 24')
+        svg.setAttribute('aria-hidden', 'true')
+        paths.forEach((definition) => {
+            const path = targetDocument.createElementNS('http://www.w3.org/2000/svg', 'path')
+            path.setAttribute('d', definition)
+            svg.appendChild(path)
+        })
+        wrapper.appendChild(svg)
+        parent.appendChild(wrapper)
+    }
+
+    function addCardIcon(targetDocument, parent, name, imageUrl) {
+        const wrapper = targetDocument.createElement('span')
+        wrapper.className = 'sp-card-icon'
+        addIcon(targetDocument, wrapper, name, 'sp-card-icon-fallback')
+        if (imageUrl) {
+            const image = targetDocument.createElement('img')
+            image.className = 'sp-card-icon-image'
+            image.alt = ''
+            image.referrerPolicy = 'no-referrer'
+            image.onload = () => wrapper.classList.add('has-image')
+            image.onerror = () => image.remove()
+            image.src = imageUrl
+            wrapper.appendChild(image)
+        }
+        parent.appendChild(wrapper)
+    }
+
     function formatDuration(milliseconds) {
         const total = Math.max(0, Math.floor(milliseconds / 1000))
         const hours = Math.floor(total / 3600)
@@ -343,11 +504,20 @@
         if (!Array.isArray(details) || details.length === 0) return
         const rows = targetDocument.createElement('div')
         rows.className = 'sp-details'
+        const iconic = details.every((detail) => detail?.icon)
+        if (iconic) {
+            rows.classList.add('iconic')
+            rows.style.setProperty('--detail-count', String(details.length))
+            rows.dataset.count = String(details.length)
+        }
         details.forEach((detail) => {
             const row = targetDocument.createElement('div')
             row.className = 'sp-detail'
-            addText(targetDocument, row, '', detail.label)
-            addText(targetDocument, row, '', detail.value)
+            row.setAttribute('aria-label', `${detail.label}: ${detail.value}`)
+            row.title = detail.label
+            if (detail.icon) addIcon(targetDocument, row, detail.icon, 'sp-detail-icon')
+            if (!iconic) addText(targetDocument, row, 'sp-detail-label', detail.label)
+            addText(targetDocument, row, 'sp-detail-value', detail.value)
             rows.appendChild(row)
         })
         element.appendChild(rows)
@@ -433,8 +603,21 @@
     }
 
     function renderCard(targetDocument, element, payload, reusableFrame) {
-        addText(targetDocument, element, 'sp-title', payload.title)
-        addText(targetDocument, element, 'sp-sub', payload.subtitle)
+        if (payload.icon || payload.state === 'active') {
+            const header = targetDocument.createElement('div')
+            header.className = 'sp-header'
+            addCardIcon(targetDocument, header, payload.icon, payload.iconUrl)
+            const heading = targetDocument.createElement('div')
+            heading.className = 'sp-heading'
+            addText(targetDocument, heading, 'sp-title', payload.title)
+            addText(targetDocument, heading, 'sp-sub', payload.subtitle)
+            header.appendChild(heading)
+            if (payload.state === 'active') addText(targetDocument, header, 'sp-status', 'Active request')
+            element.appendChild(header)
+        } else {
+            addText(targetDocument, element, 'sp-title', payload.title)
+            addText(targetDocument, element, 'sp-sub', payload.subtitle)
+        }
         addText(targetDocument, element, 'sp-meta', payload.description)
         if (payload.layout === 'details') renderDetails(targetDocument, element, payload.details)
         if (payload.layout === 'progress') renderProgress(targetDocument, element, payload.progress)
@@ -483,6 +666,7 @@
         const card = container.ownerDocument.createElement('div')
         card.className = 'sp-card'
         card.dataset.variant = lastState.card.variant || 'neutral'
+        card.dataset.state = lastState.card.state || 'pending'
         card.dataset.template = lastState.card.template || 'default'
         renderCard(container.ownerDocument, card, lastState.card, reusableFrame)
         container.replaceChildren(card)
