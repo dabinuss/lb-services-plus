@@ -44,13 +44,35 @@ local function pendingCard(payload)
     }
 end
 
-local function activeDescription(payload, distance)
-    local parts = {}
-    if payload.passengerCount then
-        parts[#parts + 1] = ("%s: %s"):format(payload.countLabel or "Passenger count", payload.passengerCount)
+local function reportedPickup(payload)
+    if type(payload.reportedPickup) == "string" and payload.reportedPickup ~= "" then
+        return payload.reportedPickup
     end
-    if type(distance) == "number" then parts[#parts + 1] = ("%.1f mi"):format(distance / 1609.34) end
-    return table.concat(parts, " · ")
+    if type(payload.x) ~= "number" or type(payload.y) ~= "number" then return "Marked location" end
+
+    local streetHash, crossingHash = GetStreetNameAtCoord(payload.x, payload.y, 0.0)
+    local street = streetHash and streetHash ~= 0 and GetStreetNameFromHashKey(streetHash) or ""
+    local crossing = crossingHash and crossingHash ~= 0 and GetStreetNameFromHashKey(crossingHash) or ""
+
+    if street == "" then street = "Marked location" end
+    if crossing ~= "" and crossing ~= street then street = ("%s / %s"):format(street, crossing) end
+    payload.reportedPickup = street
+    return street
+end
+
+local function activeDetails(payload, distance)
+    local details = {}
+    if payload.passengerCount ~= nil then
+        details[#details + 1] = {
+            label = tostring(payload.countLabel or "Passenger count"),
+            value = tostring(payload.passengerCount),
+        }
+    end
+    details[#details + 1] = { label = "Reported pickup", value = reportedPickup(payload) }
+    if type(distance) == "number" then
+        details[#details + 1] = { label = "Distance", value = ("%.1f mi"):format(distance / 1609.34) }
+    end
+    return details
 end
 
 local function activeCard(payload)
@@ -59,9 +81,12 @@ local function activeCard(payload)
         state = "active",
         variant = "success",
         template = "action",
+        layout = "details",
         title = tostring(payload.typeName or "Active request"),
         subtitle = tostring(payload.companyName or Config.App.name),
-        description = activeDescription(payload),
+        description = type(payload.description) == "string" and payload.description ~= ""
+            and ("Customer note: %s"):format(payload.description) or "Active request",
+        details = activeDetails(payload),
         duration = -1,
         hold = true,
         sound = false,
@@ -74,7 +99,13 @@ local function activeCard(payload)
                 color = "danger",
                 confirm = { label = "Confirm?", timeout = 5000 },
             },
-            { id = "complete", label = "Complete", color = "success" },
+            {
+                id = "complete",
+                label = "Enter · Complete request",
+                key = "RETURN",
+                color = "success",
+                confirm = { label = "Confirm completion?", timeout = 5000 },
+            },
         },
     }
 end
@@ -91,7 +122,7 @@ local function startDistanceUpdates(payload, peekId)
             local distance = #(vector2(coords.x, coords.y) - vector2(payload.x, payload.y))
             local current = PeekPlus.Get(peekId, owner)
             if not current then return end
-            PeekPlus.UpdatePresentation(peekId, { description = activeDescription(payload, distance) }, owner)
+            PeekPlus.UpdatePresentation(peekId, { details = activeDetails(payload, distance) }, owner)
             Wait(2000)
         end
     end)

@@ -81,7 +81,7 @@ Card options:
 - `progress`: `{ value, max, label }` for a progress layout.
 - `timer`: `{ elapsed, duration, countdown, label }`, using milliseconds.
 
-PeekPlus registers `PeekPlus: Benachrichtigung annehmen` and `PeekPlus:
+PeekPlus registers `PeekPlus: Primäraktion ausführen` and `PeekPlus:
 Benachrichtigung ablehnen/abbrechen` in FiveM's key binding settings. Their defaults are
 `ENTER` and `BACKSPACE`. Consumers use the PeekPlus actions and must not register
 a competing binding for the same card.
@@ -249,6 +249,8 @@ scrape another app's DOM.
 ## Phone lifecycle
 
 - Exactly one PeekPlus card controls the closed-phone peek at a time.
+- Closed-phone cards have a bounded compact layout: optional text and detail
+  rows truncate before action buttons can leave the visible peek area.
 - Opening the phone releases its geometry and inserts the card into LB Phone's
   lockscreen notification stack when that stack exists.
 - Home screens and apps are not covered.

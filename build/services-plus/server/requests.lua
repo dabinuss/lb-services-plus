@@ -82,7 +82,7 @@ function Requests.GetTypesForCategory(categoryId)
     local out = {}
 
     for i = 1, #all do
-        if all[i].enabled == 1 then out[#out + 1] = all[i] end
+        if DatabaseBoolean(all[i].enabled) then out[#out + 1] = all[i] end
     end
 
     return out
@@ -391,7 +391,8 @@ local function chooseCompany(requestType, options)
 
     if selectorProvided and not requested then return nil end
     if requested then
-        if requested.category_id ~= requestType.category_id or requested.requests_enabled ~= 1 then return nil end
+        if requested.category_id ~= requestType.category_id
+            or not DatabaseBoolean(requested.requests_enabled) then return nil end
         return requested
     end
 
@@ -400,7 +401,7 @@ local function chooseCompany(requestType, options)
 
     local fallback
     for i = 1, #candidates do
-        if candidates[i].requests_enabled == 1 then
+        if DatabaseBoolean(candidates[i].requests_enabled) then
             fallback = fallback or candidates[i]
             if Companies.IsAvailable(candidates[i].id) then return candidates[i] end
         end
@@ -420,7 +421,7 @@ function Requests.Create(source, requestTypeReference, options)
     if not source or GetPlayerName(source) == nil then return false end
 
     local requestType = Requests.ResolveType(requestTypeReference)
-    if not requestType or requestType.enabled ~= 1 then return false end
+    if not requestType or not DatabaseBoolean(requestType.enabled) then return false end
 
     local company = chooseCompany(requestType, options)
     if not company then return false end
@@ -433,7 +434,7 @@ function Requests.Create(source, requestTypeReference, options)
     local coords = GetEntityCoords(ped)
 
     local passengerMode = requestType.passenger_mode
-        or (requestType.passenger_count == 1 and "required" or "disabled")
+        or (DatabaseBoolean(requestType.passenger_count) and "required" or "disabled")
     local finalPassengerCount
     local passengerCount = options.passengerCount
     if passengerMode ~= "disabled" and passengerCount ~= nil and passengerCount ~= "" then
@@ -445,14 +446,14 @@ function Requests.Create(source, requestTypeReference, options)
     end
 
     local noteMode = requestType.note_mode
-        or (requestType.description_enabled == 1 and "optional" or "disabled")
+        or (DatabaseBoolean(requestType.description_enabled) and "optional" or "disabled")
     local note = type(options.description) == "string" and options.description:match("^%s*(.-)%s*$") or ""
     if noteMode == "required" and note == "" then return false end
     local finalDescription = noteMode ~= "disabled" and note ~= "" and note:sub(1, 255) or nil
 
     local category = Companies.GetCategory(requestType.category_id)
-    local competition = requestType.competition_enabled == 1
-        and category ~= nil and category.competition_allowed == 1
+    local competition = DatabaseBoolean(requestType.competition_enabled)
+        and category ~= nil and DatabaseBoolean(category.competition_allowed)
     local initialCompanyId = competition and json.null or company.id
 
     local requestId = MySQL.insert.await([[
@@ -476,7 +477,7 @@ function Requests.Create(source, requestTypeReference, options)
     if competition then
         local companies = Companies.GetByCategory(company.category_id)
         for i = 1, #companies do
-            if companies[i].requests_enabled == 1 then
+            if DatabaseBoolean(companies[i].requests_enabled) then
                 reached = reached + distribute(companies[i], requestType, routingRequest)
             end
         end
@@ -526,7 +527,7 @@ function Requests.Accept(source, requestId)
     -- this, createRequest already refuses new requests once a company turns
     -- requests off, but an already-open request's id stays valid forever, so
     -- a direct acceptRequest call for it could still go through.
-    if company.requests_enabled ~= 1 then return false end
+    if not DatabaseBoolean(company.requests_enabled) then return false end
 
     -- Re-check the exact same eligibility distribute() used (plan review
     -- §9) - duty, pause/busy and hotline can all have changed since the
@@ -709,6 +710,16 @@ function Requests.Complete(requestId, actorSource)
         TriggerClientEvent("services-plus:client:requestEnded", actorSource, id)
     end
 
+    if before.requesterNumber then
+        pcall(function()
+            exports["lb-phone"]:SendNotification(before.requesterNumber, {
+                app = Config.App.identifier,
+                title = before.company and before.company.name or Config.App.name,
+                content = "Your request has been completed. Thank you.",
+            })
+        end)
+    end
+
     return emitLifecycle("requestCompleted", id) or false
 end
 
@@ -783,7 +794,7 @@ RegisterCallback("getCompanyRequests", function(source, reply, page)
 
     rows = rows or {}
     for i = 1, #rows do
-        rows[i].is_mine = rows[i].is_mine == 1
+        rows[i].is_mine = DatabaseBoolean(rows[i].is_mine)
     end
 
     reply(rows)

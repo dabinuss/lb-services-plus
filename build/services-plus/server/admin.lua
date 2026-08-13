@@ -356,7 +356,7 @@ end)
 -- can be re-enabled later.
 adminCallback("admin:deleteNumber", function(_, reply, data)
     local number = MySQL.single.await("SELECT is_main FROM phone_services_plus_numbers WHERE id = ?", { data.id })
-    if not number or number.is_main == 1 then return reply(false) end -- plan §52: main number can't be removed
+    if not number or DatabaseBoolean(number.is_main) then return reply(false) end -- plan §52: main number can't be removed
 
     MySQL.update.await("UPDATE phone_services_plus_numbers SET enabled = 0 WHERE id = ?", { data.id })
     Companies.Reload()

@@ -2,7 +2,7 @@
 // .full-phone tree and owns LB's native .phoneVisbility peek position. It
 // does not enqueue an LB notification or edit any LB Phone files.
 ;(function () {
-    const CONTROLLER_VERSION = 'peekplus-1.1.8'
+    const CONTROLLER_VERSION = 'peekplus-1.1.9'
     const resourceName = typeof GetParentResourceName === 'function' ? GetParentResourceName() : 'services-plus'
     const OVERLAY_ID = 'services-plus-overlay'
     const STYLE_ID = 'services-plus-overlay-styles'
@@ -98,6 +98,67 @@
             top: 4.45rem;
             left: 0;
             right: 0;
+        }
+        /* Only a bounded slice of the phone is visible while it is peeking.
+           Keep actions in that slice and let optional content yield first. */
+        #${OVERLAY_ID}[data-host='phone'] .sp-card {
+            display: flex;
+            flex-direction: column;
+            max-height: 8.75rem;
+            overflow: hidden;
+            padding: .58rem .78rem;
+            border-radius: .9rem;
+        }
+        #${OVERLAY_ID}[data-host='phone'] .sp-title,
+        #${OVERLAY_ID}[data-host='phone'] .sp-sub,
+        #${OVERLAY_ID}[data-host='phone'] .sp-meta,
+        #${OVERLAY_ID}[data-host='phone'] .sp-detail span {
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        #${OVERLAY_ID}[data-host='phone'] .sp-title { font-size: .84rem; line-height: 1.05; }
+        #${OVERLAY_ID}[data-host='phone'] .sp-sub { font-size: .69rem; line-height: 1.05; }
+        #${OVERLAY_ID}[data-host='phone'] .sp-meta {
+            flex: 0 0 auto;
+            margin-top: .2rem;
+            font-size: .69rem;
+            line-height: 1.1;
+        }
+        #${OVERLAY_ID}[data-host='phone'] .sp-details {
+            min-height: 0;
+            overflow: hidden;
+            margin-top: .34rem;
+            gap: .08rem;
+        }
+        #${OVERLAY_ID}[data-host='phone'] .sp-detail {
+            min-height: 0;
+            gap: .5rem;
+            font-size: .65rem;
+            line-height: 1.05;
+        }
+        #${OVERLAY_ID}[data-host='phone'] .sp-detail span:first-child { flex: 1 1 auto; }
+        #${OVERLAY_ID}[data-host='phone'] .sp-detail span:last-child {
+            flex: 0 1 58%;
+            max-width: 58%;
+        }
+        #${OVERLAY_ID}[data-host='phone'] .sp-progress,
+        #${OVERLAY_ID}[data-host='phone'] .sp-timer,
+        #${OVERLAY_ID}[data-host='phone'] .sp-template-frame { min-height: 0; overflow: hidden; }
+        #${OVERLAY_ID}[data-host='phone'] .sp-buttons {
+            flex: 0 0 auto;
+            margin-top: .38rem;
+            gap: .38rem;
+        }
+        #${OVERLAY_ID}[data-host='phone'] .sp-btn {
+            min-width: 0;
+            overflow: hidden;
+            padding: .38rem .2rem;
+            font-size: .67rem;
+            line-height: 1;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
         #${OVERLAY_ID}[data-host='phone'][data-call-priority='true'] {
             top: 10.75rem;

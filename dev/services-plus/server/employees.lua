@@ -29,7 +29,7 @@ end
 local function mainNumberId(companyId)
     local numbers = Companies.GetNumbers(companyId)
     for i = 1, #numbers do
-        if numbers[i].is_main == 1 then return numbers[i].id end
+        if DatabaseBoolean(numbers[i].is_main) then return numbers[i].id end
     end
     return nil
 end
@@ -132,7 +132,7 @@ function Employees.GetHotlineOptions(source, companyId)
         -- Mirrors ToggleHotline's own block condition (plan review round 3
         -- §3) so the UI greys this out whenever turning it off would
         -- actually be rejected, not just in the onDutyCount <= 1 case.
-        local locked = n.is_main == 1 and active
+        local locked = DatabaseBoolean(n.is_main) and active
             and (onDutyCount <= 1 or realHolderCount(job.name, n.id, source) == 0)
 
         out[#out + 1] = {

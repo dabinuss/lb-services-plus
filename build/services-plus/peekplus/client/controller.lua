@@ -915,9 +915,10 @@ local function runPrimaryHotkey()
     end
 end
 
--- Keep the already working accept binding stable for existing players.
+-- Keep the existing command name stable for players while describing its
+-- consumer-defined purpose accurately in FiveM's key binding settings.
 RegisterCommand("peekplus_accept", runPrimaryHotkey, false)
-RegisterKeyMapping("peekplus_accept", "PeekPlus: Benachrichtigung annehmen", "keyboard", "RETURN")
+RegisterKeyMapping("peekplus_accept", "PeekPlus: Primäraktion ausführen", "keyboard", "RETURN")
 
 local function runDestructiveHotkey()
     local card = visibleId and cards[visibleId] or nil

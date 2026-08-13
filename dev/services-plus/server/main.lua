@@ -108,10 +108,11 @@ function Messages.SendCompanyMessage(companyJob, targetNumber, content)
     if targetNumber == "" then return false end
 
     local company = Companies.GetByJob(companyJob)
-    if not company or company.messages_enabled ~= 1 then return false end
+    if not company or not DatabaseBoolean(company.messages_enabled) then return false end
 
     local number = Companies.GetMainNumber(company.id)
-    if not number or number.messages_enabled ~= 1 or number.mailbox_enabled ~= 1 then return false end
+    if not number or not DatabaseBoolean(number.messages_enabled)
+        or not DatabaseBoolean(number.mailbox_enabled) then return false end
 
     local channel = getOrCreateChannel(number.id, targetNumber)
     if not channel then return false end
@@ -227,20 +228,20 @@ RegisterCallback("getCompanySettings", function(source, reply)
         numberList[i] = {
             id = n.id,
             label = n.label,
-            isMain = n.is_main == 1,
-            callsEnabled = n.calls_enabled == 1,
-            messagesEnabled = n.messages_enabled == 1,
-            mailboxEnabled = n.mailbox_enabled == 1,
+            isMain = DatabaseBoolean(n.is_main),
+            callsEnabled = DatabaseBoolean(n.calls_enabled),
+            messagesEnabled = DatabaseBoolean(n.messages_enabled),
+            mailboxEnabled = DatabaseBoolean(n.mailbox_enabled),
         }
     end
 
     reply({
-        callsEnabled = company.calls_enabled == 1,
-        messagesEnabled = company.messages_enabled == 1,
-        requestsEnabled = company.requests_enabled == 1,
-        adminCallsAllowed = company.admin_calls_allowed == 1,
-        adminMessagesAllowed = company.admin_messages_allowed == 1,
-        adminRequestsAllowed = company.admin_requests_allowed == 1,
+        callsEnabled = DatabaseBoolean(company.calls_enabled),
+        messagesEnabled = DatabaseBoolean(company.messages_enabled),
+        requestsEnabled = DatabaseBoolean(company.requests_enabled),
+        adminCallsAllowed = DatabaseBoolean(company.admin_calls_allowed),
+        adminMessagesAllowed = DatabaseBoolean(company.admin_messages_allowed),
+        adminRequestsAllowed = DatabaseBoolean(company.admin_requests_allowed),
         callRouting = company.call_routing,
         requestRouting = company.request_routing,
         numbers = numberList,
@@ -259,9 +260,9 @@ RegisterCallback("updateCompanySettings", function(source, reply, settings)
 
     -- Admin ceilings always win (plan §34): a boss can only ever request
     -- less than what's allowed, never more.
-    local callsEnabled = settings.callsEnabled and company.admin_calls_allowed == 1
-    local messagesEnabled = settings.messagesEnabled and company.admin_messages_allowed == 1
-    local requestsEnabled = settings.requestsEnabled and company.admin_requests_allowed == 1
+    local callsEnabled = settings.callsEnabled and DatabaseBoolean(company.admin_calls_allowed)
+    local messagesEnabled = settings.messagesEnabled and DatabaseBoolean(company.admin_messages_allowed)
+    local requestsEnabled = settings.requestsEnabled and DatabaseBoolean(company.admin_requests_allowed)
 
     MySQL.update.await(
         "UPDATE phone_services_plus_companies SET calls_enabled = ?, messages_enabled = ?, requests_enabled = ?, call_routing = ?, request_routing = ? WHERE id = ?",
@@ -287,7 +288,7 @@ RegisterCallback("updateNumberSettings", function(source, reply, numberId, setti
     -- Only Calls stays forced on for the main number (plan review round 6
     -- follow-up) - a company must always be reachable by call. Messages is
     -- a real boss choice even for Main, same as any other number.
-    local callsEnabled = number.is_main == 1 or (settings.callsEnabled == true)
+    local callsEnabled = DatabaseBoolean(number.is_main) or (settings.callsEnabled == true)
 
     -- One boss-facing toggle, not a separate Messages/Mailbox pair (plan
     -- review round 6 follow-up) - mailbox_enabled and messages_enabled are
@@ -362,12 +363,13 @@ RegisterCallback("openConversation", function(source, reply, numberId, page)
     -- rejected the same way - it's already gone from Companies.GetNumbers's
     -- cache everywhere else, but this queries the row directly by id, so it
     -- needs its own check.
-    if not number or number.enabled ~= 1 or number.messages_enabled ~= 1 or number.mailbox_enabled ~= 1 then return reply(false) end
+    if not number or not DatabaseBoolean(number.enabled) or not DatabaseBoolean(number.messages_enabled)
+        or not DatabaseBoolean(number.mailbox_enabled) then return reply(false) end
 
     -- Companies.GetById only ever holds enabled=1 companies, so this also
     -- covers a disabled company rejecting new conversations (plan review).
     local company = Companies.GetById(number.company_id)
-    if not company or company.messages_enabled ~= 1 then return reply(false) end
+    if not company or not DatabaseBoolean(company.messages_enabled) then return reply(false) end
 
     -- Config.MessageOffline actually did nothing here before - true or
     -- false made no difference to this callback (plan review round 4 §6).
@@ -410,10 +412,11 @@ RegisterCallback("sendMessage", function(source, reply, channelId, content)
     if not channel then return reply(false) end
 
     local number = MySQL.single.await("SELECT * FROM phone_services_plus_numbers WHERE id = ?", { channel.number_id })
-    if not number or number.enabled ~= 1 or number.messages_enabled ~= 1 or number.mailbox_enabled ~= 1 then return reply(false) end
+    if not number or not DatabaseBoolean(number.enabled) or not DatabaseBoolean(number.messages_enabled)
+        or not DatabaseBoolean(number.mailbox_enabled) then return reply(false) end
 
     local company = Companies.GetById(number.company_id)
-    if not company or company.messages_enabled ~= 1 then return reply(false) end
+    if not company or not DatabaseBoolean(company.messages_enabled) then return reply(false) end
 
     local senderNumber = Framework.GetPhoneNumber(source)
     -- `sender` is NOT NULL in SQL (plan review round 6 §7) - without this,

@@ -134,7 +134,7 @@ end
 function Companies.GetMainNumber(companyId)
     local numbers = numbersByCompany[companyId] or {}
     for i = 1, #numbers do
-        if numbers[i].is_main == 1 then return numbers[i] end
+        if DatabaseBoolean(numbers[i].is_main) then return numbers[i] end
     end
     return nil
 end
@@ -176,9 +176,9 @@ function Companies.GetPublicList()
                 icon = company.icon,
                 background = company.background,
                 available = available,
-                callsEnabled = company.calls_enabled == 1,
-                messagesEnabled = company.messages_enabled == 1,
-                requestsEnabled = company.requests_enabled == 1,
+                callsEnabled = DatabaseBoolean(company.calls_enabled),
+                messagesEnabled = DatabaseBoolean(company.messages_enabled),
+                requestsEnabled = DatabaseBoolean(company.requests_enabled),
                 numbers = (function()
                     local out = {}
                     for i = 1, #numbers do
@@ -187,9 +187,9 @@ function Companies.GetPublicList()
                             id = n.id,
                             label = n.label,
                             number = n.number,
-                            isMain = n.is_main == 1,
-                            callsEnabled = n.calls_enabled == 1,
-                            messagesEnabled = n.messages_enabled == 1,
+                            isMain = DatabaseBoolean(n.is_main),
+                            callsEnabled = DatabaseBoolean(n.calls_enabled),
+                            messagesEnabled = DatabaseBoolean(n.messages_enabled),
                         }
                     end
                     return out

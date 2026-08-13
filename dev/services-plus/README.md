@@ -165,7 +165,10 @@ Phone's native lockscreen notification stack below the clock. It does not
 cover the home screen or apps. Closing the full phone restores an active
 request to its held peek automatically. For an active request, the first
 `BACKSPACE` (or Cancel click) arms the button as `Confirm?`; the second one
-cancels the request.
+cancels the request. The active card shows the passenger count, reported pickup
+street, optional customer note and live distance to the reported coordinates.
+The first `ENTER` (or Complete request click) arms completion; pressing it again
+within five seconds completes the ride and notifies the customer.
 
 Test the complete peek path locally from the F8 console without creating a
 request:

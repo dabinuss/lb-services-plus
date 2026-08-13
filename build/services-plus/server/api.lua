@@ -14,9 +14,9 @@ local function publicCompany(company)
         icon = company.icon,
         background = company.background,
         available = Companies.IsAvailable(company.id),
-        callsEnabled = company.calls_enabled == 1,
-        messagesEnabled = company.messages_enabled == 1,
-        requestsEnabled = company.requests_enabled == 1,
+        callsEnabled = DatabaseBoolean(company.calls_enabled),
+        messagesEnabled = DatabaseBoolean(company.messages_enabled),
+        requestsEnabled = DatabaseBoolean(company.requests_enabled),
     }
 end
 
@@ -63,9 +63,9 @@ exports("GetCompanyNumbers", function(jobName)
             id = rows[i].id,
             label = rows[i].label,
             number = rows[i].number,
-            isMain = rows[i].is_main == 1,
-            callsEnabled = rows[i].calls_enabled == 1,
-            messagesEnabled = rows[i].messages_enabled == 1,
+            isMain = DatabaseBoolean(rows[i].is_main),
+            callsEnabled = DatabaseBoolean(rows[i].calls_enabled),
+            messagesEnabled = DatabaseBoolean(rows[i].messages_enabled),
         }
     end
     return numbers

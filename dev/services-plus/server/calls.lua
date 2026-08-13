@@ -53,7 +53,8 @@ RegisterCallback("resolveCall", function(source, reply, companyId, numberId)
     local company = Companies.GetById(companyId)
     local number = company and numberOf(companyId, numberId)
 
-    if not company or not number or company.calls_enabled ~= 1 or number.calls_enabled ~= 1 then
+    if not company or not number or not DatabaseBoolean(company.calls_enabled)
+        or not DatabaseBoolean(number.calls_enabled) then
         return reply(false)
     end
 
@@ -68,7 +69,7 @@ RegisterCallback("resolveCall", function(source, reply, companyId, numberId)
         return reply(false)
     end
 
-    local isMain = number.is_main == 1
+    local isMain = DatabaseBoolean(number.is_main)
     local target
 
     if isMain and company.call_routing == "all" then

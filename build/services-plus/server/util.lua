@@ -23,3 +23,11 @@ function ClampPage(page)
 
     return page
 end
+
+--- Normalizes MySQL boolean columns across drivers. oxmysql can return
+--- TINYINT(1) as Lua booleans while other adapters return 0/1 numbers.
+---@param value any
+---@return boolean
+function DatabaseBoolean(value)
+    return value == true or value == 1 or value == "1"
+end
