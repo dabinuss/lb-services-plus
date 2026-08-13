@@ -241,6 +241,7 @@ local function normalizeSpec(spec, partial, owner)
         result.templateDefinition = definitionOrError and {
             ui = definitionOrError.ui,
             height = definitionOrError.height,
+            fullCard = definitionOrError.fullCard,
         } or nil
     elseif spec.layout ~= nil then
         local layout = tostring(spec.layout)
@@ -793,6 +794,9 @@ function PeekPlus.RegisterTemplate(owner, name, definition)
     end
     if defaults.standardTemplates[name] then return nil, "reserved_template_name" end
     if type(definition) ~= "table" then return nil, "invalid_template" end
+    if definition.fullCard ~= nil and type(definition.fullCard) ~= "boolean" then
+        return nil, "invalid_full_card"
+    end
 
     local layout = definition.layout or (definition.ui and "custom" or "text")
     if not defaults.allowedLayouts[layout] then return nil, "invalid_layout" end
@@ -811,7 +815,14 @@ function PeekPlus.RegisterTemplate(owner, name, definition)
     local height = math.floor(tonumber(definition.height) or 160)
     if height < 40 or height > limits.maxTemplateHeight then return nil, "invalid_template_height" end
     local canonical = owner .. ":" .. name
-    templates[canonical] = { owner = owner, name = name, layout = layout, ui = ui, height = height }
+    templates[canonical] = {
+        owner = owner,
+        name = name,
+        layout = layout,
+        ui = ui,
+        height = height,
+        fullCard = definition.fullCard == true,
+    }
     return canonical
 end
 

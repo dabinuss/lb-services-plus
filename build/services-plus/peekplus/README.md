@@ -74,13 +74,11 @@ Card options:
 - `layout`: content model: `text`, `details`, `actions`, `progress`, `timer`
   or the `custom` layout selected by a registered iframe template.
 - `template`: visual renderer. Built-ins are `default`, `compact`, `detail`,
-  `action`, `active-request`, `progress` and `timer`.
+  `action`, `progress` and `timer`.
 - `history`: `false` excludes this card from the local history; it defaults
   to `true`.
 - `icon`: optional semantic card icon such as `taxi`, `medical`, `police`, or `wrench`.
 - `iconUrl`: optional HTTPS image URL shown as the card icon; `icon` remains its fallback.
-- `active-request`: built-in dispatch template for a persistent accepted request,
-  with branded header, compact icon/value details and two prominent actions.
 - `details`: up to the configured number of `{ label, value, icon? }` rows. If every row has an icon, PeekPlus uses the compact icon/value layout and keeps labels as accessibility text.
 - `progress`: `{ value, max, label }` for a progress layout.
 - `timer`: `{ elapsed, duration, countdown, label }`, using milliseconds.
@@ -202,6 +200,7 @@ A consumer can register a resource-owned iframe renderer:
 local templateId, err = exports["services-plus"]:RegisterPeekTemplate("live-map", {
     ui = "ui/live-map.html",
     height = 150,
+    fullCard = false,
 })
 
 exports["services-plus"]:ShowPeek({
@@ -214,15 +213,23 @@ exports["services-plus"]:ShowPeek({
 
 The UI path must belong to the invoking resource and be listed in that
 resource's `files`. PeekPlus constructs the CFX URL, sandboxes the iframe,
-limits its height and payload, disables pointer input inside it, and removes
-it with the owning resource. The iframe receives:
+limits its height and payload, and removes it with the owning resource.
+Normal custom templates are passive and keep PeekPlus' standard card chrome.
+Setting `fullCard = true` gives the iframe the complete bounded visual surface
+and pointer input. PeekPlus still owns geometry, lifecycle, hotkeys,
+confirmation state and server-facing action validation. The iframe receives:
 
 ```js
 window.addEventListener('message', ({ data }) => {
     if (data?.type !== 'peekplus:template') return
-    // data.template, data.data and a bounded data.card summary
+    // data.template, data.data, data.presentation, data.actionEndpoint
+    // and a bounded, validated data.card summary including actions.
 })
 ```
+
+A full-card renderer invokes an advertised action through `actionEndpoint`
+with `{ id: card.id, revision: card.revision, action: action.id }`. PeekPlus
+rejects stale cards and actions not declared on the currently visible card.
 
 Arbitrary HTML is never accepted in a normal card payload. Unregister an
 unused renderer with `UnregisterPeekTemplate(name)`. Active templates cannot

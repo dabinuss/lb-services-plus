@@ -3,6 +3,14 @@ local peekByRequest = {}
 local requestByPeek = {}
 local activeRequestId = nil
 local distanceToken = 0
+local activeRequestTemplate, activeRequestTemplateError = PeekPlus.RegisterTemplate(owner, "active-request", {
+    ui = "services/templates/active-request/index.html",
+    height = 178,
+    fullCard = true,
+})
+
+assert(activeRequestTemplate, ("Failed to register Services+ active request template: %s")
+    :format(tostring(activeRequestTemplateError)))
 
 local categoryIcons = {
     police = "police",
@@ -101,10 +109,10 @@ local function activeCard(payload)
         key = ("service-request:%s"):format(payload.requestId),
         state = "active",
         variant = "success",
-        template = "active-request",
+        template = activeRequestTemplate,
         icon = requestIcon(payload),
         iconUrl = payload.companyIcon,
-        layout = "details",
+        templateData = { statusLabel = "Active request" },
         title = tostring(payload.typeName or "Active request"),
         subtitle = tostring(payload.companyName or Config.App.name),
         description = type(payload.description) == "string" and payload.description ~= ""

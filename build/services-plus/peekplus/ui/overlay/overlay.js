@@ -2,7 +2,7 @@
 // .full-phone tree and owns LB's native .phoneVisbility peek position. It
 // does not enqueue an LB notification or edit any LB Phone files.
 ;(function () {
-    const CONTROLLER_VERSION = 'peekplus-1.1.15'
+    const CONTROLLER_VERSION = 'peekplus-1.2.0'
     const resourceName = typeof GetParentResourceName === 'function' ? GetParentResourceName() : 'services-plus'
     const OVERLAY_ID = 'services-plus-overlay'
     const STYLE_ID = 'services-plus-overlay-styles'
@@ -249,52 +249,11 @@
             background: rgb(28, 28, 30);
             color: #f2f2f7;
         }
-        /* Built-in persistent dispatch surface. Consumers select the
-           template; PeekPlus owns every pixel of its phone-safe layout. */
-        #${OVERLAY_ID}[data-theme] .sp-card[data-template='active-request'] {
-            width: 100%; max-width: 100%; padding: .9rem 1.35rem 1rem;
-            border: 0; border-radius: 0; color: #f7f8fa;
-            background: linear-gradient(180deg, #050607 0%, #020303 100%);
-            box-shadow: inset 0 1px 0 rgba(255,255,255,.025);
-        }
-        #${OVERLAY_ID} .sp-card[data-template='active-request'] .sp-header { gap: .72rem; }
-        #${OVERLAY_ID} .sp-card[data-template='active-request'] .sp-card-icon {
-            width: 2.85rem; height: 2.85rem; border-radius: .78rem;
-            background: linear-gradient(145deg, #444950, #292d32);
-            border-color: rgba(255,255,255,.11);
-            box-shadow: 0 .22rem .55rem rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.08);
-        }
-        #${OVERLAY_ID} .sp-card[data-template='active-request'] .sp-card-icon .sp-icon { width: 1.7rem; height: 1.7rem; }
-        #${OVERLAY_ID} .sp-card[data-template='active-request'] .sp-title {
-            font-size: 1rem; line-height: 1.08; letter-spacing: -.015em;
-        }
-        #${OVERLAY_ID} .sp-card[data-template='active-request'] .sp-sub {
-            margin-top: .12rem; font-size: .74rem; color: rgba(255,255,255,.62); opacity: 1;
-        }
-        #${OVERLAY_ID} .sp-card[data-template='active-request'] .sp-status {
-            padding: .34rem .58rem; border-radius: .65rem; font-size: .67rem; color: #46e87a;
-            background: linear-gradient(180deg, rgba(36,110,62,.68), rgba(24,72,42,.68));
-            border-color: rgba(70,232,122,.25); box-shadow: inset 0 1px 0 rgba(255,255,255,.045);
-        }
-        #${OVERLAY_ID} .sp-card[data-template='active-request'] .sp-meta {
-            margin-top: .45rem; color: rgba(255,255,255,.72);
-        }
-        #${OVERLAY_ID} .sp-card[data-template='active-request'] .sp-details.iconic { margin-top: .72rem; gap: .5rem; }
-        #${OVERLAY_ID} .sp-card[data-template='active-request'] .sp-details.iconic .sp-detail {
-            gap: .46rem; font-size: .9rem; line-height: 1.15;
-        }
-        #${OVERLAY_ID} .sp-card[data-template='active-request'] .sp-details.iconic .sp-detail + .sp-detail {
-            padding-left: .58rem; border-left-color: rgba(255,255,255,.13);
-        }
-        #${OVERLAY_ID} .sp-card[data-template='active-request'] .sp-detail-icon {
-            width: 1.6rem; height: 1.6rem; color: rgba(255,255,255,.82); opacity: 1;
-        }
-        #${OVERLAY_ID} .sp-card[data-template='active-request'] .sp-detail-value {
-            color: #fff; font-weight: 720; font-variant-numeric: tabular-nums;
-        }
-        #${OVERLAY_ID} .sp-card[data-template='active-request'] .sp-buttons { gap: .62rem; margin-top: .82rem; }
-        #${OVERLAY_ID} .sp-card[data-template='active-request'] .sp-btn {
-            padding: .62rem .35rem; border-radius: .68rem; font-size: .76rem; letter-spacing: -.01em;
+        /* Full-card consumers own their visual surface. PeekPlus only
+           supplies a bounded display slot and the trusted action bridge. */
+        #${OVERLAY_ID}[data-theme] .sp-card[data-full-card='true'] {
+            width: 100%; max-width: 100%; padding: 0; border: 0; border-radius: 0;
+            color: inherit; background: transparent; box-shadow: none;
         }
         #${OVERLAY_ID} .sp-header { display: flex; align-items: center; gap: .65rem; min-width: 0; }
         #${OVERLAY_ID} .sp-card-icon {
@@ -335,6 +294,7 @@
         #${OVERLAY_ID} .sp-timer { margin-top: .55rem; font-size: 1.25rem; font-variant-numeric: tabular-nums; font-weight: 700; }
         #${OVERLAY_ID} .sp-timer-label { font-size: .68rem; opacity: .65; margin-top: .08rem; }
         #${OVERLAY_ID} .sp-template-frame { display: block; width: 100%; margin-top: .55rem; border: 0; overflow: hidden; pointer-events: none; background: transparent; }
+        #${OVERLAY_ID} .sp-template-frame[data-full-card='true'] { margin-top: 0; pointer-events: auto; }
         #${OVERLAY_ID} .sp-buttons { display: flex; gap: .5rem; margin-top: .7rem; }
         #${OVERLAY_ID} .sp-btn {
             flex: 1;
@@ -354,14 +314,7 @@
         #${OVERLAY_ID} .sp-btn.primary { background: #0a84ff; color: #fff; }
         #${OVERLAY_ID} .sp-btn.default { background: rgba(127, 127, 127, .25); color: inherit; }
         #${OVERLAY_ID} .sp-btn:disabled { cursor: default; opacity: .55; }
-        #${OVERLAY_ID}[data-host='phone'] .sp-card[data-template='active-request'] {
-            max-height: 12.5rem;
-            padding: .78rem 1.3rem .88rem;
-        }
-        #${OVERLAY_ID}[data-host='phone'] .sp-card[data-template='active-request'] .sp-details.iconic[data-count='3'] {
-            grid-template-columns: 3.6rem minmax(0, 1fr) 6.8rem;
-            gap: .35rem;
-        }
+        #${OVERLAY_ID}[data-host='phone'] .sp-card[data-full-card='true'] { max-height: 12.5rem; }
         /* LB Phone itself uses this (misspelled) wrapper to move the complete
            device: closed = 60rem, notification = 45rem. Owning this single
            native property avoids iframe crops and preserves LB's animation. */
@@ -571,12 +524,26 @@
             type: 'peekplus:template',
             template: payload.template,
             data: payload.templateData || {},
+            actionEndpoint: `https://${resourceName}/peekplusAction`,
+            presentation: {
+                host: frame.closest(`#${OVERLAY_ID}`)?.dataset.host || 'fallback',
+                theme: getPhoneTheme(),
+                callPriority: callHasPriority,
+            },
             card: {
                 id: payload.id,
+                revision: payload.revision,
+                state: payload.state,
                 title: payload.title,
                 subtitle: payload.subtitle,
                 description: payload.description,
                 variant: payload.variant,
+                icon: payload.icon,
+                iconUrl: payload.iconUrl,
+                details: payload.details || [],
+                actions: payload.actions || [],
+                actionInFlight: payload.actionInFlight === true,
+                confirmAction: payload.confirmAction,
             },
         }, '*')
     }
@@ -597,12 +564,17 @@
         frame.onload = () => postTemplateFrame(frame, payload)
         frame.dataset.cardId = String(payload.id)
         frame.dataset.template = String(payload.template)
+        frame.dataset.fullCard = definition.fullCard === true ? 'true' : 'false'
         frame.style.height = `${Number(definition.height) || 160}px`
         element.appendChild(frame)
         if (canReuse) postTemplateFrame(frame, payload)
     }
 
     function renderCard(targetDocument, element, payload, reusableFrame) {
+        if (payload.layout === 'custom' && payload.templateDefinition?.fullCard === true) {
+            renderCustomTemplate(targetDocument, element, payload, reusableFrame)
+            return
+        }
         if (payload.icon || payload.state === 'active') {
             const header = targetDocument.createElement('div')
             header.className = 'sp-header'
@@ -668,6 +640,7 @@
         card.dataset.variant = lastState.card.variant || 'neutral'
         card.dataset.state = lastState.card.state || 'pending'
         card.dataset.template = lastState.card.template || 'default'
+        card.dataset.fullCard = lastState.card.templateDefinition?.fullCard === true ? 'true' : 'false'
         renderCard(container.ownerDocument, card, lastState.card, reusableFrame)
         container.replaceChildren(card)
     }

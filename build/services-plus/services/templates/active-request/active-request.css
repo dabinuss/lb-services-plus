@@ -1,0 +1,144 @@
+:root {
+    color-scheme: dark;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html,
+body,
+#active-request {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+}
+
+body { background: transparent; }
+
+.request-card {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    padding: 12px 20px 14px;
+    color: #f7f8fa;
+    background: linear-gradient(180deg, #050607 0%, #020303 100%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .025);
+}
+
+.request-header {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    gap: 11px;
+}
+
+.company-icon {
+    position: relative;
+    flex: 0 0 48px;
+    width: 48px;
+    height: 48px;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, .11);
+    border-radius: 13px;
+    color: #f2f3f5;
+    background: linear-gradient(145deg, #444950, #292d32);
+    box-shadow: 0 4px 9px rgba(0, 0, 0, .35), inset 0 1px 0 rgba(255, 255, 255, .08);
+}
+
+.company-icon svg { width: 29px; height: 29px; }
+.company-icon img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+
+.heading { min-width: 0; flex: 1 1 auto; }
+.title,
+.subtitle,
+.note,
+.detail-value {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.title { font-size: 17px; line-height: 1.08; font-weight: 750; letter-spacing: -.25px; }
+.subtitle { margin-top: 2px; color: rgba(255, 255, 255, .62); font-size: 12px; line-height: 1.1; }
+
+.status {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    border: 1px solid rgba(70, 232, 122, .25);
+    border-radius: 11px;
+    color: #46e87a;
+    background: linear-gradient(180deg, rgba(36, 110, 62, .68), rgba(24, 72, 42, .68));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .045);
+    font-size: 11px;
+    font-weight: 750;
+    white-space: nowrap;
+}
+
+.status::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.note { margin-top: 6px; color: rgba(255, 255, 255, .7); font-size: 11px; line-height: 1.15; }
+
+.details {
+    display: grid;
+    align-items: center;
+    min-width: 0;
+    gap: 6px;
+    margin-top: 11px;
+}
+
+.details[data-count="3"] { grid-template-columns: 58px minmax(0, 1fr) 108px; }
+.details[data-count="2"] { grid-template-columns: minmax(0, 1fr) 116px; }
+.details[data-count="1"] { grid-template-columns: minmax(0, 1fr); }
+
+.detail {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+}
+
+.detail + .detail { padding-left: 8px; border-left: 1px solid rgba(255, 255, 255, .13); }
+.detail-icon { flex: 0 0 26px; width: 26px; height: 26px; color: rgba(255, 255, 255, .84); }
+.detail-icon svg { width: 100%; height: 100%; }
+.detail-value { flex: 1 1 auto; color: #fff; font-size: 15px; line-height: 1.15; font-weight: 750; font-variant-numeric: tabular-nums; }
+
+.actions { display: flex; gap: 10px; margin-top: auto; padding-top: 11px; }
+.action {
+    min-width: 0;
+    flex: 1 1 0;
+    overflow: hidden;
+    padding: 9px 6px;
+    border: 0;
+    border-radius: 11px;
+    color: #fff;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 750;
+    letter-spacing: -.12px;
+    line-height: 1;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.action.success { background: linear-gradient(180deg, #35df65, #22b94e); box-shadow: 0 3px 8px rgba(48, 209, 88, .2); }
+.action.danger { background: linear-gradient(180deg, #ff5a52, #e63b34); box-shadow: 0 3px 8px rgba(255, 69, 58, .16); }
+.action.primary { background: linear-gradient(180deg, #168cf5, #0874d2); }
+.action.default { background: #383b40; }
+.action:disabled { cursor: default; filter: saturate(.65); opacity: .58; }
+
+.sp-icon {
+    display: block;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}

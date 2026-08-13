@@ -170,6 +170,13 @@ street, optional customer note and live distance to the reported coordinates.
 The first `ENTER` (or Complete request click) arms completion; pressing it again
 within five seconds completes the ride and notifies the customer.
 
+The active request's complete visual implementation belongs to Services+ at
+`services/templates/active-request/` (HTML, CSS and JavaScript). Services+
+registers it as a PeekPlus `fullCard` consumer template. PeekPlus contributes
+only the bounded phone-display slot, lifecycle, hotkeys, confirmation state
+and validated action bridge, so changing this design never requires adding a
+Services+-specific template or CSS rule to PeekPlus.
+
 Test the complete peek path locally from the F8 console without creating a
 request:
 
