@@ -1,3 +1,5 @@
+if Config.Debug ~= true then return end
+
 local owner = GetCurrentResourceName()
 local testId = nil
 

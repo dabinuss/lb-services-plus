@@ -1,5 +1,8 @@
 Config = {}
 
+-- Enables local development helpers such as PeekPlus test commands.
+Config.Debug = false
+
 -- "auto" tries ESX -> QBCore -> Qbox -> Standalone, in that order.
 -- Set explicitly ("esx", "qb", "qbx", "standalone") if auto-detection picks the wrong one.
 Config.Framework = "auto"

@@ -2,7 +2,7 @@
 // .full-phone tree and owns LB's native .phoneVisbility peek position. It
 // does not enqueue an LB notification or edit any LB Phone files.
 ;(function () {
-    const CONTROLLER_VERSION = 'peekplus-1.2.0'
+    const CONTROLLER_VERSION = 'peekplus-1.2.1'
     const resourceName = typeof GetParentResourceName === 'function' ? GetParentResourceName() : 'services-plus'
     const OVERLAY_ID = 'services-plus-overlay'
     const STYLE_ID = 'services-plus-overlay-styles'
@@ -618,7 +618,10 @@
 
     function render() {
         const container = ensureContainer()
-        if (!container) return
+        if (!container) {
+            clearRenderedTimer()
+            return
+        }
         const renderKey = JSON.stringify({
             card: lastState?.card || null,
             host: container.dataset.host,

@@ -33,6 +33,10 @@ See `ui/src/screens/company/`, `server/requests.lua`, `server/calls.lua`,
 - **PeekPlus Notifications app**: a separate LB Phone app shows the bounded
   local session history. It has no server API or database storage; consumer
   resources own transport, gameplay validation and any persistent state.
+- **Scalable LB Phone settings sync**: PeekPlus reads current settings and
+  phone state through LB Phone's client exports. The server event is retained
+  only as a fallback for older LB Phone versions, avoiding a restart burst of
+  one settings request per connected player on current installations.
 - **Admin area** (`ui/src/screens/admin/`, `server/admin.lua`): full CRUD for
   companies (incl. numbers and boss assignment by online player ID),
   categories, and request types; per-company admin ceilings for calls/

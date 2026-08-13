@@ -1,3 +1,6 @@
+-- Compatibility endpoint only. Current LB Phone versions expose GetSettings
+-- on the client, so PeekPlus does not call this during a normal resource
+-- start. It remains available for older installations.
 local lastSettingsRequest = {}
 
 local function readPhoneSettings(playerSource)

@@ -59,7 +59,16 @@ function PeekPlusLBPhone.GetNotificationSound()
 end
 
 function PeekPlusLBPhone.RequestSettings()
+    local current = safeExport("GetSettings", nil)
+    if type(current) == "table" then
+        normalizeSettings(current)
+        return true
+    end
+
+    -- Compatibility fallback for LB Phone versions that predate the
+    -- client-side GetSettings export. Current versions never hit the server.
     TriggerServerEvent("services-plus:server:peekplusSettings")
+    return false
 end
 
 RegisterNetEvent("services-plus:client:peekplusSettings", normalizeSettings)

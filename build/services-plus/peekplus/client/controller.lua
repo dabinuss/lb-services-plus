@@ -712,12 +712,50 @@ end
 
 function PeekPlus.ClearOwner(owner)
     if type(owner) ~= "string" or owner == "" then return false, "invalid_owner" end
-    local ids = {}
+    local ids, owned = {}, {}
     for id, card in pairs(cards) do
-        if card.owner == owner then ids[#ids + 1] = id end
+        if card.owner == owner then
+            ids[#ids + 1] = id
+            owned[id] = true
+        end
     end
-    for index = 1, #ids do PeekPlus.Remove(ids[index], owner, nil, nil, "owner_stopped") end
-    return true, nil, #ids
+    if #ids == 0 then return true, nil, 0 end
+
+    -- Detach the complete owner state before emitting lifecycle events. This
+    -- prevents Remove() from promoting another dying card between removals.
+    for index = #queue, 1, -1 do
+        if owned[queue[index]] then table.remove(queue, index) end
+    end
+    for index = #suspended, 1, -1 do
+        if owned[suspended[index]] then table.remove(suspended, index) end
+    end
+
+    local visibleRemoved = visibleId and owned[visibleId] == true
+    if visibleRemoved then
+        peekWatchToken = peekWatchToken + 1
+        interruptedId = nil
+        visibleId = nil
+    elseif interruptedId and owned[interruptedId] then
+        interruptedId = nil
+    end
+
+    local removed = {}
+    for index = 1, #ids do
+        local card = cards[ids[index]]
+        if card then
+            if card.key then keyIndex[card.owner .. ":" .. card.key] = nil end
+            cards[card.id] = nil
+            removed[#removed + 1] = card
+        end
+    end
+
+    for index = 1, #removed do
+        updateHistory(removed[index], "owner_stopped")
+        emitLifecycle(removed[index], "owner_stopped", { removed = true })
+    end
+
+    if visibleRemoved then showNext(true) end
+    return true, nil, #removed
 end
 
 function PeekPlus.ReleaseAction(id, owner, actionToken)

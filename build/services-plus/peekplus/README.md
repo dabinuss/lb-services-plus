@@ -16,7 +16,8 @@ All PeekPlus-owned code is grouped below `peekplus/`:
 - `shared/` contains configuration, defaults and validation limits.
 - `client/` contains app registration, the controller, LB Phone adapter, API,
   history and tests.
-- `server/` only reads the equipped phone's LB Phone notification settings.
+- `server/` contains only the legacy settings fallback for LB Phone versions
+  without the client-side `GetSettings` export.
 - `ui/overlay/` is the cache-busted Sibling-NUI controller.
 - `ui/notification-app/` contains the React source for local history.
 
@@ -30,6 +31,9 @@ The local Notifications app and its session history are enabled by default.
 Set `Config.PeekPlusApp.enabled = false` in `peekplus/shared/config.lua` to
 disable both. Peek cards, actions and all other PeekPlus functions continue to
 work normally without the History app.
+
+Local `peekplus_test*` development commands are registered only when
+`Config.Debug = true` in `shared/config.lua`.
 
 ## Show a card
 
