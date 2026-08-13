@@ -84,7 +84,9 @@ Framework detection can be automatic.
 
 ### 1. Add the resource
 
-Place the `services-plus` folder inside your FiveM resources directory.
+Use the ready-to-install `build/services-plus` folder and place it inside your
+FiveM resources directory as `services-plus`. The `dev` directory is the
+development source and is not intended for production installation.
 
 ### 2. Import the database
 
@@ -144,6 +146,10 @@ availability, synchronize employee states, and send company messages through
 the public Services+ exports and lifecycle events.
 
 See the complete [Server API documentation](dev/services-plus/API.md).
+
+Services+ also includes the reusable PeekPlus client API for phone-peek cards,
+actions and lifecycle handling. See the complete
+[PeekPlus documentation](dev/services-plus/PEEKPLUS.md).
 
 ## Important
 

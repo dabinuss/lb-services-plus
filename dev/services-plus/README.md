@@ -21,12 +21,12 @@ See `ui/src/screens/company/`, `server/requests.lua`, `server/calls.lua`,
 
 **Phase 3** - added on top:
 
-- **Sibling-NUI request notifications** (`ui/overlay/`, `client/overlay.lua`,
-  SIBLING-NUI.md technique): a second, tiny NUI page injects a request card
-  directly into the CitizenFX root document - not into lb-phone's own
-  iframe, so it works even with the phone closed or at peek (plan §44).
-  Accept/Decline, then an active card with a live distance readout and
-  Complete/Cancel. Max one on screen at a time; extras queue. Accepting
+- **PeekPlus request notifications** (`ui/overlay/`, `client/peekplus/`,
+  `client/services/requests.lua`): the generic PeekPlus layer controls LB
+  Phone's native peek and injects cards into its runtime DOM without changing
+  LB Phone files. Services+ is now a small consumer adapter. Accept/Decline,
+  then an active card with a live distance readout and Complete/Cancel. Max
+  one on screen at a time; extras queue. Accepting
   anywhere (overlay or the in-app Requests tab) tells every other notified
   employee to drop theirs (`server/requests.lua`'s `notifiedSources`/
   `clearNotifications`).
@@ -143,7 +143,7 @@ of smaller correctness/perf items):
 picks the wrong framework.
 
 Request notifications use LB Phone's native peek position/transition and a
-Services+-owned Sibling-NUI lock. Their sound is played directly through LB
+PeekPlus-owned Sibling-NUI lock. Their sound is played directly through LB
 Phone without adding a second native notification to LB's queue. Configure
 the pending-notification duration with
 `Config.RequestNotificationPeekDuration` in `shared/config.lua`; `0` keeps
@@ -165,15 +165,21 @@ Test the complete peek path locally from the F8 console without creating a
 request:
 
 ```text
-servicesplus_testpeek 15
-servicesplus_testpeek hold
-servicesplus_testpeek_hold
-servicesplus_testpeek stop
+peekplus_test 15
+peekplus_test hold
+peekplus_test_hold
+peekplus_test stop
 ```
 
 The optional duration is specified in seconds and is limited to 1–120.
 `hold` (or the dedicated `_hold` command) keeps the peek open until `stop` or
-the card's close button is used.
+its confirmed Cancel action is used.
+
+## Public PeekPlus client API
+
+Other client resources can display validated, owner-scoped PeekPlus cards
+through the exports provided by `services-plus`. See [`PEEKPLUS.md`](PEEKPLUS.md)
+for card fields, actions, confirmation, state transitions and lifecycle rules.
 
 ## Public server API
 

@@ -1,20 +1,22 @@
-// Services+ Sibling-NUI request controller. It renders into LB Phone's real
+// PeekPlus Sibling-NUI controller. It renders into LB Phone's real
 // .full-phone tree and owns LB's native .phoneVisbility peek position. It
 // does not enqueue an LB notification or edit any LB Phone files.
 ;(function () {
-    const CONTROLLER_VERSION = 'peek-20260812-14'
+    const CONTROLLER_VERSION = 'peekplus-1.0.0'
     const resourceName = typeof GetParentResourceName === 'function' ? GetParentResourceName() : 'services-plus'
     const OVERLAY_ID = 'services-plus-overlay'
     const STYLE_ID = 'services-plus-overlay-styles'
     const LOCK_ATTRIBUTE = 'data-services-plus-peek-lock'
     const CALL_PRIORITY_ATTRIBUTE = 'data-services-plus-call-priority'
 
-    let lastState = null // { type: 'notification' | 'active', payload } | null
+    let lastState = null // { card, forceFallback } | null
     let rootDocument = null
     let lbDocument = null
     let lbFrame = null
     let rootObserver = null
     let lbObserver = null
+    let rootObservedBody = null
+    let lbObservedRoot = null
     let reconnectTimer = null
     let peekTimer = null
     let peekCaptureTimer = null
@@ -27,7 +29,9 @@
     let lastNotificationSoundAt = 0
     let callHasPriority = false
     let phoneIsOpen = false
-    let cancelConfirmActive = false
+    let domFrame = null
+    let lastRenderKey = null
+    const reportedCapabilities = new Set()
 
     function post(action, data) {
         return fetch(`https://${resourceName}/${action}`, {
@@ -67,14 +71,14 @@
         }
     }
 
-    function escapeHtml(text) {
-        const div = document.createElement('div')
-        div.textContent = text == null ? '' : String(text)
-        return div.innerHTML
-    }
-
     function getPhoneTheme() {
         return lbDocument?.documentElement?.getAttribute('data-theme') || 'dark'
+    }
+
+    function reportCapability(name) {
+        if (reportedCapabilities.has(name)) return
+        reportedCapabilities.add(name)
+        console.warn(`[services-plus][PeekPlus] LB Phone capability unavailable: ${name}; using safe fallback.`)
     }
 
     const STYLES = `
@@ -142,9 +146,14 @@
             cursor: pointer;
         }
         #${OVERLAY_ID} .sp-btn.accept,
-        #${OVERLAY_ID} .sp-btn.complete { background: #30d158; color: #fff; }
+        #${OVERLAY_ID} .sp-btn.complete,
+        #${OVERLAY_ID} .sp-btn.success { background: #30d158; color: #fff; }
         #${OVERLAY_ID} .sp-btn.decline,
         #${OVERLAY_ID} .sp-btn.cancel { background: #ff453a; color: #fff; }
+        #${OVERLAY_ID} .sp-btn.danger { background: #ff453a; color: #fff; }
+        #${OVERLAY_ID} .sp-btn.primary { background: #0a84ff; color: #fff; }
+        #${OVERLAY_ID} .sp-btn.default { background: rgba(127, 127, 127, .25); color: inherit; }
+        #${OVERLAY_ID} .sp-btn:disabled { cursor: default; opacity: .55; }
         /* LB Phone itself uses this (misspelled) wrapper to move the complete
            device: closed = 60rem, notification = 45rem. Owning this single
            native property avoids iframe crops and preserves LB's animation. */
@@ -166,11 +175,14 @@
     `
 
     function ensureStyles(targetDocument) {
-        if (!targetDocument?.head || targetDocument.getElementById(STYLE_ID)) return
-        const style = targetDocument.createElement('style')
-        style.id = STYLE_ID
-        style.textContent = STYLES
-        targetDocument.head.appendChild(style)
+        if (!targetDocument?.head) return
+        let style = targetDocument.getElementById(STYLE_ID)
+        if (!style) {
+            style = targetDocument.createElement('style')
+            style.id = STYLE_ID
+            targetDocument.head.appendChild(style)
+        }
+        if (style.textContent !== STYLES) style.textContent = STYLES
     }
 
     function removeContainersExcept(targetDocument) {
@@ -180,14 +192,19 @@
     }
 
     function ensureContainer() {
-        const lockscreenHost = phoneIsOpen && !lastState?.forceFallback
+        const fullPhone = lbDocument?.querySelector('.full-phone') || null
+        const visibilityWrapper = lbDocument?.querySelector('.phoneVisbility') || null
+        const phoneCompatible = Boolean(fullPhone && visibilityWrapper)
+        const domFallback = Boolean(lastState && !lastState.forceFallback && !phoneCompatible)
+        const lockscreenHost = phoneIsOpen && phoneCompatible && !lastState?.forceFallback
             ? lbDocument?.querySelector('.lockscreen-notification-container')
             : null
-        const phoneHost = !phoneIsOpen && !lastState?.forceFallback
-            ? lbDocument?.querySelector('.full-phone')
+        const phoneHost = !phoneIsOpen && phoneCompatible && !lastState?.forceFallback
+            ? fullPhone
             : null
-        const targetDocument = lockscreenHost || phoneHost ? lbDocument : phoneIsOpen ? null : rootDocument
-        const host = lockscreenHost || phoneHost || (!phoneIsOpen ? rootDocument?.body : null)
+        const useFallback = lastState?.forceFallback || domFallback
+        const targetDocument = lockscreenHost || phoneHost ? lbDocument : useFallback ? rootDocument : null
+        const host = lockscreenHost || phoneHost || (useFallback ? rootDocument?.body : null)
         if (!targetDocument || !host) return null
 
         ensureStyles(targetDocument)
@@ -209,73 +226,56 @@
         return container
     }
 
-    function formatDistance(meters) {
-        if (typeof meters !== 'number') return ''
-        return `${(meters / 1609.34).toFixed(1)} mi`
+    function addText(targetDocument, parent, className, value) {
+        if (!value) return
+        const element = targetDocument.createElement('div')
+        element.className = className
+        element.textContent = String(value)
+        parent.appendChild(element)
     }
 
-    function renderNotification(targetDocument, card, payload) {
-        card.innerHTML = `
-            <div class="sp-title">${escapeHtml(payload.typeName)}</div>
-            <div class="sp-sub">${escapeHtml(payload.companyName)}</div>
-            ${payload.passengerCount ? `<div class="sp-meta">${escapeHtml(payload.countLabel || 'Passenger count')}: ${escapeHtml(payload.passengerCount)}</div>` : ''}
-            ${payload.description ? `<div class="sp-meta">${escapeHtml(payload.description)}</div>` : ''}
-            <div class="sp-buttons">
-                <button class="sp-btn decline">Delete · Decline</button>
-                <button class="sp-btn accept">Enter · Accept</button>
-            </div>
-        `
-        card.querySelector('.decline').onclick = () => {
-            post('overlayAction', { action: 'decline', requestId: payload.requestId })
-        }
-        card.querySelector('.accept').onclick = () => {
-            post('overlayAction', { action: 'accept', requestId: payload.requestId })
-        }
-    }
+    function renderCard(targetDocument, element, payload) {
+        addText(targetDocument, element, 'sp-title', payload.title)
+        addText(targetDocument, element, 'sp-sub', payload.subtitle)
+        addText(targetDocument, element, 'sp-meta', payload.description)
+        if (!Array.isArray(payload.actions) || payload.actions.length === 0) return
 
-    function renderActive(targetDocument, card, payload) {
-        if (payload.test) {
-            card.innerHTML = `
-                <div class="sp-title">${escapeHtml(payload.typeName)} · Accepted</div>
-                <div class="sp-sub">${escapeHtml(payload.companyName)}</div>
-                <div class="sp-meta">${escapeHtml(payload.description)}</div>
-                <div class="sp-buttons">
-                    <button class="sp-btn cancel">${cancelConfirmActive ? 'Confirm?' : 'Cancel test request'}</button>
-                </div>
-            `
-            card.querySelector('.cancel').onclick = () => post('overlayAction', {
-                action: 'testCancel',
-                requestId: payload.requestId,
+        const buttons = targetDocument.createElement('div')
+        buttons.className = 'sp-buttons'
+        payload.actions.forEach((action) => {
+            const button = targetDocument.createElement('button')
+            button.className = `sp-btn ${action.color || 'default'}`
+            button.textContent = payload.confirmAction === action.id
+                ? action.confirm?.label || 'Confirm?'
+                : action.label
+            button.disabled = payload.actionInFlight === true || callHasPriority
+            button.onclick = () => post('peekplusAction', {
+                id: payload.id,
+                revision: payload.revision,
+                action: action.id,
             })
-            return
-        }
-
-        card.innerHTML = `
-            <div class="sp-title">${escapeHtml(payload.typeName)}</div>
-            <div class="sp-sub">${escapeHtml(payload.companyName)}</div>
-            <div class="sp-meta">
-                ${payload.passengerCount ? `${escapeHtml(payload.countLabel || 'Passenger count')}: ${escapeHtml(payload.passengerCount)} · ` : ''}
-                <span class="sp-distance">${formatDistance(payload.distance)}</span>
-            </div>
-            <div class="sp-buttons">
-                <button class="sp-btn cancel">${cancelConfirmActive ? 'Confirm?' : 'Cancel'}</button>
-                <button class="sp-btn complete">Complete</button>
-            </div>
-        `
-        card.querySelector('.cancel').onclick = () => post('overlayAction', { action: 'cancel', requestId: payload.requestId })
-        card.querySelector('.complete').onclick = () => post('overlayAction', { action: 'complete', requestId: payload.requestId })
+            buttons.appendChild(button)
+        })
+        element.appendChild(buttons)
     }
 
     function render() {
         const container = ensureContainer()
         if (!container) return
-        container.innerHTML = ''
+        const renderKey = JSON.stringify({
+            card: lastState?.card || null,
+            host: container.dataset.host,
+            theme: container.dataset.theme,
+            call: callHasPriority,
+        })
+        if (renderKey === lastRenderKey && container.firstElementChild) return
+        lastRenderKey = renderKey
+        container.replaceChildren()
         if (!lastState) return
 
         const card = container.ownerDocument.createElement('div')
         card.className = 'sp-card'
-        if (lastState.type === 'notification') renderNotification(container.ownerDocument, card, lastState.payload)
-        else renderActive(container.ownerDocument, card, lastState.payload)
+        renderCard(container.ownerDocument, card, lastState.card)
         container.appendChild(card)
     }
 
@@ -377,6 +377,8 @@
         releasePeek(true)
         rootObserver?.disconnect()
         lbObserver?.disconnect()
+        window.cancelAnimationFrame(domFrame)
+        domFrame = null
         window.clearInterval(reconnectTimer)
         for (const doc of [rootDocument, lbDocument]) {
             try {
@@ -388,28 +390,44 @@
         }
     }
 
+    function scheduleDomRefresh() {
+        if (domFrame !== null) return
+        domFrame = window.requestAnimationFrame(() => {
+            domFrame = null
+            connect()
+            if (peekUntil > Date.now()) applyPeekLock()
+            if (lastState) render()
+        })
+    }
+
     function connect() {
         const nextRoot = findRootDocument()
         const phone = findLbPhone(nextRoot)
         const nextLbDocument = phone?.document || null
         const nextLbFrame = phone?.frame || null
-        const rootChanged = nextRoot !== rootDocument
+        const nextRootBody = nextRoot?.body || null
+        const nextLbObservedRoot = nextLbDocument?.querySelector('.full-phone') || nextLbDocument?.body || null
+        const rootChanged = nextRoot !== rootDocument || nextRootBody !== rootObservedBody
         const phoneChanged = nextLbDocument !== lbDocument || nextLbFrame !== lbFrame
+            || nextLbObservedRoot !== lbObservedRoot
+
+        if (!nextRoot) reportCapability('citizenfx-root')
+        else if (!phone) reportCapability('lb-phone-iframe')
+        else {
+            if (!nextLbDocument.querySelector('.full-phone')) reportCapability('.full-phone')
+            if (!nextLbDocument.querySelector('.phoneVisbility')) reportCapability('.phoneVisbility')
+        }
 
         if (rootChanged) {
             rootObserver?.disconnect()
             rootDocument = nextRoot
+            rootObservedBody = nextRootBody
             if (rootDocument) {
                 ensureStyles(rootDocument)
-                rootObserver = new MutationObserver(() => {
-                    connect()
-                    if (peekUntil > Date.now()) applyPeekLock()
-                })
+                rootObserver = new MutationObserver(scheduleDomRefresh)
                 rootObserver.observe(rootDocument.body, {
-                    attributes: true,
                     childList: true,
-                    subtree: true,
-                    attributeFilter: ['class', 'style'],
+                    subtree: false,
                 })
             }
         }
@@ -418,12 +436,10 @@
             lbObserver?.disconnect()
             lbDocument = nextLbDocument
             lbFrame = nextLbFrame
+            lbObservedRoot = nextLbObservedRoot
             if (lbDocument) {
-                lbObserver = new MutationObserver(() => {
-                    if (peekUntil > Date.now()) applyPeekLock()
-                    if (lastState && !lbDocument.getElementById(OVERLAY_ID)) render()
-                })
-                lbObserver.observe(lbDocument.documentElement, {
+                lbObserver = new MutationObserver(scheduleDomRefresh)
+                lbObserver.observe(lbObservedRoot, {
                     attributes: true,
                     childList: true,
                     subtree: true,
@@ -445,33 +461,31 @@
         const data = event.data
         if (!data?.action) return
 
-        if (data.action === 'requestNotification') {
-            lastState = { type: 'notification', payload: data.payload, forceFallback: data.forceFallback === true }
+        if (data.action === 'peekplus:render') {
+            phoneIsOpen = data.phoneOpen === true
+            callHasPriority = data.callActive === true
+            if (data.hidden === true) {
+                lastState = null
+                lastRenderKey = null
+                releasePeek(true)
+                rootDocument?.getElementById(OVERLAY_ID)?.remove()
+                lbDocument?.getElementById(OVERLAY_ID)?.remove()
+                return
+            }
+            lastState = {
+                card: data.card,
+                forceFallback: data.forceFallback === true,
+            }
             if (data.playSound === true) playNotificationSound(data.soundName)
             beginPeek(data.peekDuration, data.holdPeek === true)
-        } else if (data.action === 'dismiss') {
-            if (lastState?.type === 'notification' && lastState.payload.requestId === data.requestId) {
-                lastState = null
-                releasePeek()
-            }
-        } else if (data.action === 'showActive') {
-            cancelConfirmActive = false
-            lastState = { type: 'active', payload: data.payload, forceFallback: data.forceFallback === true }
-            beginPeek(data.peekDuration, data.holdPeek === true)
-        } else if (data.action === 'updateDistance') {
-            if (lastState?.type === 'active') lastState.payload.distance = data.distance
-        } else if (data.action === 'clearActive') {
-            if (lastState?.type === 'active') {
-                lastState = null
-                cancelConfirmActive = false
-                releasePeek()
-            }
-        } else if (data.action === 'clearTest') {
-            if (lastState?.payload?.test) lastState = null
+        } else if (data.action === 'peekplus:clear') {
+            lastState = null
+            lastRenderKey = null
             releasePeek()
-        } else if (data.action === 'releasePeek') {
-            releasePeek()
-        } else if (data.action === 'setPhoneOpen') {
+            rootDocument?.getElementById(OVERLAY_ID)?.remove()
+            lbDocument?.getElementById(OVERLAY_ID)?.remove()
+            return
+        } else if (data.action === 'peekplus:phone') {
             // On the open lockscreen the card participates in LB Phone's
             // native notification stack. On apps/home screens no lockscreen
             // host exists, so it remains hidden instead of covering the UI.
@@ -480,9 +494,7 @@
                 lbDocument?.getElementById(OVERLAY_ID)?.remove()
             }
             releasePeek(true)
-        } else if (data.action === 'setCancelConfirm') {
-            cancelConfirmActive = data.active === true
-        } else if (data.action === 'setCallPriority') {
+        } else if (data.action === 'peekplus:call') {
             callHasPriority = data.active === true
             const wrapper = lbDocument?.querySelector('.phoneVisbility')
             if (wrapper) {
@@ -492,7 +504,13 @@
                     wrapper.removeAttribute(CALL_PRIORITY_ATTRIBUTE)
                 }
             }
-        } else if (data.action === 'destroy') {
+        } else if (data.action === 'peekplus:reconnect') {
+            connect()
+        } else if (data.action === 'peekplus:phoneUnavailable') {
+            releasePeek(true)
+        } else if (data.action === 'peekplus:release') {
+            releasePeek()
+        } else if (data.action === 'peekplus:destroy') {
             cleanup()
             return
         } else {
@@ -504,6 +522,7 @@
 
     connect()
     reconnectTimer = window.setInterval(connect, 1000)
-    post('ready', { controllerVersion: CONTROLLER_VERSION })
-    window.addEventListener('unload', cleanup)
+    post('peekplusReady', { controllerVersion: CONTROLLER_VERSION })
+    window.addEventListener('pagehide', cleanup)
+    window.addEventListener('beforeunload', cleanup)
 })()

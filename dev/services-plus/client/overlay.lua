@@ -517,7 +517,7 @@ end
 
 local function runPeekTest(duration, durationLabel)
     if testPeekActive then
-        print("[services-plus] Peek test skipped: another test peek is still active. Use servicesplus_testpeek stop first.")
+        print("[services-plus] Peek test skipped: another test peek is still active. Use peekplus_test stop first.")
         return
     end
 
@@ -536,7 +536,7 @@ local function runPeekTest(duration, durationLabel)
     local playSound, soundName = getNotificationSound()
     local payload = {
         requestId = -(GetGameTimer() + 1),
-        typeName = "Services+ Peek Test",
+        typeName = "PeekPlus Test",
         companyName = "Local F8 test · " .. durationLabel,
         description = "Accept with ENTER or decline with DELETE. No server request is created.",
         test = true,
@@ -569,8 +569,8 @@ end
 
 -- Local F8 smoke tests for the complete native-notification + Sibling-NUI
 -- peek path. They never create a database request and have no server actions.
--- Usage: servicesplus_testpeek [seconds|hold|stop]
-RegisterCommand("servicesplus_testpeek", function(_, args)
+-- Usage: peekplus_test [seconds|hold|stop]
+RegisterCommand("peekplus_test", function(_, args)
     if args[1] == "stop" then return stopPeekTest() end
     if args[1] == "hold" then return runPeekTest(-1, "until stopped") end
 
@@ -579,6 +579,6 @@ RegisterCommand("servicesplus_testpeek", function(_, args)
     runPeekTest(seconds * 1000, seconds .. " seconds")
 end, false)
 
-RegisterCommand("servicesplus_testpeek_hold", function()
+RegisterCommand("peekplus_test_hold", function()
     runPeekTest(-1, "until stopped")
 end, false)

@@ -64,3 +64,23 @@ Config.MaxPassengerCount = 20
 -- this duration. Set it to 0 to use LB Phone's native duration only. Once a
 -- request is accepted, its active card is held until the request ends.
 Config.RequestNotificationPeekDuration = 15000
+
+-- Generic PeekPlus notification layer. The defaults preserve the current
+-- Services+ peek behaviour while bounding external consumer input.
+Config.PeekPlus = {
+    rootFallback = true,       -- Show a safe root notification when no usable phone exists.
+    maxCards = 50,             -- Maximum cards held globally on one client.
+    maxCardsPerOwner = 10,     -- Maximum cards owned by one consumer resource.
+    maxActions = 4,            -- Maximum buttons/actions on one card.
+    maxDuration = 300000,      -- Longest temporary peek in milliseconds (5 minutes).
+    maxPriority = 100,         -- Highest accepted queue priority.
+    actionTimeout = 10000,     -- Re-enable an unanswered action after this many milliseconds.
+    soundThrottle = 1000,      -- Minimum time between PeekPlus notification sounds.
+    textLimits = {
+        title = 100,
+        subtitle = 120,
+        description = 500,
+        actionId = 48,
+        actionLabel = 60,
+    },
+}

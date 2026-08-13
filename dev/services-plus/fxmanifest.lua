@@ -9,6 +9,7 @@ version '0.1.0'
 
 shared_scripts {
     'shared/config.lua',
+    'shared/peekplus.lua',
     'shared/categories.lua',
     'shared/locale.lua',
 }
@@ -16,7 +17,11 @@ shared_scripts {
 client_scripts {
     'client/callback.lua',
     'client/main.lua',
-    'client/overlay.lua',
+    'client/peekplus/lbphone.lua',
+    'client/peekplus/controller.lua',
+    'client/peekplus/api.lua',
+    'client/services/requests.lua',
+    'client/peekplus/debug.lua',
 }
 
 server_scripts {
@@ -24,6 +29,7 @@ server_scripts {
     'server/callback.lua',
     'server/util.lua',
     'server/framework.lua',
+    'server/peekplus.lua',
     'server/companies.lua',
     'server/employees.lua',
     'server/calls.lua',
@@ -36,13 +42,13 @@ server_scripts {
 
 -- The custom app itself (ui/dist) is loaded by lb-phone as a plain iframe
 -- src via AddCustomApp's `ui` field (see client/main.lua) - it does NOT need
--- this resource's own ui_page. That slot is used by the Sibling-NUI overlay
--- controller instead (client/overlay.lua + SIBLING-NUI.md).
-ui_page 'ui/overlay/index-peek-20260812-14.html'
+-- this resource's own ui_page. That slot is used by PeekPlus' Sibling-NUI
+-- controller instead. The legacy client/overlay.lua remains an unloaded
+-- migration reference until final acceptance.
+ui_page 'ui/overlay/index-peekplus-1.0.0.html'
 
 files {
-    'ui/overlay/index.html',
-    'ui/overlay/index-peek-20260812-14.html',
+    'ui/overlay/index-peekplus-1.0.0.html',
     'ui/overlay/overlay.js',
     'ui/dist/index.html',
     'ui/dist/**/*',

@@ -1,5 +1,24 @@
 # PeekPlus – Architektur- und Migrationsplan
 
+## Implementierungsstand – 13. August 2026
+
+Die Code-Migration ist umgesetzt:
+
+- generischer PeekPlus-Core und öffentliche Client-Exports
+- separater LB-Phone-Adapter und Services+-Requestadapter
+- Owner-Isolation, Queue, Interrupt/Suspend, Revisionen und Action-Tokens
+- feste Hotkeys, Zwei-Schritt-Bestätigung und Action-in-flight-Sperre
+- serverseitiger Settings-Initial-Sync und clientseitige Settings-Updates
+- sicherer DOM-Fallback, Observer-Debounce und vollständiges Cleanup
+- NUI-Rehydration, LB-Phone-Reconnect und Call-Priorität
+- API-Dokumentation und zweite optionale Test-Consumer-Resource
+
+Syntax-, Zustands-, Adapter-, Settings-, DOM- und Produktions-Buildtests sind
+lokal erfolgreich. Die bisherigen Peek-Dateien bleiben vorerst ungeladen als
+Verhaltensreferenz erhalten, bis der bestehende F8-/Ingame-Abnahmelauf auf dem
+Server bestätigt wurde. Es werden niemals alter und neuer Controller parallel
+geladen.
+
 ## 1. Ziel
 
 PeekPlus wird die generische Notification- und Phone-Peek-Schicht von
@@ -554,17 +573,9 @@ Die bisherigen F8-Befehle werden in PeekPlus verschoben und testen dieselbe
 öffentliche API wie externe Consumer:
 
 ```text
-servicesplus_testpeek 15
-servicesplus_testpeek hold
-servicesplus_testpeek_hold
-servicesplus_testpeek stop
-```
-
-Optional können später neutralere Alias-Befehle ergänzt werden:
-
-```text
 peekplus_test 15
 peekplus_test hold
+peekplus_test_hold
 peekplus_test stop
 ```
 
