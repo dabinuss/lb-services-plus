@@ -16,8 +16,8 @@ local function sanitizeSettings(settings)
     if type(settings) ~= "table" then return nil end
     local sound = type(settings.sound) == "table" and settings.sound or {}
     local notifications = type(settings.notifications) == "table" and settings.notifications or {}
-    local app = type(notifications[Config.App.identifier]) == "table"
-        and notifications[Config.App.identifier] or {}
+    local app = type(notifications[Config.PeekPlusApp.identifier]) == "table"
+        and notifications[Config.PeekPlusApp.identifier] or {}
 
     return {
         airplaneMode = settings.airplaneMode == true,

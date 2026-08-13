@@ -2,7 +2,7 @@
 // .full-phone tree and owns LB's native .phoneVisbility peek position. It
 // does not enqueue an LB notification or edit any LB Phone files.
 ;(function () {
-    const CONTROLLER_VERSION = 'peekplus-1.1.7'
+    const CONTROLLER_VERSION = 'peekplus-1.1.8'
     const resourceName = typeof GetParentResourceName === 'function' ? GetParentResourceName() : 'services-plus'
     const OVERLAY_ID = 'services-plus-overlay'
     const STYLE_ID = 'services-plus-overlay-styles'
@@ -32,6 +32,9 @@
     let domFrame = null
     let lastRenderKey = null
     let cardTimerInterval = null
+    let timerAnchorCardId = null
+    let timerAnchorKey = null
+    let timerAnchorStartedAt = 0
     const reportedCapabilities = new Set()
 
     function post(action, data) {
@@ -269,6 +272,12 @@
         cardTimerInterval = null
     }
 
+    function clearTimerAnchor() {
+        timerAnchorCardId = null
+        timerAnchorKey = null
+        timerAnchorStartedAt = 0
+    }
+
     function renderDetails(targetDocument, element, details) {
         if (!Array.isArray(details) || details.length === 0) return
         const rows = targetDocument.createElement('div')
@@ -302,11 +311,17 @@
         element.appendChild(wrapper)
     }
 
-    function renderTimer(targetDocument, element, timer) {
+    function renderTimer(targetDocument, element, timer, cardId) {
         if (!timer) return
         const display = targetDocument.createElement('div')
         display.className = 'sp-timer'
-        const startedAt = Date.now()
+        const timerKey = JSON.stringify(timer)
+        if (timerAnchorCardId !== cardId || timerAnchorKey !== timerKey) {
+            timerAnchorCardId = cardId
+            timerAnchorKey = timerKey
+            timerAnchorStartedAt = Date.now()
+        }
+        const startedAt = timerAnchorStartedAt
         const update = () => {
             const advanced = Math.max(0, Date.now() - startedAt)
             const value = timer.countdown
@@ -320,15 +335,8 @@
         addText(targetDocument, element, 'sp-timer-label', timer.label)
     }
 
-    function renderCustomTemplate(targetDocument, element, payload) {
-        const definition = payload.templateDefinition
-        if (!definition?.ui) return
-        const frame = targetDocument.createElement('iframe')
-        frame.className = 'sp-template-frame'
-        frame.src = definition.ui
-        frame.sandbox = 'allow-scripts'
-        frame.style.height = `${Number(definition.height) || 160}px`
-        frame.onload = () => frame.contentWindow?.postMessage({
+    function postTemplateFrame(frame, payload) {
+        frame.contentWindow?.postMessage({
             type: 'peekplus:template',
             template: payload.template,
             data: payload.templateData || {},
@@ -340,17 +348,37 @@
                 variant: payload.variant,
             },
         }, '*')
-        element.appendChild(frame)
     }
 
-    function renderCard(targetDocument, element, payload) {
+    function renderCustomTemplate(targetDocument, element, payload, reusableFrame) {
+        const definition = payload.templateDefinition
+        if (!definition?.ui) return
+        const canReuse = reusableFrame
+            && reusableFrame.dataset.cardId === String(payload.id)
+            && reusableFrame.dataset.template === String(payload.template)
+            && reusableFrame.getAttribute('src') === definition.ui
+        const frame = canReuse ? reusableFrame : targetDocument.createElement('iframe')
+        if (!canReuse) {
+            frame.className = 'sp-template-frame'
+            frame.src = definition.ui
+            frame.sandbox = 'allow-scripts'
+        }
+        frame.onload = () => postTemplateFrame(frame, payload)
+        frame.dataset.cardId = String(payload.id)
+        frame.dataset.template = String(payload.template)
+        frame.style.height = `${Number(definition.height) || 160}px`
+        element.appendChild(frame)
+        if (canReuse) postTemplateFrame(frame, payload)
+    }
+
+    function renderCard(targetDocument, element, payload, reusableFrame) {
         addText(targetDocument, element, 'sp-title', payload.title)
         addText(targetDocument, element, 'sp-sub', payload.subtitle)
         addText(targetDocument, element, 'sp-meta', payload.description)
         if (payload.layout === 'details') renderDetails(targetDocument, element, payload.details)
         if (payload.layout === 'progress') renderProgress(targetDocument, element, payload.progress)
-        if (payload.layout === 'timer') renderTimer(targetDocument, element, payload.timer)
-        if (payload.layout === 'custom') renderCustomTemplate(targetDocument, element, payload)
+        if (payload.layout === 'timer') renderTimer(targetDocument, element, payload.timer, payload.id)
+        if (payload.layout === 'custom') renderCustomTemplate(targetDocument, element, payload, reusableFrame)
         if (!Array.isArray(payload.actions) || payload.actions.length === 0) return
 
         const buttons = targetDocument.createElement('div')
@@ -383,16 +411,20 @@
         })
         if (renderKey === lastRenderKey && container.firstElementChild) return
         lastRenderKey = renderKey
+        const reusableFrame = container.querySelector('.sp-template-frame')
         clearRenderedTimer()
-        container.replaceChildren()
-        if (!lastState) return
+        if (!lastState) {
+            container.replaceChildren()
+            return
+        }
+        if (lastState.card.layout !== 'timer') clearTimerAnchor()
 
         const card = container.ownerDocument.createElement('div')
         card.className = 'sp-card'
         card.dataset.variant = lastState.card.variant || 'neutral'
         card.dataset.template = lastState.card.template || 'default'
-        renderCard(container.ownerDocument, card, lastState.card)
-        container.appendChild(card)
+        renderCard(container.ownerDocument, card, lastState.card, reusableFrame)
+        container.replaceChildren(card)
     }
 
     function capturePeek() {
@@ -476,9 +508,30 @@
         window.clearTimeout(peekTimer)
         window.clearTimeout(peekCaptureTimer)
         window.clearTimeout(peekReleaseTimer)
+        peekTimer = null
         peekReleaseTimer = null
 
         peekUntil = indefinite ? Number.MAX_SAFE_INTEGER : Date.now() + milliseconds
+        if (!indefinite) {
+            const deadline = peekUntil
+            const expireLocally = () => {
+                if (peekUntil !== deadline) return
+                const remaining = deadline - Date.now()
+                if (remaining > 0) {
+                    peekTimer = window.setTimeout(expireLocally, remaining)
+                    return
+                }
+                peekTimer = null
+                clearRenderedTimer()
+                clearTimerAnchor()
+                lastState = null
+                lastRenderKey = null
+                releasePeek(true)
+                rootDocument?.getElementById(OVERLAY_ID)?.remove()
+                lbDocument?.getElementById(OVERLAY_ID)?.remove()
+            }
+            peekTimer = window.setTimeout(expireLocally, milliseconds)
+        }
         if (lockSnapshot) {
             applyPeekLock()
             return
@@ -496,7 +549,9 @@
         window.cancelAnimationFrame(domFrame)
         domFrame = null
         window.clearInterval(reconnectTimer)
+        reconnectTimer = null
         clearRenderedTimer()
+        clearTimerAnchor()
         for (const doc of [rootDocument, lbDocument]) {
             try {
                 doc?.getElementById(OVERLAY_ID)?.remove()
@@ -517,13 +572,36 @@
         })
     }
 
+    function setReconnectPolling(required) {
+        if (required && reconnectTimer === null) {
+            reconnectTimer = window.setInterval(connect, 1000)
+        } else if (!required && reconnectTimer !== null) {
+            window.clearInterval(reconnectTimer)
+            reconnectTimer = null
+        }
+    }
+
+    function isRelevantLbMutation(mutation) {
+        const target = mutation.target?.nodeType === 1
+            ? mutation.target
+            : mutation.target?.parentElement
+        if (target?.closest?.(`#${OVERLAY_ID}`)) return false
+        if (mutation.type === 'attributes') {
+            return target === lbDocument?.documentElement || target?.matches?.('.phoneVisbility')
+        }
+        const selector = '.full-phone, .phoneVisbility, .lockscreen-notification-container'
+        return [...mutation.addedNodes, ...mutation.removedNodes].some((node) =>
+            node?.nodeType === 1 && (node.matches?.(selector) || node.querySelector?.(selector))
+        )
+    }
+
     function connect() {
         const nextRoot = findRootDocument()
         const phone = findLbPhone(nextRoot)
         const nextLbDocument = phone?.document || null
         const nextLbFrame = phone?.frame || null
         const nextRootBody = nextRoot?.body || null
-        const nextLbObservedRoot = nextLbDocument?.querySelector('.full-phone') || nextLbDocument?.body || null
+        const nextLbObservedRoot = nextLbDocument?.documentElement || null
         const rootChanged = nextRoot !== rootDocument || nextRootBody !== rootObservedBody
         const phoneChanged = nextLbDocument !== lbDocument || nextLbFrame !== lbFrame
             || nextLbObservedRoot !== lbObservedRoot
@@ -555,12 +633,14 @@
             lbFrame = nextLbFrame
             lbObservedRoot = nextLbObservedRoot
             if (lbDocument) {
-                lbObserver = new MutationObserver(scheduleDomRefresh)
+                lbObserver = new MutationObserver((mutations) => {
+                    if (mutations.some(isRelevantLbMutation)) scheduleDomRefresh()
+                })
                 lbObserver.observe(lbObservedRoot, {
                     attributes: true,
                     childList: true,
                     subtree: true,
-                    attributeFilter: ['class', 'style'],
+                    attributeFilter: ['class', 'style', 'data-theme'],
                 })
             }
         }
@@ -572,6 +652,7 @@
                 peekCaptureTimer = window.setTimeout(capturePeek, 150)
             }
         }
+        setReconnectPolling(!nextRoot || !phone)
     }
 
     window.addEventListener('message', (event) => {
@@ -583,6 +664,7 @@
             callHasPriority = data.callActive === true
             if (data.hidden === true) {
                 clearRenderedTimer()
+                clearTimerAnchor()
                 lastState = null
                 lastRenderKey = null
                 releasePeek(true)
@@ -598,6 +680,7 @@
             beginPeek(data.peekDuration, data.holdPeek === true)
         } else if (data.action === 'peekplus:clear') {
             clearRenderedTimer()
+            clearTimerAnchor()
             lastState = null
             lastRenderKey = null
             releasePeek()
@@ -640,7 +723,6 @@
     })
 
     connect()
-    reconnectTimer = window.setInterval(connect, 1000)
     post('peekplusReady', { controllerVersion: CONTROLLER_VERSION })
     window.addEventListener('pagehide', cleanup)
     window.addEventListener('beforeunload', cleanup)

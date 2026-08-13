@@ -22,8 +22,8 @@ local function normalizeSettings(value)
     if type(value) ~= "table" then return end
     local sound = type(value.sound) == "table" and value.sound or {}
     local notifications = type(value.notifications) == "table" and value.notifications or {}
-    local app = type(notifications[Config.App.identifier]) == "table"
-        and notifications[Config.App.identifier] or {}
+    local app = type(notifications[Config.PeekPlusApp.identifier]) == "table"
+        and notifications[Config.PeekPlusApp.identifier] or {}
 
     settings = {
         airplaneMode = value.airplaneMode == true,
@@ -91,17 +91,19 @@ AddEventHandler("onClientResourceStop", function(resourceName)
     if PeekPlus and PeekPlus.PhoneUnavailable then PeekPlus.PhoneUnavailable() end
 end)
 
+local function setCallActive(value)
+    local nextCallActive = value ~= nil and value ~= false and value ~= 0 and value ~= ""
+    if nextCallActive == callActive then return end
+    callActive = nextCallActive
+    if PeekPlus and PeekPlus.SetCallPriority then PeekPlus.SetCallPriority(callActive) end
+end
+
+AddStateBagChangeHandler(
+    "onCallWith",
+    ("player:%s"):format(GetPlayerServerId(PlayerId())),
+    function(_, _, value) setCallActive(value) end
+)
 CreateThread(function()
-    while true do
-        local onCallWith = LocalPlayer.state.onCallWith
-        local nextCallActive = onCallWith ~= nil and onCallWith ~= false
-            and onCallWith ~= 0 and onCallWith ~= ""
-        if nextCallActive ~= callActive then
-            callActive = nextCallActive
-            if PeekPlus and PeekPlus.SetCallPriority then
-                PeekPlus.SetCallPriority(callActive)
-            end
-        end
-        Wait(100)
-    end
+    Wait(0)
+    setCallActive(LocalPlayer.state.onCallWith)
 end)

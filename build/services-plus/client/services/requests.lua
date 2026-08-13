@@ -180,6 +180,12 @@ PeekPlus.RegisterActionHandler(owner, function(data)
     PeekPlus.ReleaseAction(data.id, owner, data.actionToken)
 end)
 
+AddEventHandler(("peekplus:lifecycle:%s"):format(owner), function(data)
+    if type(data) ~= "table" or data.removed ~= true then return end
+    local context = requestByPeek[data.id]
+    if context then forgetRequest(context.requestId) end
+end)
+
 PeekPlus.RegisterReadyHandler(function()
     if activeRequestId and peekByRequest[activeRequestId]
         and PeekPlus.Get(peekByRequest[activeRequestId], owner) then return end

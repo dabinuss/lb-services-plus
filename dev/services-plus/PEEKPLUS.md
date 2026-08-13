@@ -209,15 +209,16 @@ changes:
 
 ```lua
 AddEventHandler("peekplus:lifecycle:my-resource", function(data)
-    -- data.id, data.key, data.revision, data.state, data.reason
+    -- data.id, data.key, data.revision, data.state, data.reason, data.removed
 end)
 ```
 
 Reasons include `created`, `queued`, `visible`, `updated`, `deduplicated`,
 `suspended`, `resumed`, `expired`, `removed`, `owner_stopped` and a custom
-removal reason supplied to `RemovePeek`. `peekplus:ready` is emitted whenever
-the controller NUI reconnects. These are local presentation events, not
-trusted gameplay authorization.
+removal reason supplied to `RemovePeek`. `data.removed` is `true` only for the
+final lifecycle event after which the card no longer exists. `peekplus:ready`
+is emitted whenever the controller NUI reconnects. These are local
+presentation events, not trusted gameplay authorization.
 
 Adapters for LB Phone's standard apps, for example a running stopwatch, are a
 future extension. They should use stable app events or exports and must not

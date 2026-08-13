@@ -690,7 +690,8 @@ export function getSettings() {
 
 export function onSettingsChange(cb) {
   if (devMode || !window.onSettingsChange) return
-  window.onSettingsChange(cb)
+  const unsubscribe = window.onSettingsChange(cb)
+  return typeof unsubscribe === 'function' ? unsubscribe : undefined
 }
 
 /**
@@ -702,7 +703,8 @@ export function onSettingsChange(cb) {
  */
 export function onNuiEvent(event, cb) {
   if (devMode || !window.onNuiEvent) return
-  window.onNuiEvent(event, cb)
+  const unsubscribe = window.onNuiEvent(event, cb)
+  return typeof unsubscribe === 'function' ? unsubscribe : undefined
 }
 
 /** @param {{ company?: string, number?: string, videoCall?: boolean, hideNumber?: boolean }} options */

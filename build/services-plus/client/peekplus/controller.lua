@@ -596,6 +596,7 @@ function PeekPlus.Update(id, patch, owner, expectedRevision, actionToken)
     card.actionInFlight = nil
     card.confirmAction = nil
     if normalized.duration ~= nil or normalized.hold ~= nil then
+        card.suspendedRemaining = nil
         if card.queued then
             card.expiresAt = 0
         else
@@ -673,7 +674,7 @@ function PeekPlus.Remove(id, owner, expectedRevision, actionToken, reason)
         removalReason = card.state
     end
     updateHistory(card, removalReason)
-    emitLifecycle(card, removalReason)
+    emitLifecycle(card, removalReason, { removed = true })
     cards[id] = nil
     if visibleId == id then
         peekWatchToken = peekWatchToken + 1

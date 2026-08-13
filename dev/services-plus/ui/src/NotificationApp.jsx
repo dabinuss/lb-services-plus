@@ -99,11 +99,20 @@ export default function NotificationApp() {
       return () => media.removeEventListener('change', apply)
     }
     getSettings().then((settings) => settings && setTheme(settings.display.theme))
-    onSettingsChange((settings) => setTheme(settings.display.theme))
+    return onSettingsChange((settings) => setTheme(settings.display.theme))
   }, [])
 
   useEffect(() => { load() }, [load])
   useEffect(() => onNuiEvent('peekplusHistoryChanged', load), [load])
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setEntries((current) => current.length === 0 ? current : current.map((entry) => ({
+          ...entry,
+          ageSeconds: Number(entry.ageSeconds || 0) + 60,
+        })))
+    }, 60000)
+    return () => window.clearInterval(timer)
+  }, [])
   useEffect(() => { document.body.setAttribute('data-theme', theme) }, [theme])
 
   const visible = useMemo(() => filter === 'unread' ? entries.filter((entry) => !entry.read) : entries, [entries, filter])

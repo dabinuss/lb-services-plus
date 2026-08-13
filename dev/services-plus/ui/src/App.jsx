@@ -44,7 +44,7 @@ export default function App() {
     }
 
     getSettings().then((settings) => settings && setTheme(settings.display.theme))
-    onSettingsChange((settings) => setTheme(settings.display.theme))
+    return onSettingsChange((settings) => setTheme(settings.display.theme))
   }, [])
 
   useEffect(() => {
@@ -59,13 +59,13 @@ export default function App() {
   // the actual merge-into-open-conversation happens in ConversationScreen,
   // this just routes the push to whichever one (if any) is currently open.
   useEffect(() => {
-    onNuiEvent('newMessage', (data) => setIncomingMessage(data))
+    return onNuiEvent('newMessage', (data) => setIncomingMessage(data))
   }, [])
 
   // Same idea, for a colleague's status/hotline change (plan review round 5
   // §8) - keeps the Team view current without polling.
   useEffect(() => {
-    onNuiEvent('employeeStateChanged', (data) => setTeamUpdate(data))
+    return onNuiEvent('employeeStateChanged', (data) => setTeamUpdate(data))
   }, [])
 
   // External framework duty/job changes bypass the app's toggle callback.
@@ -73,7 +73,7 @@ export default function App() {
   // client-side Lua handler separately applies the same snapshot to native
   // LB-Phone company calls.
   useEffect(() => {
-    onNuiEvent('employeeDutyChanged', (data) => {
+    return onNuiEvent('employeeDutyChanged', (data) => {
       const employee = data.employee || null
       setBootstrap((prev) => (prev ? { ...prev, employee } : prev))
       if (data.jobChanged || !employee?.onDuty) setCompanySession(null)
