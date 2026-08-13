@@ -180,10 +180,10 @@ and `templates.active` definitions directly in `shared/categories.lua`;
 database/admin-created types can use `Config.RequestTypeTemplates[identifier]`.
 Missing states deliberately fall back to PeekPlus' standard `action` template.
 
-The Taxi Pickup active request's complete visual implementation belongs to
-Services+ at `services/templates/active-request/` (HTML, CSS and JavaScript).
-Its request-type definition registers it as a PeekPlus `fullCard` consumer
-template. PeekPlus contributes only the bounded phone-display slot, lifecycle,
+The Taxi Pickup request type owns both its incoming and active taxometer cards
+at `services/request-types/taxi/` (HTML, CSS and JavaScript). Its request-type
+definition registers the same state-aware UI as two PeekPlus `fullCard`
+templates. PeekPlus contributes only the bounded phone-display slot, lifecycle,
 hotkeys, confirmation state and validated action bridge, so every request type
 can get a fully individual design without adding Services+-specific templates
 or CSS rules to PeekPlus.

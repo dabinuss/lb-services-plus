@@ -2,7 +2,7 @@
 // .full-phone tree and owns LB's native .phoneVisbility peek position. It
 // does not enqueue an LB notification or edit any LB Phone files.
 ;(function () {
-    const CONTROLLER_VERSION = 'peekplus-1.2.1'
+    const CONTROLLER_VERSION = 'peekplus-1.2.2'
     const resourceName = typeof GetParentResourceName === 'function' ? GetParentResourceName() : 'services-plus'
     const OVERLAY_ID = 'services-plus-overlay'
     const STYLE_ID = 'services-plus-overlay-styles'
@@ -314,20 +314,20 @@
         #${OVERLAY_ID} .sp-btn.primary { background: #0a84ff; color: #fff; }
         #${OVERLAY_ID} .sp-btn.default { background: rgba(127, 127, 127, .25); color: inherit; }
         #${OVERLAY_ID} .sp-btn:disabled { cursor: default; opacity: .55; }
-        #${OVERLAY_ID}[data-host='phone'] .sp-card[data-full-card='true'] { max-height: 12.5rem; }
+        #${OVERLAY_ID}[data-host='phone'] .sp-card[data-full-card='true'] { max-height: 20rem; }
         /* LB Phone itself uses this (misspelled) wrapper to move the complete
            device: closed = 60rem, notification = 45rem. Owning this single
            native property avoids iframe crops and preserves LB's animation. */
         .phoneVisbility[${LOCK_ATTRIBUTE}] {
             visibility: visible !important;
-            margin-top: 42rem !important;
+            margin-top: calc(42rem - var(--peekplus-card-lift, 0px)) !important;
             transition: margin-top .5s ease-out !important;
         }
         /* A call banner occupies the top of the phone. Lift the same native
            wrapper a little further so the request remains fully visible below
            it while LB Phone keeps the higher input/visual priority. */
         .phoneVisbility[${LOCK_ATTRIBUTE}='active'][${CALL_PRIORITY_ATTRIBUTE}] {
-            margin-top: 39rem !important;
+            margin-top: calc(39rem - var(--peekplus-card-lift, 0px)) !important;
         }
         .phoneVisbility[${LOCK_ATTRIBUTE}='arming'],
         .phoneVisbility[${LOCK_ATTRIBUTE}='closing'] {
@@ -654,6 +654,7 @@
         const wrapper = lbDocument.querySelector('.phoneVisbility')
         if (!wrapper) return
 
+        syncPeekHeightLift(wrapper)
         lockSnapshot = true
         peekAnimationToken += 1
         const animationToken = peekAnimationToken
@@ -668,6 +669,16 @@
         }))
     }
 
+    function syncPeekHeightLift(wrapper) {
+        const definition = lastState?.card?.templateDefinition
+        const requestedHeight = definition?.fullCard === true ? Number(definition.height) || 0 : 0
+        const lift = Math.max(0, Math.min(320, requestedHeight) - 180)
+        const value = `${lift}px`
+        if (wrapper.style.getPropertyValue('--peekplus-card-lift') !== value) {
+            wrapper.style.setProperty('--peekplus-card-lift', value)
+        }
+    }
+
     function applyPeekLock() {
         if (applyingLock || !lockSnapshot || Date.now() >= peekUntil || !lbDocument || !lbFrame) return
         applyingLock = true
@@ -676,6 +687,7 @@
             wrapper.setAttribute(LOCK_ATTRIBUTE, 'active')
         }
         if (wrapper) {
+            syncPeekHeightLift(wrapper)
             if (callHasPriority && wrapper.getAttribute(LOCK_ATTRIBUTE) === 'active') {
                 wrapper.setAttribute(CALL_PRIORITY_ATTRIBUTE, '')
             } else {
@@ -690,6 +702,7 @@
         for (const element of targetDocument.querySelectorAll(`[${LOCK_ATTRIBUTE}]`)) {
             element.removeAttribute(LOCK_ATTRIBUTE)
             element.removeAttribute(CALL_PRIORITY_ATTRIBUTE)
+            element.style.removeProperty('--peekplus-card-lift')
         }
     }
 
@@ -711,6 +724,7 @@
             peekReleaseTimer = window.setTimeout(() => {
                 wrapper.removeAttribute(LOCK_ATTRIBUTE)
                 wrapper.removeAttribute(CALL_PRIORITY_ATTRIBUTE)
+                wrapper.style.removeProperty('--peekplus-card-lift')
             }, 520)
         } else {
             removeLockFromDocument(rootDocument)

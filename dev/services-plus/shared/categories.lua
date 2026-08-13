@@ -14,9 +14,9 @@ Config.DefaultCategories = {
 
 -- Default request types (plan §12, §55), seeded once the same way categories
 -- are. Managed through the future admin area afterwards, not read again here.
-local taxiActiveTemplate = {
-    ui = "services/templates/active-request/index.html",
-    height = 178,
+local taxiTemplate = {
+    ui = "services/request-types/taxi/index.html",
+    height = 214,
     fullCard = true,
 }
 
@@ -26,7 +26,8 @@ Config.DefaultRequestTypes = {
         description = "Request a ride from your current location.",
         locationMode = "auto", passengerMode = "required", noteMode = "optional", competitionEnabled = true,
         templates = {
-            active = taxiActiveTemplate,
+            pending = taxiTemplate,
+            active = taxiTemplate,
         },
     },
     {
@@ -68,9 +69,9 @@ Config.RequestTypeTemplates = Config.RequestTypeTemplates or {}
 -- was introduced and for the bundled development fixture. Explicit server
 -- configuration still wins over these defaults.
 Config.RequestTypeTemplates.taxi_pickup = Config.RequestTypeTemplates.taxi_pickup
-    or { active = taxiActiveTemplate }
+    or { pending = taxiTemplate, active = taxiTemplate }
 Config.RequestTypeTemplates.taxi_ride = Config.RequestTypeTemplates.taxi_ride
-    or { active = taxiActiveTemplate }
+    or { pending = taxiTemplate, active = taxiTemplate }
 
 -- Example:
 -- Config.RequestTypeTemplates.medical_emergency = {

@@ -48,14 +48,17 @@ server_scripts {
 -- this resource's own ui_page. That slot is used by PeekPlus' Sibling-NUI
 -- controller instead. The legacy peekplus/client/legacy-overlay.lua remains
 -- an unloaded migration reference until final acceptance.
-ui_page 'peekplus/ui/overlay/index-peekplus-1.2.1.html'
+ui_page 'peekplus/ui/overlay/index-peekplus-1.2.2.html'
 
 files {
-    'peekplus/ui/overlay/index-peekplus-1.2.1.html',
+    'peekplus/ui/overlay/index-peekplus-1.2.2.html',
     'peekplus/ui/overlay/overlay.js',
-    'services/templates/active-request/index.html',
-    'services/templates/active-request/active-request.css',
-    'services/templates/active-request/active-request.js',
+    'services/request-types/taxi/index.html',
+    'services/request-types/taxi/taxi.css',
+    'services/request-types/taxi/taxi.js',
+    'services/request-types/taxi/fonts/DSEG7Classic-Regular.woff2',
+    'services/request-types/taxi/fonts/DSEG14Classic-Regular.woff2',
+    'services/request-types/taxi/fonts/DSEG-LICENSE.txt',
     'ui/dist/index.html',
     'ui/dist/**/*',
     'locales/*.json',

@@ -73,6 +73,14 @@ local function requestId(payload)
     return payload and tonumber(payload.requestId)
 end
 
+local activeDetails
+
+local function distanceFromPlayer(payload)
+    if type(payload.x) ~= "number" or type(payload.y) ~= "number" then return nil end
+    local coords = GetEntityCoords(PlayerPedId())
+    return #(vector2(coords.x, coords.y) - vector2(payload.x, payload.y))
+end
+
 local function forgetRequest(id)
     local peekId = peekByRequest[id]
     if peekId then requestByPeek[peekId] = nil end
@@ -100,6 +108,7 @@ local function pendingCard(payload)
         title = tostring(payload.typeName or "New request"),
         subtitle = tostring(payload.companyName or Config.App.name),
         description = tostring(payload.description or ""),
+        details = activeDetails(payload, distanceFromPlayer(payload)),
         duration = Config.RequestNotificationPeekDuration or 15000,
         hold = false,
         sound = true,
@@ -127,7 +136,7 @@ local function reportedPickup(payload)
     return street
 end
 
-local function activeDetails(payload, distance)
+activeDetails = function(payload, distance)
     local details = {}
     if payload.passengerCount ~= nil then
         details[#details + 1] = {
