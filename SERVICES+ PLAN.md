@@ -916,9 +916,137 @@ Alta Street
 
 # 44. Notifications bei Phone Peek
 
-Request-Notifications sollen auch sichtbar und bedienbar sein, wenn das Telefon nur im Peek-Zustand angezeigt wird.
+Services+-eigene interaktive Notifications lösen selbst einen kontrollierten
+Phone-Peek aus. Genau für diese Notifications wird die Sibling-NUI-Technik
+verwendet.
 
-Der Nutzer muss nicht zuerst Services+ öffnen.
+Das betrifft zunächst:
+
+- neue Request-Notifications
+- den Wechsel einer angenommenen Notification zur aktiven Request-Anzeige
+
+Normale LB-Phone-Nachrichten, Anrufe und Notifications anderer Apps bleiben
+vollständig unter der Kontrolle von LB Phone. Services+ verändert oder
+verlängert deren Peek nicht.
+
+## Zielverhalten
+
+Wenn ein geeigneter Mitarbeiter eine Services+-Request-Notification erhält:
+
+1. Services+ blendet das echte LB-Phone visuell in seiner Peek-Position ein.
+2. Die Services+-Notification wird innerhalb des sichtbaren Telefonbereichs
+   angezeigt.
+3. Services+ hält diesen Peek für eine eigene, konfigurierbare Dauer sichtbar.
+4. Accept oder Decline kann direkt aus dem Peek ausgeführt werden.
+5. Nach Ablauf, Decline oder einem anderen beendenden Zustand gibt Services+
+   den Telefon-DOM wieder vollständig an LB Phone zurück.
+
+Der Nutzer muss weder das Telefon noch Services+ zuvor öffnen.
+
+## Technische Umsetzung
+
+Der Sibling-NUI-Controller erhält einen eigenen, ausschließlich von Services+
+verwalteten Peek-Zustand:
+
+```text
+inactive
+↓ neue Services+-Notification
+peeking
+↓ Accept
+active request peek
+↓ Decline / Complete / Cancel / Timeout
+inactive
+```
+
+Beim Start des Peeks:
+
+- wird das LB-Phone-Iframe im CitizenFX-Root ermittelt;
+- wird die aktuelle `.phone-container`-Instanz ermittelt;
+- wird eine eindeutig benannte Services+-Peek-Klasse gesetzt;
+- werden die für die Peek-Position benötigten Styles ausschließlich über
+  diese Klasse mit höherer Priorität angewendet;
+- wird die Services+-Notification in den Telefon-Container eingesetzt;
+- wird ein Services+-eigener Ablaufzeitpunkt gespeichert.
+
+Ein `MutationObserver` beobachtet Klassen-, Style- und DOM-Änderungen des
+LB-Phone-Containers. Solange der Services+-Ablaufzeitpunkt nicht erreicht ist,
+wird ein durch LB Phone entfernter Peek-Lock erneut angewendet. Wird der
+Telefon-Container neu gemountet, verbindet sich der Controller mit der neuen
+Instanz und stellt den aktuellen Services+-Peek wieder her.
+
+Der Peek wird nicht durch wiederholtes Senden nativer Notifications künstlich
+verlängert. Services+ besitzt genau einen zeitlich begrenzten Peek-Lock.
+
+## Dauer und Warteschlange
+
+Die Dauer wird in der Services+-Konfiguration festgelegt, beispielsweise:
+
+```lua
+Config.RequestNotificationPeekDuration = 15000
+```
+
+Regeln:
+
+- Ein neuer sichtbarer Services+-Request startet die Dauer neu.
+- Weitere Requests bleiben in der bestehenden Notification-Warteschlange.
+- Nach Decline wird unmittelbar der nächste wartende Request gezeigt und die
+  Peek-Dauer für diesen neu gestartet.
+- Ohne weiteren Request wird der Peek nach Ablauf geschlossen.
+- Eine angenommene aktive Request-Anzeige darf eine eigene Dauer oder einen
+  dauerhaften kompakten Zustand erhalten; dies wird getrennt von der Dauer
+  einer noch offenen Notification konfiguriert.
+
+## Besitz und Rückgabe
+
+Services+ darf nur einen Peek schließen, den Services+ selbst ausgelöst hat.
+
+Öffnet der Spieler das Telefon vollständig, beginnt ein Anruf, wird die Kamera
+geöffnet oder übernimmt LB Phone aus einem anderen Grund die sichtbare
+Telefonansicht, entfernt Services+ seinen Peek-Lock sofort. Die
+Services+-Notification darf in diesem Fall weiterhin innerhalb des geöffneten
+Telefons sichtbar bleiben, aber Services+ verändert dessen Position nicht mehr.
+
+Beim Ende des eigenen Peeks entfernt Services+ ausschließlich:
+
+- die eigene Peek-Klasse;
+- die eigenen Style-Overrides;
+- die eigene Notification-Darstellung;
+- die eigenen Observer- und Timer-Zustände.
+
+Bestehende LB-Phone-Klassen und Inline-Styles werden nicht überschrieben oder
+auf zuvor erratene Werte zurückgesetzt.
+
+## Fehler- und Fallbackverhalten
+
+Der kontrollierte Peek ist eine versionsabhängige Sibling-NUI-Integration und
+keine öffentliche LB-Phone-Schnittstelle.
+
+Falls Frame, Dokument oder `.phone-container` nicht verfügbar sind:
+
+- bleibt der Request serverseitig normal erhalten;
+- wird die bestehende Services+-Overlay-Notification als Fallback angezeigt;
+- entsteht kein Fehler-Loop und das Telefon wird nicht zwangsweise geöffnet;
+- versucht der Controller bei einem späteren Remount erneut, sich sauber zu
+  verbinden.
+
+Vor der Umsetzung muss im laufenden LB Phone geprüft werden, ob der
+Telefon-Container beim Ende eines nativen Peeks lediglich transformiert oder
+vollständig aus dem DOM entfernt wird. Davon hängen die finalen Peek-Styles und
+die Remount-Behandlung ab.
+
+## Abnahmekriterien
+
+- Eine Services+-Request-Notification lässt das Telefon automatisch peeken.
+- Die Peek-Dauer entspricht der Services+-Konfiguration.
+- Notifications anderer Apps werden nicht beeinflusst.
+- Accept und Decline funktionieren direkt im Peek.
+- Wartende Requests erscheinen nacheinander ohne mehrere Telefoninstanzen.
+- Manuelles vollständiges Öffnen des Telefons beendet nur den Services+-Lock,
+  nicht die Notification oder das geöffnete Telefon.
+- Complete, Cancel, Decline, Timeout und Resource-Stop räumen den Lock sauber
+  auf.
+- Ein Restart von Services+ oder LB Phone hinterlässt keine Klassen, Styles,
+  Timer oder unsichtbaren Fokuszustände.
 
 ---
 

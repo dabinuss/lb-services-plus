@@ -142,6 +142,39 @@ of smaller correctness/perf items):
 `Config.Framework` defaults to `"auto"` - set it explicitly if detection ever
 picks the wrong framework.
 
+Request notifications use LB Phone's native peek position/transition and a
+Services+-owned Sibling-NUI lock. Their sound is played directly through LB
+Phone without adding a second native notification to LB's queue. Configure
+the pending-notification duration with
+`Config.RequestNotificationPeekDuration` in `shared/config.lua`; `0` keeps
+LB Phone's native duration without extending it. After acceptance, the active
+request remains held in peek until it is completed or cancelled.
+
+Pending request cards can be accepted with `ENTER` and declined with
+`DELETE`. If an incoming or active call overlaps the request, LB Phone keeps
+visual and input priority: the request remains visible below the call banner,
+but its buttons and shortcuts stay inactive until the call has ended. Opening
+the full phone releases the peek geometry and places the request inside LB
+Phone's native lockscreen notification stack below the clock. It does not
+cover the home screen or apps. Closing the full phone restores an active
+request to its held peek automatically. For an active request, the first
+`DELETE` (or Cancel click) arms the button as `Confirm?`; the second one
+cancels the request.
+
+Test the complete peek path locally from the F8 console without creating a
+request:
+
+```text
+servicesplus_testpeek 15
+servicesplus_testpeek hold
+servicesplus_testpeek_hold
+servicesplus_testpeek stop
+```
+
+The optional duration is specified in seconds and is limited to 1–120.
+`hold` (or the dedicated `_hold` command) keeps the peek open until `stop` or
+the card's close button is used.
+
 ## Public server API
 
 See [`API.md`](API.md) for all public server exports, return values, request

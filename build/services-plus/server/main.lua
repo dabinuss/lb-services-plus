@@ -71,7 +71,7 @@ function Messages.Send(company, number, channel, senderNumber, senderType, conte
         end
 
         exports["lb-phone"]:SendNotification(channel.contact_number, {
-            app = Config.App.name,
+            app = Config.App.identifier,
             title = company.name,
             content = content,
         })
@@ -83,7 +83,7 @@ function Messages.Send(company, number, channel, senderNumber, senderType, conte
                 if staffNumber then
                     TriggerClientEvent("services-plus:client:newMessage", staff[i], payload)
                     exports["lb-phone"]:SendNotification(staffNumber, {
-                        app = Config.App.name,
+                        app = Config.App.identifier,
                         title = ("%s (%s)"):format(company.name, number.label),
                         content = content,
                     })

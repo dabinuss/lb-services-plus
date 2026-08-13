@@ -58,3 +58,9 @@ Config.PageSize = {
 -- Highest passenger count a request may claim (server-validated, see
 -- server/requests.lua).
 Config.MaxPassengerCount = 20
+
+-- Services+-owned request notifications trigger LB Phone's native notification
+-- peek, then the Sibling-NUI controller keeps that reached visual state for
+-- this duration. Set it to 0 to use LB Phone's native duration only. Once a
+-- request is accepted, its active card is held until the request ends.
+Config.RequestNotificationPeekDuration = 15000

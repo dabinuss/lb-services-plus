@@ -210,7 +210,7 @@ local function cancelExpiredDisconnectedRequests(identifier)
             if row and row.requester_number then
                 pcall(function()
                     exports["lb-phone"]:SendNotification(row.requester_number, {
-                        app = Config.App.name,
+                        app = Config.App.identifier,
                         title = Config.App.name,
                         content = "Your request was cancelled because the employee became unavailable.",
                     })
@@ -592,7 +592,7 @@ function Requests.Accept(source, requestId)
         clearNotifications(requestId, source)
 
         exports["lb-phone"]:SendNotification(request.requester_number, {
-            app = Config.App.name,
+            app = Config.App.identifier,
             title = company.name,
             content = ("%s is on the way."):format(requestType.name),
         })

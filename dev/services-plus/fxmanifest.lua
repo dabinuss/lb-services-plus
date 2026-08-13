@@ -38,10 +38,11 @@ server_scripts {
 -- src via AddCustomApp's `ui` field (see client/main.lua) - it does NOT need
 -- this resource's own ui_page. That slot is used by the Sibling-NUI overlay
 -- controller instead (client/overlay.lua + SIBLING-NUI.md).
-ui_page 'ui/overlay/index.html'
+ui_page 'ui/overlay/index-peek-20260812-14.html'
 
 files {
     'ui/overlay/index.html',
+    'ui/overlay/index-peek-20260812-14.html',
     'ui/overlay/overlay.js',
     'ui/dist/index.html',
     'ui/dist/**/*',
