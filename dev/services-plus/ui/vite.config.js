@@ -7,6 +7,11 @@ import { fileURLToPath } from 'node:url'
 // that same path. In dev, Vite serves from "/" as usual.
 export default defineConfig(({ command }) => ({
   base: command === 'build' ? '/ui/dist/' : '/',
+  // PeekPlus keeps its Notification app source in the resource-level module.
+  // Resolve both React imports through this UI workspace to keep one runtime.
+  resolve: {
+    dedupe: ['react', 'react-dom'],
+  },
   build: {
     sourcemap: false,
     rollupOptions: {

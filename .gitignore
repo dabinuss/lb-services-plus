@@ -8,6 +8,8 @@ dev/web/dist/
 dist/
 !build/services-plus/ui/dist/
 !build/services-plus/ui/dist/**
+# PeekPlus' React source is development-only; build ships the compiled ui/dist.
+build/services-plus/peekplus/ui/notification-app/
 .npm/
 
 # Agent / AI / IDE generated files (GPT, Gemini, Claude, etc.)

@@ -4,7 +4,7 @@ import { createRoot } from 'react-dom/client'
 import './colors.css'
 import './index.css'
 import App from './App.jsx'
-import NotificationApp from './NotificationApp.jsx'
+import NotificationApp from '../../peekplus/ui/notification-app/NotificationApp.jsx'
 
 // window.invokeNative only exists inside the actual FiveM NUI browser, so
 // this is a reliable "am I running in a real phone" check (same trick the

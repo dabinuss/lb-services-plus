@@ -27,20 +27,6 @@ local function registerApp()
         print(("^1[services-plus] could not register app: %s^7"):format(errorMessage))
     end
 
-    local notificationsAdded, notificationsError = exports["lb-phone"]:AddCustomApp({
-        identifier = Config.PeekPlusApp.identifier,
-        name = Config.PeekPlusApp.name,
-        description = Config.PeekPlusApp.description,
-        developer = Config.PeekPlusApp.developer,
-        icon = ("https://cfx-nui-%s/ui/dist/notification-icon.svg"):format(resourceName),
-        defaultApp = Config.PeekPlusApp.defaultApp,
-        size = Config.PeekPlusApp.size,
-        ui = ("%s/ui/dist/notifications.html"):format(resourceName),
-        fixBlur = true,
-    })
-    if not notificationsAdded then
-        print(("^1[services-plus] could not register PeekPlus app: %s^7"):format(notificationsError))
-    end
 end
 
 -- Realtime delta for an already-open conversation (plan review §15).
@@ -195,7 +181,6 @@ AddEventHandler("onResourceStop", function(resource)
     end
 
     pcall(function() exports["lb-phone"]:RemoveCustomApp(Config.App.identifier) end)
-    pcall(function() exports["lb-phone"]:RemoveCustomApp(Config.PeekPlusApp.identifier) end)
 end)
 
 RegisterNUICallback("bootstrap", function(_, cb)

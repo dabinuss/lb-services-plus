@@ -611,9 +611,9 @@ Der Testablauf muss mindestens prüfen:
 
 ### Phase 1 – Extraktion ohne Verhaltensänderung
 
-- vorhandenen JS-Controller nach `ui/peekplus/` verschieben
+- vorhandenen JS-Controller nach `peekplus/ui/overlay/` verschieben
 - Peek-, Call-, Sound- und Phone-Lifecycle aus `client/overlay.lua` nach
-  `client/peekplus/` verschieben
+  `peekplus/client/` verschieben
 - gegenwärtiges Verhalten unverändert halten
 - bestehende Testcommands auf die interne PeekPlus-API umstellen
 - vor und nach der Extraktion denselben Referenzablauf per Screenshot/Video und
@@ -674,7 +674,7 @@ werden.
 ## 16. Dokumentation
 
 PeekPlus erhält einen eigenen Abschnitt in der Haupt-README und eine separate
-API-Dokumentation, beispielsweise `PEEKPLUS.md`.
+API-Dokumentation, beispielsweise `peekplus/README.md`.
 
 Diese Dokumentation enthält:
 

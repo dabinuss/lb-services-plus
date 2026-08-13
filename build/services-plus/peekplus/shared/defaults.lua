@@ -52,6 +52,8 @@ PeekPlusDefaults = {
 }
 
 assert(type(Config.PeekPlus) == "table", "Config.PeekPlus must be a table")
+assert(type(Config.PeekPlusApp) == "table", "Config.PeekPlusApp must be a table")
+assert(type(Config.PeekPlusApp.enabled) == "boolean", "Config.PeekPlusApp.enabled must be true or false")
 for _, field in ipairs({ "maxCards", "maxCardsPerOwner", "maxActions", "maxDuration", "maxPriority", "actionTimeout", "soundThrottle", "maxHistory", "maxDetails", "maxTemplateDataBytes", "maxTemplateHeight", "maxTimerDuration" }) do
     local value = Config.PeekPlus[field]
     assert(type(value) == "number" and value % 1 == 0 and value >= 0,

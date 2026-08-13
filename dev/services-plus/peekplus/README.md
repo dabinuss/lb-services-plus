@@ -9,6 +9,28 @@ queueing, input arbitration and cleanup only. It does not provide a generic
 server delivery API or persist consumer state. Consumers decide how data
 reaches their client and must validate every gameplay action on their server.
 
+## Internal module layout
+
+All PeekPlus-owned code is grouped below `peekplus/`:
+
+- `shared/` contains configuration, defaults and validation limits.
+- `client/` contains app registration, the controller, LB Phone adapter, API,
+  history and tests.
+- `server/` only reads the equipped phone's LB Phone notification settings.
+- `ui/overlay/` is the cache-busted Sibling-NUI controller.
+- `ui/notification-app/` contains the React source for local history.
+
+Services+ consumes this module through its public client API. Its request
+adapter remains in `client/services/requests.lua` because request gameplay is
+owned by Services+, not by PeekPlus. The shared Vite entrypoints and compiled
+`ui/dist/` output also remain under `ui/`; they are integration/build outputs,
+not additional PeekPlus implementations.
+
+The local Notifications app and its session history are enabled by default.
+Set `Config.PeekPlusApp.enabled = false` in `peekplus/shared/config.lua` to
+disable both. Peek cards, actions and all other PeekPlus functions continue to
+work normally without the History app.
+
 ## Show a card
 
 ```lua

@@ -4,7 +4,7 @@
     the actual Services+ app stays a normal, independent custom app.
 
     This resource's own `ui_page` (see fxmanifest.lua) points at
-    ui/overlay/index.html, a tiny invisible page whose only job is to find
+    peekplus/ui/overlay/index.html, a tiny invisible page whose only job is to find
     the CitizenFX root NUI document and render a notification/active-request
     card into it. The controller now mounts the card into LB Phone's real
     `.full-phone` tree and owns a bounded visual peek lock for Services+

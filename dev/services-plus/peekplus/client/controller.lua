@@ -359,7 +359,7 @@ local function trimHistory()
 end
 
 local function addHistory(card)
-    if card.history == false then return end
+    if not Config.PeekPlusApp.enabled or card.history == false then return end
     nextHistoryId = nextHistoryId + 1
     local entry = {
         id = nextHistoryId,

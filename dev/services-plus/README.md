@@ -21,7 +21,7 @@ See `ui/src/screens/company/`, `server/requests.lua`, `server/calls.lua`,
 
 **Phase 3** - added on top:
 
-- **PeekPlus request notifications** (`ui/overlay/`, `client/peekplus/`,
+- **PeekPlus request notifications** (`peekplus/`,
   `client/services/requests.lua`): the generic PeekPlus layer controls LB
   Phone's native peek and injects cards into its runtime DOM without changing
   LB Phone files. Services+ is now a small consumer adapter. Accept/Decline,
@@ -145,6 +145,9 @@ of smaller correctness/perf items):
 `Config.Framework` defaults to `"auto"` - set it explicitly if detection ever
 picks the wrong framework.
 
+PeekPlus-specific app and safety-limit settings are grouped in
+`peekplus/shared/config.lua`.
+
 Request notifications use LB Phone's native peek position/transition and a
 PeekPlus-owned Sibling-NUI lock. Their sound is played directly through LB
 Phone without adding a second native notification to LB's queue. Configure
@@ -186,7 +189,7 @@ its confirmed Cancel action is used.
 ## Public PeekPlus client API
 
 Other client resources can display validated, owner-scoped PeekPlus cards
-through the exports provided by `services-plus`. See [`PEEKPLUS.md`](PEEKPLUS.md)
+through the exports provided by `services-plus`. See [`peekplus/README.md`](peekplus/README.md)
 for variants, layouts, templates, local history, actions, logical keys,
 confirmation, state transitions and lifecycle rules.
 
@@ -199,7 +202,7 @@ lifecycle events, and integration examples.
 
 See [`ui/README.md`](ui/README.md). `npm run dev` (port 5173, matches
 `.claude/launch.json`) works standalone in a browser with fixture data (see
-`ui/src/lib/nui.js`) - **except** `ui/overlay/`, which has no build step and
+`ui/src/lib/nui.js`) - **except** `peekplus/ui/overlay/`, which has no build step and
 can't be meaningfully previewed outside an actual lb-phone client (there's no
 root NUI document to inject into in a plain browser tab). Run `npm run build`
 before testing in-game since the resource serves `ui/dist`.

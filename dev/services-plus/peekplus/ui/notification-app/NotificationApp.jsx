@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
-import Frame from './components/Frame.jsx'
-import { devMode, fetchNui, getSettings, onNuiEvent, onSettingsChange } from './lib/nui.js'
+import Frame from '../../../ui/src/components/Frame.jsx'
+import { devMode, fetchNui, getSettings, onNuiEvent, onSettingsChange } from '../../../ui/src/lib/nui.js'
 import './NotificationApp.css'
 
 const DEV_HISTORY = [

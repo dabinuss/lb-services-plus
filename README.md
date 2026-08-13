@@ -124,6 +124,14 @@ shared/config.lua
 ```
 
 Most important settings such as framework, permissions and default routing can be changed there.
+PeekPlus-specific app and safety-limit settings are grouped separately in:
+
+```text
+peekplus/shared/config.lua
+```
+
+Set `Config.PeekPlusApp.enabled = false` there if the local Notifications
+history app should not be registered. PeekPlus cards continue to work.
 
 ## Admin Access
 
@@ -150,7 +158,7 @@ See the complete [Server API documentation](dev/services-plus/API.md).
 Services+ also includes the reusable, client-only PeekPlus notification
 system with phone-peek cards, configurable hotkeys, variants, layouts,
 consumer templates, lifecycle handling and a local Notifications app. See the complete
-[PeekPlus documentation](dev/services-plus/PEEKPLUS.md).
+[PeekPlus documentation](dev/services-plus/peekplus/README.md).
 
 ## Important
 
