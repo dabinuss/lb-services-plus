@@ -38,7 +38,7 @@ local function pendingCard(payload)
         sound = true,
         priority = 0,
         actions = {
-            { id = "decline", label = "Delete · Decline", key = "DELETE", color = "danger" },
+            { id = "decline", label = "Backspace · Decline", key = "BACK", color = "danger" },
             { id = "accept", label = "Enter · Accept", key = "RETURN", color = "success" },
         },
     }
@@ -70,7 +70,7 @@ local function activeCard(payload)
             {
                 id = "cancel",
                 label = "Cancel",
-                key = "DELETE",
+                key = "BACK",
                 color = "danger",
                 confirm = { label = "Confirm?", timeout = 5000 },
             },

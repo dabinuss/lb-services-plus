@@ -24,7 +24,7 @@ local peekId, err = exports["services-plus"]:ShowPeek({
     sound = true,
     priority = 0,
     actions = {
-        { id = "decline", label = "Decline", key = "DELETE", color = "danger" },
+        { id = "decline", label = "Decline", key = "BACK", color = "danger" },
         { id = "accept", label = "Accept", key = "RETURN", color = "success" },
     },
 })
@@ -46,7 +46,7 @@ Card options:
 - `interrupt`: only a strictly higher-priority card may temporarily suspend a
   held card. The held card returns without another sound.
 - `actions`: up to the configured maximum. Version 1 supports the optional
-  keys `RETURN` and `DELETE`.
+  keys `RETURN` and `BACK`.
 - `variant`: semantic styling: `neutral`, `info`, `success`, `warning` or
   `error`.
 - `layout`: content model: `text`, `details`, `actions`, `progress`, `timer`
@@ -61,7 +61,7 @@ Card options:
 
 PeekPlus registers `PeekPlus: Benachrichtigung annehmen` and `PeekPlus:
 Benachrichtigung ablehnen/abbrechen` in FiveM's key binding settings. Their defaults are
-`ENTER` and `DELETE`. Consumers use the PeekPlus actions and must not register
+`ENTER` and `BACKSPACE`. Consumers use the PeekPlus actions and must not register
 a competing binding for the same card.
 
 An action may require two-step confirmation:
@@ -70,7 +70,7 @@ An action may require two-step confirmation:
 {
     id = "cancel",
     label = "Cancel",
-    key = "DELETE",
+    key = "BACK",
     color = "danger",
     confirm = { label = "Confirm?", timeout = 5000 },
 }
@@ -116,7 +116,7 @@ local ok, err = exports["services-plus"]:UpdatePeek(peekId, {
         {
             id = "cancel",
             label = "Cancel",
-            key = "DELETE",
+            key = "BACK",
             color = "danger",
             confirm = { label = "Confirm?", timeout = 5000 },
         },

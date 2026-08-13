@@ -21,12 +21,12 @@ local function showTest(duration, label)
         state = "pending",
         title = "PeekPlus Test",
         subtitle = "Local F8 test · " .. label,
-        description = "Accept with ENTER or decline with DELETE. No server request is created.",
+        description = "Accept with ENTER or decline with BACKSPACE. No server request is created.",
         duration = duration,
         hold = duration < 0,
         sound = true,
         actions = {
-            { id = "test_decline", label = "Delete · Decline", key = "DELETE", color = "danger" },
+            { id = "test_decline", label = "Backspace · Decline", key = "BACK", color = "danger" },
             { id = "test_accept", label = "Enter · Accept", key = "RETURN", color = "success" },
         },
     }, owner)
@@ -52,7 +52,7 @@ AddEventHandler(("peekplus:action:%s"):format(owner), function(data)
                 {
                     id = "test_cancel",
                     label = "Cancel test request",
-                    key = "DELETE",
+                    key = "BACK",
                     color = "danger",
                     confirm = { label = "Confirm?", timeout = 5000 },
                 },

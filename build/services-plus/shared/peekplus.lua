@@ -1,5 +1,5 @@
 PeekPlusDefaults = {
-    version = "1.1.0",
+    version = "1.1.7",
     allowedStates = {
         queued = true,
         pending = true,
@@ -18,7 +18,7 @@ PeekPlusDefaults = {
     },
     allowedKeys = {
         RETURN = true,
-        DELETE = true,
+        BACK = true,
     },
     allowedColors = {
         default = true,

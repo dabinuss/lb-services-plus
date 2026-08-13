@@ -154,14 +154,14 @@ LB Phone's native duration without extending it. After acceptance, the active
 request remains held in peek until it is completed or cancelled.
 
 Pending request cards can be accepted with `ENTER` and declined with
-`DELETE`. If an incoming or active call overlaps the request, LB Phone keeps
+`BACKSPACE`. If an incoming or active call overlaps the request, LB Phone keeps
 visual and input priority: the request remains visible below the call banner,
 but its buttons and shortcuts stay inactive until the call has ended. Opening
 the full phone releases the peek geometry and places the request inside LB
 Phone's native lockscreen notification stack below the clock. It does not
 cover the home screen or apps. Closing the full phone restores an active
 request to its held peek automatically. For an active request, the first
-`DELETE` (or Cancel click) arms the button as `Confirm?`; the second one
+`BACKSPACE` (or Cancel click) arms the button as `Confirm?`; the second one
 cancels the request.
 
 Test the complete peek path locally from the F8 console without creating a

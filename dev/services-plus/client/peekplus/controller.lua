@@ -903,7 +903,7 @@ RegisterNUICallback("peekplusReady", function(data, callback)
     callback(true)
 end)
 
-RegisterCommand("peekplus_accept", function()
+local function runPrimaryHotkey()
     local card = visibleId and cards[visibleId] or nil
     if not card then return end
     for index = 1, #card.actions do
@@ -912,20 +912,32 @@ RegisterCommand("peekplus_accept", function()
             return
         end
     end
-end, false)
+end
+
+-- Keep the already working accept binding stable for existing players.
+RegisterCommand("peekplus_accept", runPrimaryHotkey, false)
 RegisterKeyMapping("peekplus_accept", "PeekPlus: Benachrichtigung annehmen", "keyboard", "RETURN")
 
-RegisterCommand("peekplus_decline", function()
+local function runDestructiveHotkey()
     local card = visibleId and cards[visibleId] or nil
     if not card then return end
     for index = 1, #card.actions do
-        if card.actions[index].key == "DELETE" then
+        if card.actions[index].key == "BACK" then
             handleAction({ id = card.id, revision = card.revision, action = card.actions[index].id })
             return
         end
     end
-end, false)
-RegisterKeyMapping("peekplus_decline", "PeekPlus: Benachrichtigung ablehnen/abbrechen", "keyboard", "DELETE")
+end
+
+-- FiveM calls the Backspace key BACK. Use the same simple command mapping as
+-- the working ENTER action.
+RegisterCommand("peekplus_back", runDestructiveHotkey, false)
+RegisterKeyMapping(
+    "peekplus_back",
+    "PeekPlus: Benachrichtigung ablehnen/abbrechen",
+    "keyboard",
+    "BACK"
+)
 
 function PeekPlus.SetPhoneOpen(open)
     phoneOpen = open == true
