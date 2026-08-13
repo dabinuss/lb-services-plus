@@ -3,14 +3,57 @@ local peekByRequest = {}
 local requestByPeek = {}
 local activeRequestId = nil
 local distanceToken = 0
-local activeRequestTemplate, activeRequestTemplateError = PeekPlus.RegisterTemplate(owner, "active-request", {
-    ui = "services/templates/active-request/index.html",
-    height = 178,
-    fullCard = true,
-})
+local requestTypeTemplates = {}
+local requestTypeTemplateDefinitions = {}
 
-assert(activeRequestTemplate, ("Failed to register Services+ active request template: %s")
-    :format(tostring(activeRequestTemplateError)))
+local function normalizeIdentifier(value)
+    if type(value) ~= "string" then return nil end
+    local identifier = value:lower():gsub("[^%w]+", "_"):gsub("^_+", ""):gsub("_+$", "")
+    if identifier == "" then return nil end
+    return identifier
+end
+
+local function collectTemplates(identifier, definitions)
+    identifier = normalizeIdentifier(identifier)
+    if not identifier or type(definitions) ~= "table" then return end
+
+    requestTypeTemplateDefinitions[identifier] = requestTypeTemplateDefinitions[identifier] or {}
+    for _, state in ipairs({ "pending", "active" }) do
+        local definition = definitions[state]
+        if type(definition) == "table" then requestTypeTemplateDefinitions[identifier][state] = definition end
+    end
+end
+
+for i = 1, #(Config.DefaultRequestTypes or {}) do
+    local requestType = Config.DefaultRequestTypes[i]
+    collectTemplates(requestType.identifier or requestType.name, requestType.templates)
+end
+for identifier, definitions in pairs(Config.RequestTypeTemplates or {}) do
+    collectTemplates(identifier, definitions)
+end
+
+for identifier, definitions in pairs(requestTypeTemplateDefinitions) do
+    requestTypeTemplates[identifier] = {}
+    for _, state in ipairs({ "pending", "active" }) do
+        local definition = definitions[state]
+        if definition then
+            local template, err = PeekPlus.RegisterTemplate(
+                owner,
+                ("request-type-%s-%s"):format(identifier, state),
+                definition
+            )
+            assert(template, ("Failed to register %s template for request type '%s': %s")
+                :format(state, identifier, tostring(err)))
+            requestTypeTemplates[identifier][state] = template
+        end
+    end
+end
+
+local function requestTemplate(payload, state)
+    local identifier = normalizeIdentifier(payload.requestType or payload.typeIcon)
+    local templates = identifier and requestTypeTemplates[identifier] or nil
+    return templates and templates[state] or "action"
+end
 
 local categoryIcons = {
     police = "police",
@@ -51,7 +94,7 @@ local function pendingCard(payload)
         key = ("service-request:%s"):format(payload.requestId),
         state = "pending",
         variant = "info",
-        template = "action",
+        template = requestTemplate(payload, "pending"),
         icon = requestIcon(payload),
         iconUrl = payload.companyIcon,
         title = tostring(payload.typeName or "New request"),
@@ -109,7 +152,7 @@ local function activeCard(payload)
         key = ("service-request:%s"):format(payload.requestId),
         state = "active",
         variant = "success",
-        template = activeRequestTemplate,
+        template = requestTemplate(payload, "active"),
         icon = requestIcon(payload),
         iconUrl = payload.companyIcon,
         templateData = { statusLabel = "Active request" },

@@ -170,12 +170,19 @@ street, optional customer note and live distance to the reported coordinates.
 The first `ENTER` (or Complete request click) arms completion; pressing it again
 within five seconds completes the ride and notifies the customer.
 
-The active request's complete visual implementation belongs to Services+ at
-`services/templates/active-request/` (HTML, CSS and JavaScript). Services+
-registers it as a PeekPlus `fullCard` consumer template. PeekPlus contributes
-only the bounded phone-display slot, lifecycle, hotkeys, confirmation state
-and validated action bridge, so changing this design never requires adding a
-Services+-specific template or CSS rule to PeekPlus.
+Notification templates are selected by the request type's technical
+identifier. A default request type can declare independent `templates.pending`
+and `templates.active` definitions directly in `shared/categories.lua`;
+database/admin-created types can use `Config.RequestTypeTemplates[identifier]`.
+Missing states deliberately fall back to PeekPlus' standard `action` template.
+
+The Taxi Pickup active request's complete visual implementation belongs to
+Services+ at `services/templates/active-request/` (HTML, CSS and JavaScript).
+Its request-type definition registers it as a PeekPlus `fullCard` consumer
+template. PeekPlus contributes only the bounded phone-display slot, lifecycle,
+hotkeys, confirmation state and validated action bridge, so every request type
+can get a fully individual design without adding Services+-specific templates
+or CSS rules to PeekPlus.
 
 Test the complete peek path locally from the F8 console without creating a
 request:

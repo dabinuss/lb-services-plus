@@ -38,7 +38,7 @@ local function seedIfEmpty()
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ]], {
             categoryId or json.null, t.name,
-            t.name:lower():gsub("[^%w]+", "_"):gsub("^_+", ""):gsub("_+$", ""):sub(1, 100),
+            t.identifier or t.name:lower():gsub("[^%w]+", "_"):gsub("^_+", ""):gsub("_+$", ""):sub(1, 100),
             t.description or json.null, t.locationMode or "auto", t.passengerMode ~= "disabled" and 1 or 0,
             t.passengerMode or "disabled", t.countLabel or "Passenger count",
             t.noteMode ~= "disabled" and 1 or 0, t.noteMode or "optional", t.competitionEnabled and 1 or 0,
@@ -251,6 +251,7 @@ local function distribute(company, requestType, request)
     local category = Companies.GetCategory(requestType.category_id)
     local payload = {
         requestId = request.id,
+        requestType = requestType.icon,
         typeName = requestType.name,
         typeIcon = requestType.icon,
         category = category and category.key or nil,
@@ -603,6 +604,7 @@ function Requests.Accept(source, requestId)
         local category = Companies.GetCategory(requestType.category_id)
         local activePayload = {
             requestId = requestId,
+            requestType = requestType.icon,
             typeName = requestType.name,
             typeIcon = requestType.icon,
             category = category and category.key or nil,
@@ -676,6 +678,7 @@ local function toOverlayPayload(request)
     if not request then return nil end
     return {
         requestId = request.id,
+        requestType = request.type,
         typeName = request.typeName,
         typeIcon = request.type,
         category = request.category,
