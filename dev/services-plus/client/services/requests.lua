@@ -18,15 +18,18 @@ local function forgetRequest(id)
     end
 end
 
-local function removeRequest(id)
+local function removeRequest(id, reason)
     local peekId = peekByRequest[id]
-    if peekId then PeekPlus.Remove(peekId, owner) end
+    if peekId then PeekPlus.Remove(peekId, owner, nil, nil, reason) end
     forgetRequest(id)
 end
 
 local function pendingCard(payload)
     return {
+        key = ("service-request:%s"):format(payload.requestId),
         state = "pending",
+        variant = "info",
+        template = "action",
         title = tostring(payload.typeName or "New request"),
         subtitle = tostring(payload.companyName or Config.App.name),
         description = tostring(payload.description or ""),
@@ -52,7 +55,10 @@ end
 
 local function activeCard(payload)
     return {
+        key = ("service-request:%s"):format(payload.requestId),
         state = "active",
+        variant = "success",
+        template = "action",
         title = tostring(payload.typeName or "Active request"),
         subtitle = tostring(payload.companyName or Config.App.name),
         description = activeDescription(payload),
@@ -129,14 +135,14 @@ RegisterNetEvent("services-plus:client:requestNotification", showPending)
 
 RegisterNetEvent("services-plus:client:requestClaimed", function(id)
     id = tonumber(id)
-    if id then removeRequest(id) end
+    if id then removeRequest(id, "claimed") end
 end)
 
 RegisterNetEvent("services-plus:client:requestAccepted", showActive)
 
 RegisterNetEvent("services-plus:client:requestEnded", function(id)
     id = tonumber(id)
-    if id then removeRequest(id) end
+    if id then removeRequest(id, "ended") end
 end)
 
 PeekPlus.RegisterActionHandler(owner, function(data)
@@ -145,13 +151,13 @@ PeekPlus.RegisterActionHandler(owner, function(data)
     local id = context.requestId
 
     if data.action == "decline" then
-        removeRequest(id)
+        removeRequest(id, "declined")
         return
     end
 
     if data.action == "accept" then
         local ok, result = ServerCallback("acceptRequest", id)
-        if not (ok and result) then removeRequest(id) end
+        if not (ok and result) then removeRequest(id, "accept_failed") end
         return
     end
 

@@ -6,6 +6,8 @@ node_modules/
 dev/web/node_modules/
 dev/web/dist/
 dist/
+!build/services-plus/ui/dist/
+!build/services-plus/ui/dist/**
 .npm/
 
 # Agent / AI / IDE generated files (GPT, Gemini, Claude, etc.)

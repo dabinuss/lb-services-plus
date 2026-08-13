@@ -72,3 +72,35 @@ end, false)
 RegisterCommand("peekplus_test_hold", function()
     showTest(-1, "until stopped")
 end, false)
+
+RegisterCommand("peekplus_test_template", function(_, args)
+    local kind = tostring(args[1] or "info"):lower()
+    local spec = {
+        key = "debug-template",
+        title = "PeekPlus " .. kind,
+        subtitle = "Local template test",
+        description = "This notification is rendered from structured client data.",
+        duration = 15000,
+        sound = false,
+        history = true,
+        variant = ({ warning = "warning", error = "error", success = "success" })[kind] or "info",
+    }
+    if kind == "details" then
+        spec.template = "detail"
+        spec.details = {
+            { label = "Location", value = "Legion Square" },
+            { label = "Distance", value = "350 m" },
+        }
+    elseif kind == "progress" then
+        spec.template = "progress"
+        spec.progress = { value = 68, max = 100, label = "Download" }
+    elseif kind == "timer" then
+        spec.template = "timer"
+        spec.timer = { elapsed = 0, duration = 60000, countdown = true, label = "Time remaining" }
+    else
+        spec.template = "compact"
+    end
+    local id, err = PeekPlus.Show(spec, owner)
+    print(id and ("[services-plus] PeekPlus %s template test started."):format(kind)
+        or ("[services-plus] PeekPlus template test failed: %s"):format(err or "unknown_error"))
+end, false)

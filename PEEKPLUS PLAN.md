@@ -12,6 +12,9 @@ Die Code-Migration ist umgesetzt:
 - sicherer DOM-Fallback, Observer-Debounce und vollständiges Cleanup
 - NUI-Rehydration, LB-Phone-Reconnect und Call-Priorität
 - API-Dokumentation und zweite optionale Test-Consumer-Resource
+- lokale Sitzungshistorie und eigene LB-Phone-Notification-App
+- Varianten, Layouts und sichere Standard-/Consumer-Templates
+- logische Kartenschlüssel, Deduplizierung und Lifecycle-Events
 
 Syntax-, Zustands-, Adapter-, Settings-, DOM- und Produktions-Buildtests sind
 lokal erfolgreich. Die bisherigen Peek-Dateien bleiben vorerst ungeladen als
@@ -314,10 +317,12 @@ Alle Eingaben werden validiert und begrenzt:
 - keine HTML-Ausführung; Texte werden immer escaped
 
 Version 1 akzeptiert nur eine kleine, zentral registrierte Hotkey-Allowlist,
-zunächst `RETURN` und `DELETE`. Die zugehörigen `RegisterKeyMapping`-Commands
-werden genau einmal statisch registriert und jeweils nur an die Action der
-aktuell sichtbaren Karte weitergeleitet. Beliebige dynamische Key-Mappings sind
-kein Bestandteil von Version 1.
+zunächst `RETURN` und `DELETE`. Die FiveM-Einstellungen führen sie als
+`PeekPlus: Benachrichtigung annehmen` und `PeekPlus: Benachrichtigung ablehnen/abbrechen`.
+Die zugehörigen `RegisterKeyMapping`-Commands werden genau einmal statisch
+registriert und jeweils nur an die Action der aktuell sichtbaren Karte
+weitergeleitet. Consumer registrieren dafür keine konkurrierenden Hotkeys.
+Beliebige dynamische Key-Mappings sind kein Bestandteil von Version 1.
 
 ---
 
@@ -711,15 +716,47 @@ PeekPlus gilt als fertig, wenn:
 
 ---
 
-## 18. Nicht-Ziele
+## 18. Notification-App und Templates
+
+PeekPlus bleibt lokal auf dem Client. Es erhält keine generische serverseitige
+API zum Verteilen, Aktualisieren oder Speichern von Karten. Der Consumer ist
+für Datentransport, fachliche Autorität und eine gegebenenfalls persistente
+Speicherung verantwortlich.
+
+Die PeekPlus-Notification-App zeigt eine begrenzte lokale Sitzungshistorie.
+PeekPlus zeichnet dafür die von Consumern dargestellten Einträge auf und
+rendert sie; persistente Einträge muss der Consumer nach einem Login oder
+Resource-Neustart erneut bereitstellen. PeekPlus sendet die Historie nicht an
+den Server.
+
+Die Darstellung wird in drei Ebenen getrennt:
+
+- `variant`: semantische Optik wie neutral, info, success, warning und error
+- `layout`: Datenmodell wie text, actions, details, progress und timer
+- `template`: konkreter Standard- oder Consumer-Renderer
+
+PeekPlus liefert sichere Standardtemplates. Spezielle Consumer wie eine
+Navigations-App können ein ausdrücklich registriertes, sandboxed Template wie
+`live-map` bereitstellen, ohne dieses in den Services+-Standardumfang zu
+zwingen. Beliebiges HTML im normalen Kartenpayload bleibt verboten; eigene
+Renderer besitzen Isolation, Ownership-Cleanup und feste Größen-/Payloadlimits.
+
+Optionale Adapter für mitgelieferte LB-Phone-Standardapps, beispielsweise eine
+laufende Stoppuhr, sind Zukunftsmusik. Sie dürfen nur stabile Events oder
+Exports verwenden und nicht das DOM fremder Apps auslesen.
+
+---
+
+## 19. Nicht-Ziele
 
 PeekPlus wird ausdrücklich nicht:
 
 - als separate Resource ausgeliefert
 - LB-Phone-Core-Dateien patchen
+- eine generische serverseitige PeekPlus-API bereitstellen
+- fachliche oder persistente Consumer-Daten speichern
 - serverseitige Geschäftslogik übernehmen
 - Requests, Unternehmen oder Duty-Systeme kennen
-- ein vollständiges Notification-Center ersetzen
 - beliebiges HTML von Consumern rendern
 - mehrere konkurrierende Hotkey-Systeme parallel zulassen
 

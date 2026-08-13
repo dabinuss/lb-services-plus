@@ -20,6 +20,7 @@ client_scripts {
     'client/peekplus/lbphone.lua',
     'client/peekplus/controller.lua',
     'client/peekplus/api.lua',
+    'client/peekplus/history.lua',
     'client/services/requests.lua',
     'client/peekplus/debug.lua',
 }
@@ -45,10 +46,10 @@ server_scripts {
 -- this resource's own ui_page. That slot is used by PeekPlus' Sibling-NUI
 -- controller instead. The legacy client/overlay.lua remains an unloaded
 -- migration reference until final acceptance.
-ui_page 'ui/overlay/index-peekplus-1.0.0.html'
+ui_page 'ui/overlay/index-peekplus-1.1.0.html'
 
 files {
-    'ui/overlay/index-peekplus-1.0.0.html',
+    'ui/overlay/index-peekplus-1.1.0.html',
     'ui/overlay/overlay.js',
     'ui/dist/index.html',
     'ui/dist/**/*',

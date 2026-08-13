@@ -1,0 +1,47 @@
+.notification-app {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 3.7rem 1rem .7rem;
+  background: var(--sp-bg-primary);
+  color: var(--sp-text-primary);
+}
+.pn-header { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: .8rem; }
+.pn-header h1 { font-size: 1.65rem; line-height: 1.1; }
+.pn-header p { color: var(--sp-text-secondary); font-size: .72rem; margin-top: .2rem; }
+.pn-header button, .pn-read-all { color: var(--sp-accent); font-size: .72rem; font-weight: 650; }
+.pn-toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: .7rem; }
+.pn-filter { display: flex; padding: .18rem; border-radius: .65rem; background: var(--sp-bg-highlight); }
+.pn-filter button { padding: .35rem .75rem; border-radius: .5rem; color: var(--sp-text-secondary); font-size: .7rem; font-weight: 650; }
+.pn-filter button.active { background: var(--sp-bg-secondary); color: var(--sp-text-primary); box-shadow: 0 1px 5px rgba(0,0,0,.12); }
+.pn-list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: .55rem; padding-bottom: .5rem; }
+.pn-card { position: relative; background: var(--sp-bg-secondary); border-radius: .85rem; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,.07); }
+.pn-card.unread::after { content: ''; position: absolute; top: .7rem; right: .7rem; width: .38rem; height: .38rem; border-radius: 50%; background: var(--sp-accent); }
+.pn-card-main { width: 100%; display: flex; align-items: flex-start; gap: .6rem; padding: .72rem; color: inherit; text-align: left; }
+.pn-variant-icon { width: 1.65rem; height: 1.65rem; flex: none; display: grid; place-items: center; border-radius: .52rem; background: #8e8e93; color: #fff; font-size: .78rem; font-weight: 800; }
+.variant-info .pn-variant-icon { background: var(--sp-accent); }
+.variant-success .pn-variant-icon { background: var(--sp-success); }
+.variant-warning .pn-variant-icon { background: var(--sp-warning); }
+.variant-error .pn-variant-icon { background: var(--sp-danger); }
+.pn-copy { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.pn-title { font-size: .8rem; font-weight: 700; padding-right: .4rem; }
+.pn-subtitle { font-size: .68rem; color: var(--sp-text-secondary); }
+.pn-description { margin-top: .22rem; font-size: .7rem; color: var(--sp-text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pn-description.expanded { white-space: normal; }
+.pn-time { flex: none; padding-right: .45rem; color: var(--sp-text-tertiary); font-size: .62rem; }
+.pn-details { border-top: 1px solid var(--sp-separator); padding: .6rem .72rem .72rem 2.97rem; }
+.pn-detail-row, .pn-progress-label, .pn-meta { display: flex; justify-content: space-between; gap: .6rem; font-size: .66rem; }
+.pn-detail-row { padding: .2rem 0; color: var(--sp-text-secondary); }
+.pn-detail-row strong { color: var(--sp-text-primary); text-align: right; }
+.pn-progress { margin: .45rem 0; }
+.pn-progress-label { margin-bottom: .28rem; color: var(--sp-text-secondary); }
+.pn-progress-track { height: .28rem; border-radius: 999px; overflow: hidden; background: var(--sp-bg-highlight); }
+.pn-progress-track span { display: block; height: 100%; background: var(--sp-accent); border-radius: inherit; }
+.pn-history-timer { display: flex; align-items: baseline; justify-content: space-between; margin: .45rem 0; color: var(--sp-text-secondary); font-size: .66rem; }
+.pn-history-timer strong { color: var(--sp-text-primary); font-size: 1rem; font-variant-numeric: tabular-nums; }
+.pn-meta { margin-top: .45rem; color: var(--sp-text-tertiary); }
+.pn-delete { margin-top: .55rem; color: var(--sp-danger); font-size: .68rem; font-weight: 650; }
+.pn-empty { margin: auto; text-align: center; color: var(--sp-text-secondary); }
+.pn-empty span { margin: 0 auto .7rem; width: 2.8rem; height: 2.8rem; border-radius: 50%; display: grid; place-items: center; background: var(--sp-bg-highlight); color: var(--sp-success); font-size: 1.25rem; }
+.pn-empty strong { display: block; color: var(--sp-text-primary); font-size: .9rem; }
+.pn-empty p { margin-top: .25rem; max-width: 12rem; font-size: .7rem; line-height: 1.35; }

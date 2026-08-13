@@ -1,0 +1,21 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    *{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent;color:#fff;font-family:-apple-system,"Segoe UI",sans-serif}
+    .map{height:100%;border-radius:12px;background:linear-gradient(135deg,#18252d,#203945);position:relative;overflow:hidden;padding:16px;display:flex;align-items:flex-end}
+    .map:before,.map:after{content:"";position:absolute;background:rgba(255,255,255,.12);transform:rotate(-18deg)}
+    .map:before{width:140%;height:18px;left:-20%;top:42%}.map:after{width:16px;height:160%;left:62%;top:-30%}
+    .route{position:absolute;width:7px;height:130%;left:52%;top:-15%;background:#0a84ff;transform:rotate(28deg);box-shadow:0 0 8px #0a84ff}
+    .info{position:relative;z-index:2;background:rgba(0,0,0,.68);border-radius:9px;padding:8px 10px;display:flex;align-items:center;gap:9px;width:100%}
+    .arrow{font-size:24px;color:#64d2ff}.copy{display:flex;flex-direction:column}.street{font-size:13px;font-weight:700}.distance{font-size:11px;opacity:.72}
+  </style>
+</head>
+<body>
+  <div class="map"><div class="route"></div><div class="info"><span class="arrow">↱</span><span class="copy"><span class="street">Route</span><span class="distance">—</span></span></div></div>
+  <script>
+    addEventListener('message',({data})=>{if(data?.type!=='peekplus:template')return;const value=data.data||{};document.querySelector('.street').textContent=value.street||'Route';document.querySelector('.distance').textContent=value.distance||'—';document.querySelector('.arrow').textContent=value.direction==='left'?'↰':'↱'})
+  </script>
+</body>
+</html>

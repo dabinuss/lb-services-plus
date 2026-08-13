@@ -30,6 +30,9 @@ See `ui/src/screens/company/`, `server/requests.lua`, `server/calls.lua`,
   anywhere (overlay or the in-app Requests tab) tells every other notified
   employee to drop theirs (`server/requests.lua`'s `notifiedSources`/
   `clearNotifications`).
+- **PeekPlus Notifications app**: a separate LB Phone app shows the bounded
+  local session history. It has no server API or database storage; consumer
+  resources own transport, gameplay validation and any persistent state.
 - **Admin area** (`ui/src/screens/admin/`, `server/admin.lua`): full CRUD for
   companies (incl. numbers and boss assignment by online player ID),
   categories, and request types; per-company admin ceilings for calls/
@@ -169,6 +172,11 @@ peekplus_test 15
 peekplus_test hold
 peekplus_test_hold
 peekplus_test stop
+peekplus_test_template info
+peekplus_test_template warning
+peekplus_test_template details
+peekplus_test_template progress
+peekplus_test_template timer
 ```
 
 The optional duration is specified in seconds and is limited to 1–120.
@@ -179,7 +187,8 @@ its confirmed Cancel action is used.
 
 Other client resources can display validated, owner-scoped PeekPlus cards
 through the exports provided by `services-plus`. See [`PEEKPLUS.md`](PEEKPLUS.md)
-for card fields, actions, confirmation, state transitions and lifecycle rules.
+for variants, layouts, templates, local history, actions, logical keys,
+confirmation, state transitions and lifecycle rules.
 
 ## Public server API
 

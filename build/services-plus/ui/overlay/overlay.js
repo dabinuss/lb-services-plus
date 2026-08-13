@@ -2,7 +2,7 @@
 // .full-phone tree and owns LB's native .phoneVisbility peek position. It
 // does not enqueue an LB notification or edit any LB Phone files.
 ;(function () {
-    const CONTROLLER_VERSION = 'peekplus-1.0.0'
+    const CONTROLLER_VERSION = 'peekplus-1.1.0'
     const resourceName = typeof GetParentResourceName === 'function' ? GetParentResourceName() : 'services-plus'
     const OVERLAY_ID = 'services-plus-overlay'
     const STYLE_ID = 'services-plus-overlay-styles'
@@ -31,6 +31,7 @@
     let phoneIsOpen = false
     let domFrame = null
     let lastRenderKey = null
+    let cardTimerInterval = null
     const reportedCapabilities = new Set()
 
     function post(action, data) {
@@ -123,7 +124,15 @@
             border-radius: 1.125rem;
             padding: .9rem 1rem;
             box-shadow: 0 .4rem 1rem rgba(0, 0, 0, .24);
+            border-left: .24rem solid #8e8e93;
         }
+        #${OVERLAY_ID} .sp-card[data-variant='info'] { border-left-color: #0a84ff; }
+        #${OVERLAY_ID} .sp-card[data-variant='success'] { border-left-color: #30d158; }
+        #${OVERLAY_ID} .sp-card[data-variant='warning'] { border-left-color: #ff9f0a; }
+        #${OVERLAY_ID} .sp-card[data-variant='error'] { border-left-color: #ff453a; }
+        #${OVERLAY_ID} .sp-card[data-template='compact'] { padding: .65rem .8rem; border-radius: .85rem; }
+        #${OVERLAY_ID} .sp-card[data-template='compact'] .sp-title { font-size: .86rem; }
+        #${OVERLAY_ID} .sp-card[data-template='compact'] .sp-meta { margin-top: .2rem; }
         #${OVERLAY_ID}[data-theme='light'] .sp-card {
             background: rgb(245, 245, 250);
             color: #000;
@@ -135,6 +144,17 @@
         #${OVERLAY_ID} .sp-title { font-size: .95rem; font-weight: 700; }
         #${OVERLAY_ID} .sp-sub { font-size: .78rem; opacity: .7; margin-top: .1rem; }
         #${OVERLAY_ID} .sp-meta { font-size: .78rem; opacity: .85; margin-top: .35rem; }
+        #${OVERLAY_ID} .sp-details { margin-top: .55rem; display: grid; gap: .25rem; }
+        #${OVERLAY_ID} .sp-detail { display: flex; justify-content: space-between; gap: .75rem; font-size: .73rem; }
+        #${OVERLAY_ID} .sp-detail span:first-child { opacity: .65; }
+        #${OVERLAY_ID} .sp-detail span:last-child { font-weight: 650; text-align: right; }
+        #${OVERLAY_ID} .sp-progress { margin-top: .6rem; }
+        #${OVERLAY_ID} .sp-progress-label { display: flex; justify-content: space-between; font-size: .7rem; opacity: .75; margin-bottom: .28rem; }
+        #${OVERLAY_ID} .sp-progress-track { height: .32rem; border-radius: 999px; overflow: hidden; background: rgba(127,127,127,.25); }
+        #${OVERLAY_ID} .sp-progress-fill { display: block; height: 100%; border-radius: inherit; background: #0a84ff; }
+        #${OVERLAY_ID} .sp-timer { margin-top: .55rem; font-size: 1.25rem; font-variant-numeric: tabular-nums; font-weight: 700; }
+        #${OVERLAY_ID} .sp-timer-label { font-size: .68rem; opacity: .65; margin-top: .08rem; }
+        #${OVERLAY_ID} .sp-template-frame { display: block; width: 100%; margin-top: .55rem; border: 0; overflow: hidden; pointer-events: none; background: transparent; }
         #${OVERLAY_ID} .sp-buttons { display: flex; gap: .5rem; margin-top: .7rem; }
         #${OVERLAY_ID} .sp-btn {
             flex: 1;
@@ -234,10 +254,103 @@
         parent.appendChild(element)
     }
 
+    function formatDuration(milliseconds) {
+        const total = Math.max(0, Math.floor(milliseconds / 1000))
+        const hours = Math.floor(total / 3600)
+        const minutes = Math.floor((total % 3600) / 60)
+        const seconds = total % 60
+        return hours > 0
+            ? `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+            : `${minutes}:${String(seconds).padStart(2, '0')}`
+    }
+
+    function clearRenderedTimer() {
+        window.clearInterval(cardTimerInterval)
+        cardTimerInterval = null
+    }
+
+    function renderDetails(targetDocument, element, details) {
+        if (!Array.isArray(details) || details.length === 0) return
+        const rows = targetDocument.createElement('div')
+        rows.className = 'sp-details'
+        details.forEach((detail) => {
+            const row = targetDocument.createElement('div')
+            row.className = 'sp-detail'
+            addText(targetDocument, row, '', detail.label)
+            addText(targetDocument, row, '', detail.value)
+            rows.appendChild(row)
+        })
+        element.appendChild(rows)
+    }
+
+    function renderProgress(targetDocument, element, progress) {
+        if (!progress || !Number.isFinite(Number(progress.value)) || !Number.isFinite(Number(progress.max))) return
+        const percent = Math.max(0, Math.min(100, Number(progress.value) / Number(progress.max) * 100))
+        const wrapper = targetDocument.createElement('div')
+        wrapper.className = 'sp-progress'
+        const label = targetDocument.createElement('div')
+        label.className = 'sp-progress-label'
+        addText(targetDocument, label, '', progress.label || 'Progress')
+        addText(targetDocument, label, '', `${Math.round(percent)}%`)
+        const track = targetDocument.createElement('div')
+        track.className = 'sp-progress-track'
+        const fill = targetDocument.createElement('span')
+        fill.className = 'sp-progress-fill'
+        fill.style.width = `${percent}%`
+        track.appendChild(fill)
+        wrapper.append(label, track)
+        element.appendChild(wrapper)
+    }
+
+    function renderTimer(targetDocument, element, timer) {
+        if (!timer) return
+        const display = targetDocument.createElement('div')
+        display.className = 'sp-timer'
+        const startedAt = Date.now()
+        const update = () => {
+            const advanced = Math.max(0, Date.now() - startedAt)
+            const value = timer.countdown
+                ? Math.max(0, Number(timer.duration) - Number(timer.elapsed) - advanced)
+                : Number(timer.elapsed) + advanced
+            display.textContent = formatDuration(value)
+        }
+        update()
+        cardTimerInterval = window.setInterval(update, 250)
+        element.appendChild(display)
+        addText(targetDocument, element, 'sp-timer-label', timer.label)
+    }
+
+    function renderCustomTemplate(targetDocument, element, payload) {
+        const definition = payload.templateDefinition
+        if (!definition?.ui) return
+        const frame = targetDocument.createElement('iframe')
+        frame.className = 'sp-template-frame'
+        frame.src = definition.ui
+        frame.sandbox = 'allow-scripts'
+        frame.style.height = `${Number(definition.height) || 160}px`
+        frame.onload = () => frame.contentWindow?.postMessage({
+            type: 'peekplus:template',
+            template: payload.template,
+            data: payload.templateData || {},
+            card: {
+                id: payload.id,
+                title: payload.title,
+                subtitle: payload.subtitle,
+                description: payload.description,
+                variant: payload.variant,
+            },
+        }, '*')
+        element.appendChild(frame)
+    }
+
     function renderCard(targetDocument, element, payload) {
         addText(targetDocument, element, 'sp-title', payload.title)
         addText(targetDocument, element, 'sp-sub', payload.subtitle)
         addText(targetDocument, element, 'sp-meta', payload.description)
+        if (payload.layout === 'details') renderDetails(targetDocument, element, payload.details)
+        if (payload.layout === 'progress') renderProgress(targetDocument, element, payload.progress)
+        if (payload.layout === 'timer') renderTimer(targetDocument, element, payload.timer)
+        if (payload.layout === 'custom') renderCustomTemplate(targetDocument, element, payload)
         if (!Array.isArray(payload.actions) || payload.actions.length === 0) return
 
         const buttons = targetDocument.createElement('div')
@@ -270,11 +383,14 @@
         })
         if (renderKey === lastRenderKey && container.firstElementChild) return
         lastRenderKey = renderKey
+        clearRenderedTimer()
         container.replaceChildren()
         if (!lastState) return
 
         const card = container.ownerDocument.createElement('div')
         card.className = 'sp-card'
+        card.dataset.variant = lastState.card.variant || 'neutral'
+        card.dataset.template = lastState.card.template || 'default'
         renderCard(container.ownerDocument, card, lastState.card)
         container.appendChild(card)
     }
@@ -380,6 +496,7 @@
         window.cancelAnimationFrame(domFrame)
         domFrame = null
         window.clearInterval(reconnectTimer)
+        clearRenderedTimer()
         for (const doc of [rootDocument, lbDocument]) {
             try {
                 doc?.getElementById(OVERLAY_ID)?.remove()
@@ -465,6 +582,7 @@
             phoneIsOpen = data.phoneOpen === true
             callHasPriority = data.callActive === true
             if (data.hidden === true) {
+                clearRenderedTimer()
                 lastState = null
                 lastRenderKey = null
                 releasePeek(true)
@@ -479,6 +597,7 @@
             if (data.playSound === true) playNotificationSound(data.soundName)
             beginPeek(data.peekDuration, data.holdPeek === true)
         } else if (data.action === 'peekplus:clear') {
+            clearRenderedTimer()
             lastState = null
             lastRenderKey = null
             releasePeek()

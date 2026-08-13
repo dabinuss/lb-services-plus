@@ -7,4 +7,10 @@ description 'Optional PeekPlus public client API smoke test'
 
 client_script 'client.lua'
 
+files {
+    'ui/live-map.html',
+}
+
+dependency 'services-plus'
+
 dependency 'services-plus'

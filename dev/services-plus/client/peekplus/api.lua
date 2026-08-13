@@ -16,10 +16,16 @@ exports("UpdatePeek", function(id, patch, expectedRevision, actionToken)
     return PeekPlus.Update(id, patch, owner, expectedRevision, actionToken)
 end)
 
-exports("RemovePeek", function(id, expectedRevision, actionToken)
+exports("UpdatePeekPresentation", function(id, patch)
     local owner = invokingOwner()
     if not owner then return false, "missing_invoking_resource" end
-    return PeekPlus.Remove(id, owner, expectedRevision, actionToken)
+    return PeekPlus.UpdatePresentation(id, patch, owner)
+end)
+
+exports("RemovePeek", function(id, expectedRevision, actionToken, reason)
+    local owner = invokingOwner()
+    if not owner then return false, "missing_invoking_resource" end
+    return PeekPlus.Remove(id, owner, expectedRevision, actionToken, reason)
 end)
 
 exports("ClearPeeks", function()
@@ -38,4 +44,34 @@ exports("GetPeek", function(id)
     local owner = invokingOwner()
     if not owner then return nil, "missing_invoking_resource" end
     return PeekPlus.Get(id, owner)
+end)
+
+exports("GetPeekHistory", function()
+    local owner = invokingOwner()
+    if not owner then return nil, "missing_invoking_resource" end
+    return PeekPlus.GetHistory(owner)
+end)
+
+exports("MarkPeekHistoryRead", function(historyId, read)
+    local owner = invokingOwner()
+    if not owner then return false, "missing_invoking_resource" end
+    return PeekPlus.MarkHistoryRead(historyId, owner, read)
+end)
+
+exports("ClearPeekHistory", function(historyId)
+    local owner = invokingOwner()
+    if not owner then return false, "missing_invoking_resource" end
+    return PeekPlus.ClearHistory(owner, historyId)
+end)
+
+exports("RegisterPeekTemplate", function(name, definition)
+    local owner = invokingOwner()
+    if not owner then return nil, "missing_invoking_resource" end
+    return PeekPlus.RegisterTemplate(owner, name, definition)
+end)
+
+exports("UnregisterPeekTemplate", function(name)
+    local owner = invokingOwner()
+    if not owner then return false, "missing_invoking_resource" end
+    return PeekPlus.UnregisterTemplate(owner, name)
 end)

@@ -147,8 +147,9 @@ the public Services+ exports and lifecycle events.
 
 See the complete [Server API documentation](dev/services-plus/API.md).
 
-Services+ also includes the reusable PeekPlus client API for phone-peek cards,
-actions and lifecycle handling. See the complete
+Services+ also includes the reusable, client-only PeekPlus notification
+system with phone-peek cards, configurable hotkeys, variants, layouts,
+consumer templates, lifecycle handling and a local Notifications app. See the complete
 [PeekPlus documentation](dev/services-plus/PEEKPLUS.md).
 
 ## Important

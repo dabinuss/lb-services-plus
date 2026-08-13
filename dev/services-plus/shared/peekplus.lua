@@ -1,5 +1,5 @@
 PeekPlusDefaults = {
-    version = "1.0.0",
+    version = "1.1.0",
     allowedStates = {
         queued = true,
         pending = true,
@@ -26,10 +26,33 @@ PeekPlusDefaults = {
         success = true,
         danger = true,
     },
+    allowedVariants = {
+        neutral = true,
+        info = true,
+        success = true,
+        warning = true,
+        error = true,
+    },
+    allowedLayouts = {
+        text = true,
+        details = true,
+        actions = true,
+        progress = true,
+        timer = true,
+        custom = true,
+    },
+    standardTemplates = {
+        default = "text",
+        compact = "text",
+        detail = "details",
+        action = "actions",
+        progress = "progress",
+        timer = "timer",
+    },
 }
 
 assert(type(Config.PeekPlus) == "table", "Config.PeekPlus must be a table")
-for _, field in ipairs({ "maxCards", "maxCardsPerOwner", "maxActions", "maxDuration", "maxPriority", "actionTimeout", "soundThrottle" }) do
+for _, field in ipairs({ "maxCards", "maxCardsPerOwner", "maxActions", "maxDuration", "maxPriority", "actionTimeout", "soundThrottle", "maxHistory", "maxDetails", "maxTemplateDataBytes", "maxTemplateHeight", "maxTimerDuration" }) do
     local value = Config.PeekPlus[field]
     assert(type(value) == "number" and value % 1 == 0 and value >= 0,
         ("Config.PeekPlus.%s must be a non-negative integer"):format(field))
@@ -39,6 +62,11 @@ assert(Config.PeekPlus.maxCardsPerOwner > 0, "Config.PeekPlus.maxCardsPerOwner m
 assert(Config.PeekPlus.maxCardsPerOwner <= Config.PeekPlus.maxCards,
     "Config.PeekPlus.maxCardsPerOwner must not exceed maxCards")
 assert(Config.PeekPlus.maxActions > 0, "Config.PeekPlus.maxActions must be greater than zero")
+assert(Config.PeekPlus.maxHistory > 0, "Config.PeekPlus.maxHistory must be greater than zero")
+assert(Config.PeekPlus.maxDetails > 0, "Config.PeekPlus.maxDetails must be greater than zero")
+assert(Config.PeekPlus.maxTemplateDataBytes > 0, "Config.PeekPlus.maxTemplateDataBytes must be greater than zero")
+assert(Config.PeekPlus.maxTemplateHeight > 0, "Config.PeekPlus.maxTemplateHeight must be greater than zero")
+assert(Config.PeekPlus.maxTimerDuration > 0, "Config.PeekPlus.maxTimerDuration must be greater than zero")
 assert(type(Config.PeekPlus.rootFallback) == "boolean", "Config.PeekPlus.rootFallback must be true or false")
 assert(type(Config.PeekPlus.textLimits) == "table", "Config.PeekPlus.textLimits must be a table")
 for _, field in ipairs({ "title", "subtitle", "description", "actionId", "actionLabel" }) do

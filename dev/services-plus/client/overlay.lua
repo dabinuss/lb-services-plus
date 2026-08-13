@@ -371,15 +371,15 @@ local function handleDeleteRequest()
     return declineShownRequest()
 end
 
-RegisterCommand("servicesplus_request_accept", function()
+RegisterCommand("peekplus_accept", function()
     acceptShownRequest()
 end, false)
-RegisterKeyMapping("servicesplus_request_accept", "Accept Services+ request", "keyboard", "RETURN")
+RegisterKeyMapping("peekplus_accept", "PeekPlus: Benachrichtigung annehmen", "keyboard", "RETURN")
 
-RegisterCommand("servicesplus_request_decline", function()
+RegisterCommand("peekplus_decline", function()
     handleDeleteRequest()
 end, false)
-RegisterKeyMapping("servicesplus_request_decline", "Decline or cancel Services+ request", "keyboard", "DELETE")
+RegisterKeyMapping("peekplus_decline", "PeekPlus: Benachrichtigung ablehnen/abbrechen", "keyboard", "DELETE")
 
 RegisterNUICallback("overlayAction", function(data, cb)
     local action = data.action

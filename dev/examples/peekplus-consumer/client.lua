@@ -1,5 +1,19 @@
 local activePeek = nil
 
+local function registerTemplate()
+    local id, err = exports["services-plus"]:RegisterPeekTemplate("live-map", {
+        ui = "ui/live-map.html",
+        height = 150,
+    })
+    if not id then print(("[peekplus-test-consumer] template registration failed: %s"):format(err or "unknown_error")) end
+end
+
+CreateThread(registerTemplate)
+
+AddEventHandler("onClientResourceStart", function(resource)
+    if resource == "services-plus" then registerTemplate() end
+end)
+
 RegisterCommand("peekplus_test_consumer", function()
     if activePeek then
         exports["services-plus"]:RemovePeek(activePeek)
@@ -8,10 +22,14 @@ RegisterCommand("peekplus_test_consumer", function()
 
     local err
     activePeek, err = exports["services-plus"]:ShowPeek({
+        key = "consumer-live-map",
         state = "pending",
-        title = "External PeekPlus test",
+        title = "Route guidance",
         subtitle = GetCurrentResourceName(),
-        description = "This card was created through the public client export.",
+        description = "Consumer-owned template rendered inside PeekPlus.",
+        variant = "info",
+        template = "live-map",
+        templateData = { street = "Vespucci Boulevard", distance = "350 m", direction = "right" },
         duration = 15000,
         sound = true,
         actions = {
