@@ -532,6 +532,11 @@
         addText(targetDocument, element, 'sp-timer-label', timer.label)
     }
 
+    function remainingPeekMs() {
+        if (!lastState || typeof lastState.peekDuration !== 'number' || lastState.peekDuration < 0) return -1
+        return Math.max(0, lastState.peekDuration - (Date.now() - lastState.receivedAt))
+    }
+
     function postTemplateFrame(frame, payload) {
         frame.contentWindow?.postMessage({
             type: 'peekplus:template',
@@ -557,6 +562,11 @@
                 actions: payload.actions || [],
                 actionInFlight: payload.actionInFlight === true,
                 confirmAction: payload.confirmAction,
+                // Milliseconds left before this card auto-expires, measured
+                // against the iframe's own clock (-1 = held/no expiry). Lets
+                // a full-card template show a live "auto-decline" countdown
+                // without needing to trust the host's GetGameTimer() clock.
+                remainingMs: remainingPeekMs(),
             },
         }, '*')
     }
@@ -684,7 +694,17 @@
 
     function syncPeekHeightLift(wrapper) {
         const definition = lastState?.card?.templateDefinition
-        const requestedHeight = definition?.fullCard === true ? Number(definition.height) || 0 : 0
+        let requestedHeight = 0
+        if (definition?.fullCard === true) {
+            // Prefer the live, content-reported height (see
+            // handleTemplateResize) over the registered ceiling, so the
+            // phone only lifts as far as the current card actually needs.
+            // Falls back to the ceiling before the first resize report
+            // arrives (e.g. the very first frame of a new card).
+            const frame = lbDocument?.querySelector('.sp-template-frame') || rootDocument?.querySelector('.sp-template-frame')
+            const liveHeight = frame ? Number.parseFloat(frame.style.height) : NaN
+            requestedHeight = Number.isFinite(liveHeight) ? liveHeight : (Number(definition.height) || 0)
+        }
         const lift = Math.max(0, Math.min(320, requestedHeight) - 180)
         const value = `${lift}px`
         if (wrapper.style.getPropertyValue('--peekplus-card-lift') !== value) {
@@ -903,8 +923,29 @@
         setReconnectPolling(!nextRoot || !phone)
     }
 
+    // A full-card template reports its own natural content height after
+    // every render (see dispatch.js's reportHeight). Size the real iframe
+    // to match, clamped to at most the template's registered height - that
+    // registration is a ceiling now, not a fixed size, so the notification
+    // is only ever as tall as its current content actually needs.
+    function handleTemplateResize(event) {
+        const frame = lbDocument?.querySelector('.sp-template-frame') || rootDocument?.querySelector('.sp-template-frame')
+        if (!frame || frame.contentWindow !== event.source) return
+        const definition = lastState?.card?.templateDefinition
+        const maxHeight = Number(definition?.height) || 320
+        const clamped = Math.max(40, Math.min(maxHeight, Math.ceil(event.data.height)))
+        if (frame.style.height === `${clamped}px`) return
+        frame.style.height = `${clamped}px`
+        const wrapper = lbDocument?.querySelector('.phoneVisbility')
+        if (wrapper && peekUntil > Date.now()) syncPeekHeightLift(wrapper)
+    }
+
     window.addEventListener('message', (event) => {
         const data = event.data
+        if (data?.type === 'peekplus:template:resize' && typeof data.height === 'number') {
+            handleTemplateResize(event)
+            return
+        }
         if (!data?.action) return
 
         if (data.action === 'peekplus:render') {
@@ -923,6 +964,8 @@
             lastState = {
                 card: data.card,
                 forceFallback: data.forceFallback === true,
+                peekDuration: typeof data.peekDuration === 'number' ? data.peekDuration : -1,
+                receivedAt: Date.now(),
             }
             if (data.playSound === true) playNotificationSound(data.soundName)
             beginPeek(data.peekDuration, data.holdPeek === true)

@@ -147,6 +147,13 @@ local function reportedPickup(payload)
     return street
 end
 
+-- Cosmetic-only estimate for the taxi dispatch card - see Config.Taxi in
+-- shared/config.lua. No payment is charged anywhere from this value.
+local function estimatedFare(distanceMeters)
+    local fare = Config.Taxi.baseFare + (distanceMeters / 1000) * Config.Taxi.perKm
+    return ("~$%d"):format(math.floor(fare + 0.5))
+end
+
 activeDetails = function(payload, distance)
     local details = {}
     if payload.passengerCount ~= nil then
@@ -163,6 +170,9 @@ activeDetails = function(payload, distance)
             value = ("%.1f mi"):format(distance / 1609.34),
             icon = "distance",
         }
+        if payload.category == "taxi" then
+            details[#details + 1] = { label = "Estimated fare", value = estimatedFare(distance), icon = "price" }
+        end
     end
     return details
 end

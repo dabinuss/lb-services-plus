@@ -1,0 +1,123 @@
+/* Shared design system for full-card PeekPlus request-type templates
+   (taxi, police_emergency, medical_emergency, ...). One look across all of
+   them instead of a one-off design per request type - only the accent
+   color and the row content differ per template. */
+:root {
+    color-scheme: dark;
+    font-family: -apple-system, 'Segoe UI', sans-serif;
+    --dispatch-bg: linear-gradient(165deg, #1c1d22, #101114);
+    --dispatch-border: rgba(255, 255, 255, .08);
+    --dispatch-text: #f2f2f7;
+    --dispatch-dim: rgba(242, 242, 247, .62);
+    --dispatch-dim-2: rgba(242, 242, 247, .38);
+    --dispatch-row-bg: rgba(255, 255, 255, .035);
+    --dispatch-accent: #f4b914;
+    --dispatch-accent-ink: #171100;
+    --dispatch-danger: #ff453a;
+}
+
+* { box-sizing: border-box; }
+/* No forced height here on purpose: the card sizes to its own content and
+   reports that natural height to overlay.js (see dispatch.js reportHeight),
+   which then sizes the actual iframe to match - up to the registered
+   template height, which acts as a maximum, not a fixed size. */
+html, body { width: 100%; margin: 0; overflow: hidden; background: transparent; }
+
+.dispatch-card {
+    position: relative;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    padding: 12px 13px 10px;
+    color: var(--dispatch-text);
+    background: var(--dispatch-bg);
+    overflow: hidden;
+}
+
+.dispatch-header { display: flex; align-items: flex-start; gap: 9px; }
+.dispatch-badge {
+    position: relative; display: grid; place-items: center; flex: 0 0 auto; overflow: hidden;
+    width: 34px; height: 34px; border-radius: 10px;
+    background: color-mix(in srgb, var(--dispatch-accent) 20%, transparent);
+    border: 1px solid color-mix(in srgb, var(--dispatch-accent) 35%, transparent);
+    color: var(--dispatch-accent);
+}
+.dispatch-badge .dispatch-icon { width: 19px; height: 19px; }
+.dispatch-badge-image {
+    position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
+    opacity: 0; transition: opacity .15s ease;
+}
+.dispatch-badge.has-image .dispatch-badge-image { opacity: 1; }
+.dispatch-heading { min-width: 0; flex: 1 1 auto; }
+.dispatch-eyebrow { font-size: 10px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: var(--dispatch-accent); }
+.dispatch-title { margin-top: 1px; font-size: 15px; font-weight: 800; line-height: 1.18; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dispatch-subtitle { margin-top: 1px; font-size: 11.5px; color: var(--dispatch-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Right-aligned corner stack in the header: distance first (every card has
+   one), then whatever else is specific to this request type (passenger/
+   patient count, taxi's fare). Real numbers with a small icon instead of a
+   decorative "Priority: High" label that never changed with the incident. */
+.dispatch-header-stats { flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-end; justify-content: center; gap: 3px; }
+.dispatch-header-stat { display: flex; align-items: center; gap: 4px; }
+.dispatch-header-stat-value { font-size: 12px; font-weight: 800; color: var(--dispatch-text); white-space: nowrap; }
+.dispatch-header-stat .dispatch-icon { width: 12px; height: 12px; flex: 0 0 auto; color: var(--dispatch-dim-2); }
+/* The one number that actually decides whether to take the job - gets its
+   own highlighted chip instead of blending in with the rest. */
+.dispatch-header-stat.highlight { padding: 3px 7px; border-radius: 7px; background: color-mix(in srgb, var(--dispatch-accent) 22%, transparent); }
+.dispatch-header-stat.highlight .dispatch-header-stat-value { color: var(--dispatch-accent); font-size: 13.5px; }
+.dispatch-header-stat.highlight .dispatch-icon { color: var(--dispatch-accent); }
+
+.dispatch-body { min-height: 0; flex: 1 1 auto; display: flex; flex-direction: column; gap: 6px; margin-top: 9px; overflow: hidden; }
+
+/* Rows hold a single line of content and must never be compressed below
+   that - only .dispatch-note (below) is allowed to flex/shrink, and it
+   clips instead of spilling into whatever comes after it. Without this,
+   a flex-shrunk note box can end up shorter than its own (line-clamped)
+   text and the text visually overlaps the footer buttons underneath it. */
+.dispatch-row { flex: 0 0 auto; display: flex; align-items: center; gap: 9px; min-width: 0; padding: 7px 9px; border-radius: 9px; background: var(--dispatch-row-bg); }
+.dispatch-row-icon { flex: 0 0 auto; display: grid; place-items: center; width: 22px; height: 22px; color: var(--dispatch-dim); }
+.dispatch-row-icon .dispatch-icon { width: 15px; height: 15px; }
+.dispatch-row-body { min-width: 0; flex: 1 1 auto; }
+.dispatch-row-label { font-size: 9px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--dispatch-dim-2); }
+.dispatch-row-value { margin-top: 1px; font-size: 12.5px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dispatch-row-aside { flex: 0 0 auto; text-align: right; font-size: 12px; font-weight: 700; color: var(--dispatch-dim); white-space: nowrap; }
+.dispatch-row.split { justify-content: space-between; }
+
+.dispatch-note {
+    flex: 0 1 auto; min-height: 40px; overflow: hidden; padding: 8px 9px; border-radius: 9px;
+    background: var(--dispatch-row-bg);
+}
+.dispatch-note .dispatch-row-label { color: var(--dispatch-accent); }
+.dispatch-note-text {
+    margin-top: 2px; font-size: 11.5px; line-height: 1.32; color: var(--dispatch-dim);
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+
+.dispatch-footer { flex: 0 0 auto; margin-top: 9px; }
+.dispatch-buttons { display: flex; gap: 8px; }
+.dispatch-btn {
+    flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px;
+    min-width: 0; height: 38px; padding: 0 10px; border: 0; border-radius: 10px;
+    font: inherit; font-size: 12.5px; font-weight: 800; letter-spacing: .01em; cursor: pointer;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.dispatch-btn .dispatch-icon { width: 15px; height: 15px; flex: 0 0 auto; }
+.dispatch-btn.secondary { color: var(--dispatch-text); background: rgba(255, 255, 255, .08); }
+.dispatch-btn.primary { color: var(--dispatch-accent-ink); background: linear-gradient(180deg, color-mix(in srgb, var(--dispatch-accent) 100%, white 12%), var(--dispatch-accent)); box-shadow: 0 3px 8px color-mix(in srgb, var(--dispatch-accent) 35%, transparent); }
+.dispatch-btn:disabled { cursor: default; filter: saturate(.55); opacity: .55; }
+
+.dispatch-info { margin-top: 7px; display: flex; align-items: center; justify-content: center; gap: 5px; font-size: 10.5px; font-weight: 650; color: var(--dispatch-dim-2); }
+.dispatch-info .dispatch-icon { width: 11px; height: 11px; }
+.dispatch-info strong { color: var(--dispatch-dim); font-variant-numeric: tabular-nums; }
+.dispatch-info.warn { color: var(--dispatch-danger); }
+.dispatch-info.warn strong { color: var(--dispatch-danger); }
+
+.dispatch-icon { display: block; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+/* Compact decorative location thumbnail - not a real map (no live map data
+   is available inside the NUI), just a stylized road pattern so the card
+   keeps a spatial cue without pretending to be routed navigation. */
+.dispatch-map {
+    flex: 0 0 auto; width: 36px; height: 36px; border-radius: 9px; overflow: hidden;
+    background: #0c0d10; position: relative;
+}
+.dispatch-map svg { width: 100%; height: 100%; }

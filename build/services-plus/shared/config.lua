@@ -67,3 +67,11 @@ Config.MaxPassengerCount = 20
 -- this duration. Set it to 0 to use LB Phone's native duration only. Once a
 -- request is accepted, its active card is held until the request ends.
 Config.RequestNotificationPeekDuration = 15000
+
+-- Cosmetic-only fare shown on the taxi dispatch card (services/request-types/
+-- taxi). No payment is ever charged for it - it's a distance-based estimate
+-- so the card isn't just blank where the mockup shows a price.
+Config.Taxi = {
+    baseFare = 5,   -- flat starting amount
+    perKm = 2,      -- added per kilometre of straight-line pickup distance
+}

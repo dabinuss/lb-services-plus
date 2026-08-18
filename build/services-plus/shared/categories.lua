@@ -27,9 +27,25 @@ Config.DefaultCategories = {
 
 -- Default request types (plan §12, §55), seeded once the same way categories
 -- are. Managed through the future admin area afterwards, not read again here.
+-- `height` is a CEILING, not a fixed size: the dispatch templates (see
+-- services/request-types/shared/dispatch.js) measure their own natural
+-- content height and report it to overlay.js, which sizes the real iframe
+-- to match - the card is only ever as tall as it needs to be, up to this
+-- value. Keep it under Config.PeekPlus.maxTemplateHeight (peekplus/shared/
+-- config.lua) and the closed-phone peek's own 20rem/320px cap.
 local taxiTemplate = {
     ui = "services/request-types/taxi/index.html",
-    height = 214,
+    height = 300,
+    fullCard = true,
+}
+local policeTemplate = {
+    ui = "services/request-types/police_emergency/index.html",
+    height = 300,
+    fullCard = true,
+}
+local medicalTemplate = {
+    ui = "services/request-types/medical_emergency/index.html",
+    height = 300,
     fullCard = true,
 }
 
@@ -57,12 +73,22 @@ Config.DefaultRequestTypes = {
         identifier = "police_emergency", category = "police", name = "Police Emergency",
         description = "Request police assistance.",
         locationMode = "auto", passengerMode = "disabled", noteMode = "optional", competitionEnabled = false,
+        templates = {
+            pending = policeTemplate,
+            active = policeTemplate,
+        },
     },
     {
         identifier = "medical_emergency", category = "medical", name = "Medical Emergency",
         description = "Request medical assistance.",
         locationMode = "auto", passengerMode = "required", countLabel = "Number of injured people",
-        noteMode = "disabled", competitionEnabled = false,
+        -- Was "disabled" - the dispatch card's Notes/situation box needs a
+        -- free-text field to show, so callers must be able to write one.
+        noteMode = "optional", competitionEnabled = false,
+        templates = {
+            pending = medicalTemplate,
+            active = medicalTemplate,
+        },
     },
     {
         identifier = "breaking_news", category = "news", name = "Breaking News",
@@ -85,11 +111,6 @@ Config.RequestTypeTemplates.taxi_pickup = Config.RequestTypeTemplates.taxi_picku
     or { pending = taxiTemplate, active = taxiTemplate }
 Config.RequestTypeTemplates.taxi_ride = Config.RequestTypeTemplates.taxi_ride
     or { pending = taxiTemplate, active = taxiTemplate }
-
--- Example:
--- Config.RequestTypeTemplates.medical_emergency = {
---     pending = { ui = "services/request-types/medical_emergency/pending.html", height = 150, fullCard = true },
--- }
 
 -- Optional seed companies for local development. Leave empty on a real server
 -- and create companies through the admin area instead (plan §51).

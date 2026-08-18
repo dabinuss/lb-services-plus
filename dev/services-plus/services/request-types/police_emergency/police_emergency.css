@@ -1,0 +1,3 @@
+/* Police dispatch tweaks on top of ../shared/dispatch.css - red accent. */
+:root { --dispatch-accent: #ff453a; --dispatch-accent-ink: #2a0605; }
+#dispatch-request { width: 100%; height: 100%; }

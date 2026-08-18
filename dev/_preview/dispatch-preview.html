@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Dispatch template preview</title>
+<style>
+  body { margin: 0; padding: 24px; background: #0b0c0e; color: #eee; font-family: -apple-system, 'Segoe UI', sans-serif; }
+  h1 { font-size: 16px; margin: 0 0 4px; }
+  p.hint { margin: 0 0 22px; color: #999; font-size: 12.5px; }
+  .board { display: flex; gap: 22px; flex-wrap: wrap; }
+  .column { width: 340px; }
+  .column h2 { font-size: 12.5px; text-transform: uppercase; letter-spacing: .05em; color: #999; margin: 0 0 8px; }
+  /* Plain dark background, no bezel/outline - this used to draw a 1px
+     "phone bezel" outline that isn't part of the real card at all and was
+     being mistaken for a leftover card border. Matches the phone's actual
+     background so what you see here is exactly what the card looks like. */
+  .phone-frame { width: 340px; border-radius: 22px; overflow: hidden; background: #000; transition: height .12s ease; }
+  iframe { width: 100%; border: 0; display: block; }
+  .controls { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+  button { background: #1c1d22; color: #eee; border: 1px solid #333; border-radius: 7px; padding: 6px 10px; font-size: 11.5px; cursor: pointer; }
+  button:hover { background: #26272d; }
+  button.active-btn { border-color: #f4b914; color: #f4b914; }
+</style>
+</head>
+<body>
+<h1>PeekPlus dispatch templates - visual preview</h1>
+<p class="hint">Posts the same postMessage payload shape overlay.js sends to a real full-card iframe, and mirrors overlay.js's own auto-height handling: each card reports its natural content height and the frame below resizes to match, capped at 300px. Accept/Decline buttons inside each card call a fake action endpoint (no live PeekPlus backend here), so use the controls below each card to change state instead.</p>
+<div class="board" id="board"></div>
+
+<script>
+const TEMPLATES = [
+  {
+    key: 'taxi', title: 'Taxi', src: '../services-plus/services/request-types/taxi/index.html',
+    iconUrl: 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="%23222"/><circle cx="32" cy="32" r="24" fill="%2337c2ff"/><text x="32" y="40" font-size="26" text-anchor="middle" fill="%23fff" font-family="sans-serif">DC</text></svg>'),
+    pending: {
+      title: 'Taxi Pickup', subtitle: 'Downtown Cab Co.', variant: 'info', description: '',
+      details: [
+        { label: 'Passenger count', value: '2', icon: 'people' },
+        { label: 'Reported location', value: 'Vespucci Boulevard / Alta Street', icon: 'location' },
+        { label: 'Distance', value: '2.6 mi', icon: 'distance' },
+        { label: 'Estimated fare', value: '~$13', icon: 'price' },
+      ],
+      actions: [{ id: 'decline', label: 'Decline' }, { id: 'accept', label: 'Accept' }],
+      remainingMs: 15000,
+    },
+    active: {
+      title: 'Taxi Pickup', subtitle: 'Downtown Cab Co.', variant: 'success', description: '',
+      details: [
+        { label: 'Passenger count', value: '2', icon: 'people' },
+        { label: 'Reported location', value: 'Vespucci Boulevard / Alta Street', icon: 'location' },
+        { label: 'Distance', value: '1.1 mi', icon: 'distance' },
+      ],
+      actions: [{ id: 'cancel', label: 'Cancel' }, { id: 'complete', label: 'Complete' }],
+      remainingMs: -1,
+    },
+    long: {
+      title: 'Taxi Pickup', subtitle: 'Downtown Cab Co. & Airport Shuttle Services LLC', variant: 'info', description: '',
+      details: [
+        { label: 'Passenger count', value: '4', icon: 'people' },
+        { label: 'Reported location', value: 'Vespucci Boulevard / Alta Street, near the big intersection by the gas station', icon: 'location' },
+        { label: 'Distance', value: '126.4 mi', icon: 'distance' },
+        { label: 'Estimated fare', value: '~$1337', icon: 'price' },
+      ],
+      actions: [{ id: 'decline', label: 'Decline' }, { id: 'accept', label: 'Accept' }],
+      remainingMs: 15000,
+    },
+  },
+  {
+    key: 'police', title: 'Police Emergency', src: '../services-plus/services/request-types/police_emergency/index.html',
+    pending: {
+      title: 'Police Emergency', subtitle: 'Los Santos Police Department', variant: 'error',
+      description: 'Multiple people fighting outside the bar. Caller on scene, requests urgent police presence.',
+      details: [
+        { label: 'Reported location', value: 'Lindenstrasse 14, 50674', icon: 'location' },
+        { label: 'Distance', value: '1.2 km', icon: 'distance' },
+      ],
+      actions: [{ id: 'decline', label: 'Decline' }, { id: 'accept', label: 'Accept' }],
+      remainingMs: 15000,
+    },
+    active: {
+      title: 'Police Emergency', subtitle: 'Los Santos Police Department', variant: 'success',
+      description: 'Multiple people fighting outside the bar. Caller on scene, requests urgent police presence.',
+      details: [
+        { label: 'Reported location', value: 'Lindenstrasse 14, 50674', icon: 'location' },
+        { label: 'Distance', value: '0.4 km', icon: 'distance' },
+      ],
+      actions: [{ id: 'cancel', label: 'Cancel' }, { id: 'complete', label: 'Complete' }],
+      remainingMs: -1,
+    },
+    long: {
+      title: 'Police Emergency', subtitle: 'Los Santos Police Department - Central Division', variant: 'error',
+      description: 'Multiple people fighting outside the bar near the entrance. Several witnesses report weapons may be involved. Caller remains on scene and requests urgent police presence as soon as possible before it escalates further.',
+      details: [
+        { label: 'Reported location', value: 'Lindenstrasse 14, 50674 Cologne, near the central station', icon: 'location' },
+        { label: 'Distance', value: '1.2 km', icon: 'distance' },
+      ],
+      actions: [{ id: 'decline', label: 'Decline' }, { id: 'accept', label: 'Accept' }],
+      remainingMs: 15000,
+    },
+  },
+  {
+    key: 'medical', title: 'Medical Emergency', src: '../services-plus/services/request-types/medical_emergency/index.html',
+    pending: {
+      title: 'Medical Emergency', subtitle: 'Pillbox Medical', variant: 'error',
+      description: 'Patient fell, pain in the leg, conscious and responsive.',
+      details: [
+        { label: 'Number of injured people', value: '1', icon: 'people' },
+        { label: 'Reported location', value: 'Bahnhofstrasse 7, 80331', icon: 'location' },
+      ],
+      actions: [{ id: 'decline', label: 'Decline' }, { id: 'accept', label: 'Accept' }],
+      remainingMs: 28000,
+    },
+    active: {
+      title: 'Medical Emergency', subtitle: 'Pillbox Medical', variant: 'success',
+      description: 'Patient fell, pain in the leg, conscious and responsive.',
+      details: [
+        { label: 'Number of injured people', value: '1', icon: 'people' },
+        { label: 'Reported location', value: 'Bahnhofstrasse 7, 80331', icon: 'location' },
+      ],
+      actions: [{ id: 'cancel', label: 'Cancel' }, { id: 'complete', label: 'Complete' }],
+      remainingMs: -1,
+    },
+    long: {
+      title: 'Medical Emergency', subtitle: 'Pillbox Medical Center - Emergency Response Unit', variant: 'error',
+      description: 'Patient fell down a flight of stairs, complains of severe pain in the leg and lower back, currently conscious and responsive but unable to stand up without assistance from bystanders on scene.',
+      details: [
+        { label: 'Number of injured people', value: '1', icon: 'people' },
+        { label: 'Reported location', value: 'Bahnhofstrasse 7, 80331 Munich, second floor apartment', icon: 'location' },
+        { label: 'Distance', value: '0.4 km', icon: 'distance' },
+      ],
+      actions: [{ id: 'decline', label: 'Decline' }, { id: 'accept', label: 'Accept' }],
+      remainingMs: 28000,
+    },
+  },
+]
+
+// Matches the ceiling registered for these templates in shared/categories.lua.
+const MAX_HEIGHT = 300
+
+let revision = 1
+
+// Mirrors overlay.js's handleTemplateResize(): each card reports its own
+// natural content height (dispatch.js's reportHeight), clamp it to the
+// registered ceiling, and resize the iframe (and here, the phone-frame
+// wrapper around it) to match.
+window.addEventListener('message', ({ data, source }) => {
+  if (data?.type !== 'peekplus:template:resize' || typeof data.height !== 'number') return
+  const iframe = Array.from(document.querySelectorAll('iframe')).find((f) => f.contentWindow === source)
+  if (!iframe) return
+  const clamped = Math.max(40, Math.min(MAX_HEIGHT, Math.ceil(data.height)))
+  iframe.style.height = `${clamped}px`
+  iframe.closest('.phone-frame').style.height = `${clamped}px`
+})
+
+function post(frame, base, state) {
+  revision += 1
+  frame.contentWindow.postMessage({
+    type: 'peekplus:template',
+    template: 'preview',
+    data: {},
+    actionEndpoint: 'about:blank',
+    presentation: { host: 'phone', theme: 'dark', callPriority: false },
+    card: {
+      id: 1, revision, state, actionInFlight: false, confirmAction: null,
+      icon: null, iconUrl: null,
+      ...base,
+    },
+  }, '*')
+}
+
+const board = document.getElementById('board')
+TEMPLATES.forEach((entry) => {
+  const column = document.createElement('div')
+  column.className = 'column'
+  const heading = document.createElement('h2')
+  heading.textContent = entry.title
+  const frameWrap = document.createElement('div')
+  frameWrap.className = 'phone-frame'
+  const iframe = document.createElement('iframe')
+  iframe.src = entry.src
+  frameWrap.appendChild(iframe)
+  const controls = document.createElement('div')
+  controls.className = 'controls'
+
+  const send = (state, btn) => {
+    controls.querySelectorAll('button').forEach((b) => b.classList.remove('active-btn'))
+    btn.classList.add('active-btn')
+    post(iframe, { iconUrl: entry.iconUrl || null, ...entry[state] }, state)
+  }
+
+  const pendingBtn = document.createElement('button')
+  pendingBtn.textContent = 'Show pending'
+  const activeBtn = document.createElement('button')
+  activeBtn.textContent = 'Show active'
+  const longBtn = document.createElement('button')
+  longBtn.textContent = 'Show long text'
+  const reloadBtn = document.createElement('button')
+  reloadBtn.textContent = 'Reload iframe'
+
+  iframe.addEventListener('load', () => send('pending', pendingBtn))
+  pendingBtn.addEventListener('click', () => send('pending', pendingBtn))
+  activeBtn.addEventListener('click', () => send('active', activeBtn))
+  longBtn.addEventListener('click', () => send('long', longBtn))
+  reloadBtn.addEventListener('click', () => { iframe.src = entry.src })
+
+  controls.append(pendingBtn, activeBtn, longBtn, reloadBtn)
+  column.append(heading, frameWrap, controls)
+  board.appendChild(column)
+})
+</script>
+</body>
+</html>
