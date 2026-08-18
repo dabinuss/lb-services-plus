@@ -8,7 +8,15 @@ import { showToast } from '../../lib/toast.js'
 const EMPTY = {
   categoryId: '', name: '', description: '',
   passengerMode: 'disabled', countLabel: 'Passenger count', noteMode: 'disabled', competitionEnabled: false, enabled: true,
+  feature: '',
 }
+
+// Every "special feature" a request type can expose - see server/admin.lua's
+// own VALID_FEATURES, which is what actually enforces this, not this list.
+const FEATURE_OPTIONS = [
+  { key: '', label: 'None' },
+  { key: 'taxi_pricing', label: 'Taxi pricing (Taxameter)' },
+]
 
 // Request type CRUD (plan §55). Location is always automatic (plan §14) -
 // there's nothing else implemented to choose here, so it isn't a field.
@@ -65,6 +73,7 @@ export default function RequestTypesTab() {
               <div className="admin-row-meta">
                 {categoryName(t.category_id)} · {t.competition_enabled ? 'competition' : 'exclusive'}
                 {(t.passenger_mode || (t.passenger_count ? 'required' : 'disabled')) !== 'disabled' ? ' · passengers' : ''}
+                {t.feature ? ` · ${FEATURE_OPTIONS.find((f) => f.key === t.feature)?.label || t.feature}` : ''}
                 {' · '}{t.enabled ? 'enabled' : 'disabled'}
               </div>
             </div>
@@ -80,6 +89,7 @@ export default function RequestTypesTab() {
                     noteMode: t.note_mode || (t.description_enabled === 1 ? 'optional' : 'disabled'),
                     competitionEnabled: t.competition_enabled === 1,
                     enabled: t.enabled === 1,
+                    feature: t.feature || '',
                   })
                 }
               >
@@ -151,6 +161,21 @@ export default function RequestTypesTab() {
               <option value="disabled">Disabled</option>
               <option value="optional">Optional</option>
               <option value="required">Required</option>
+            </select>
+          </div>
+          <div className="request-type-setting">
+            <label htmlFor="request-type-feature">Special feature</label>
+            <select
+              id="request-type-feature"
+              className="search-input"
+              value={editing.feature}
+              onChange={(e) => setEditing({ ...editing, feature: e.target.value })}
+            >
+              {FEATURE_OPTIONS.map((f) => (
+                <option key={f.key} value={f.key}>
+                  {f.label}
+                </option>
+              ))}
             </select>
           </div>
           <div className="hotline-row">

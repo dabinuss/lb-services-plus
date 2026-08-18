@@ -358,3 +358,59 @@ SET @ddl := IF(@idx_exists = 0,
     'ALTER TABLE `phone_services_plus_requests` ADD INDEX `disconnected_status` (`status`, `employee_disconnected_at`)',
     'SELECT 1');
 PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- ---------------------------------------------------------------------------
+-- Request-type "special features" (e.g. taxi Taxameter pricing). See
+-- sql/install.sql's phone_services_plus_company_features/_requests comments
+-- for what each piece is for.
+-- ---------------------------------------------------------------------------
+
+SET @col_exists := (
+    SELECT COUNT(*) FROM information_schema.columns
+    WHERE table_schema = DATABASE() AND table_name = 'phone_services_plus_request_types' AND column_name = 'feature'
+);
+SET @ddl := IF(@col_exists = 0,
+    'ALTER TABLE `phone_services_plus_request_types` ADD COLUMN `feature` VARCHAR(50) DEFAULT NULL AFTER `enabled`',
+    'SELECT 1');
+PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+CREATE TABLE IF NOT EXISTS `phone_services_plus_company_features` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `company_id` INT UNSIGNED NOT NULL,
+    `request_type_id` INT UNSIGNED NOT NULL,
+    `feature` VARCHAR(50) NOT NULL,
+    `config` JSON NOT NULL,
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `company_type_feature` (`company_id`, `request_type_id`, `feature`),
+    FOREIGN KEY (`company_id`) REFERENCES `phone_services_plus_companies`(`id`) ON DELETE CASCADE,
+    FOREIGN KEY (`request_type_id`) REFERENCES `phone_services_plus_request_types`(`id`) ON DELETE CASCADE
+) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+SET @col_exists := (
+    SELECT COUNT(*) FROM information_schema.columns
+    WHERE table_schema = DATABASE() AND table_name = 'phone_services_plus_requests' AND column_name = 'accepted_at'
+);
+SET @ddl := IF(@col_exists = 0,
+    'ALTER TABLE `phone_services_plus_requests` ADD COLUMN `accepted_at` TIMESTAMP NULL DEFAULT NULL AFTER `description`',
+    'SELECT 1');
+PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @col_exists := (
+    SELECT COUNT(*) FROM information_schema.columns
+    WHERE table_schema = DATABASE() AND table_name = 'phone_services_plus_requests' AND column_name = 'pickup_distance'
+);
+SET @ddl := IF(@col_exists = 0,
+    'ALTER TABLE `phone_services_plus_requests` ADD COLUMN `pickup_distance` FLOAT DEFAULT NULL AFTER `accepted_at`',
+    'SELECT 1');
+PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @col_exists := (
+    SELECT COUNT(*) FROM information_schema.columns
+    WHERE table_schema = DATABASE() AND table_name = 'phone_services_plus_requests' AND column_name = 'feature_data'
+);
+SET @ddl := IF(@col_exists = 0,
+    'ALTER TABLE `phone_services_plus_requests` ADD COLUMN `feature_data` JSON DEFAULT NULL AFTER `pickup_distance`',
+    'SELECT 1');
+PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;

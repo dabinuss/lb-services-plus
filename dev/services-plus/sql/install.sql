@@ -212,8 +212,40 @@ CREATE TABLE IF NOT EXISTS `phone_services_plus_request_types` (
     -- the admin area just clears this instead.
     `enabled` TINYINT(1) NOT NULL DEFAULT 1,
 
+    -- Technical key of the "special feature" this type exposes (e.g.
+    -- 'taxi_pricing'), NULL for none. Only server/taxi_pricing.lua (and any
+    -- future feature module) knows what a given key means or reads
+    -- phone_services_plus_company_features for it - this column is just the
+    -- admin-facing on/off switch per type, same role admin_*_allowed plays
+    -- for companies.
+    `feature` VARCHAR(50) DEFAULT NULL,
+
     PRIMARY KEY (`id`),
     FOREIGN KEY (`category_id`) REFERENCES `phone_services_plus_categories`(`id`) ON DELETE SET NULL
+) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- Generic per-company, per-request-type feature config (e.g. a taxi
+-- company's Taxameter billing mode/rate). `config` is opaque JSON that only
+-- the feature module named by `feature` interprets - this table itself
+-- doesn't know or care what's inside it, the same way
+-- phone_services_plus_settings doesn't know what its values mean beyond a
+-- string. Kept separate from phone_services_plus_companies/_request_types
+-- (plan discussion) so those stay generic across every business type
+-- instead of accumulating one column per feature.
+CREATE TABLE IF NOT EXISTS `phone_services_plus_company_features` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `company_id` INT UNSIGNED NOT NULL,
+    `request_type_id` INT UNSIGNED NOT NULL,
+    `feature` VARCHAR(50) NOT NULL,
+    `config` JSON NOT NULL,
+
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `company_type_feature` (`company_id`, `request_type_id`, `feature`),
+    FOREIGN KEY (`company_id`) REFERENCES `phone_services_plus_companies`(`id`) ON DELETE CASCADE,
+    FOREIGN KEY (`request_type_id`) REFERENCES `phone_services_plus_request_types`(`id`) ON DELETE CASCADE
 ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `phone_services_plus_requests` (
@@ -230,6 +262,23 @@ CREATE TABLE IF NOT EXISTS `phone_services_plus_requests` (
     `pos_y` FLOAT DEFAULT NULL,
     `passenger_count` INT DEFAULT NULL,
     `description` VARCHAR(255) DEFAULT NULL,
+
+    -- Feature bookkeeping (server/taxi_pricing.lua and friends), all NULL
+    -- for requests whose type has no feature. `accepted_at` exists
+    -- separately from `updated_at` because that column gets overwritten on
+    -- *both* the accept and the complete transition, so it can't answer
+    -- "how long was this active" by itself. `pickup_distance` is a proxy,
+    -- not a real trip odometer - this request system has no drop-off
+    -- location or route tracking (see server/requests.lua's own header on
+    -- the deliberately small state machine), so it's the straight-line
+    -- distance between the accepting employee and the pickup point,
+    -- captured once at accept. `feature_data` is the frozen result computed
+    -- at completion (e.g. the Taxameter's final fare) - a snapshot, because
+    -- the company's rate can change after the fact and old requests must
+    -- keep showing what they actually cost at the time.
+    `accepted_at` TIMESTAMP NULL DEFAULT NULL,
+    `pickup_distance` FLOAT DEFAULT NULL,
+    `feature_data` JSON DEFAULT NULL,
 
     `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,

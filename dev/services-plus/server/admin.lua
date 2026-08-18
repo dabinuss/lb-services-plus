@@ -377,6 +377,11 @@ adminCallback("admin:getRequestTypes", function(_, reply)
     reply(MySQL.query.await("SELECT * FROM phone_services_plus_request_types ORDER BY name ASC") or {})
 end)
 
+-- Every "special feature" a request type can expose. Only this list gates
+-- what an admin can pick - what a given key actually *does* is entirely up
+-- to its own feature module (server/taxi_pricing.lua for 'taxi_pricing').
+local VALID_FEATURES = { taxi_pricing = true }
+
 local function requestTypeParams(data)
     local name = type(data.name) == "string" and data.name:match("^%s*(.-)%s*$") or ""
     local identifier = name:lower():gsub("[^%w]+", "_"):gsub("^_+", ""):gsub("_+$", "")
@@ -388,12 +393,13 @@ local function requestTypeParams(data)
         and data.passengerMode or "disabled"
     local countLabel = type(data.countLabel) == "string" and data.countLabel:match("^%s*(.-)%s*$") or ""
     if countLabel == "" then countLabel = "Passenger count" end
+    local feature = VALID_FEATURES[data.feature] and data.feature or json.null
 
     return {
         data.categoryId or json.null, name, identifier:sub(1, 100), data.description or json.null,
         data.locationMode or "auto", passengerMode ~= "disabled" and 1 or 0, passengerMode, countLabel:sub(1, 50),
         noteMode ~= "disabled" and 1 or 0, noteMode,
-        data.competitionEnabled and 1 or 0,
+        data.competitionEnabled and 1 or 0, feature,
     }
 end
 
@@ -408,8 +414,8 @@ adminCallback("admin:createRequestType", function(_, reply, data)
 
     local id = MySQL.insert.await([[
         INSERT INTO phone_services_plus_request_types
-            (category_id, name, icon, description, location_mode, passenger_count, passenger_mode, count_label, description_enabled, note_mode, competition_enabled)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (category_id, name, icon, description, location_mode, passenger_count, passenger_mode, count_label, description_enabled, note_mode, competition_enabled, feature)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ]], requestTypeParams(data))
 
     Requests.Reload()
@@ -425,7 +431,7 @@ adminCallback("admin:updateRequestType", function(_, reply, data)
     MySQL.update.await([[
         UPDATE phone_services_plus_request_types SET
             category_id = ?, name = ?, icon = ?, description = ?, location_mode = ?,
-            passenger_count = ?, passenger_mode = ?, count_label = ?, description_enabled = ?, note_mode = ?, competition_enabled = ?, enabled = ?
+            passenger_count = ?, passenger_mode = ?, count_label = ?, description_enabled = ?, note_mode = ?, competition_enabled = ?, feature = ?, enabled = ?
         WHERE id = ?
     ]], params)
 

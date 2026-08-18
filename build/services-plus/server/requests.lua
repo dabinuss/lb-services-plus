@@ -593,6 +593,12 @@ function Requests.Accept(source, requestId)
             activeAssignments[source] = { identifier = identifier, requestId = requestId }
         end
 
+        -- Feature hook (server/taxi_pricing.lua) - a no-op unless this
+        -- request's type actually has one turned on. Must run after the
+        -- accept UPDATE above so its own accepted_at/pickup_distance write
+        -- targets a row that's genuinely 'active' under this employee.
+        TaxiPricing.OnAccept(requestId, source)
+
         clearNotifications(requestId, source)
 
         exports["lb-phone"]:SendNotification(request.requester_number, {
@@ -711,6 +717,11 @@ function Requests.Complete(requestId, actorSource)
 
     if MySQL.update.await(sql, params) == 0 then return false end
 
+    -- Feature hook (server/taxi_pricing.lua) - a no-op unless this
+    -- request's type actually has one turned on. Runs before the customer
+    -- notification below so a priced request can mention what it cost.
+    TaxiPricing.OnComplete(id)
+
     if before.employeeSource then
         activeAssignments[before.employeeSource] = nil
         TriggerClientEvent("services-plus:client:requestEnded", before.employeeSource, id)
@@ -721,11 +732,22 @@ function Requests.Complete(requestId, actorSource)
     end
 
     if before.requesterNumber then
+        local content = "Your request has been completed. Thank you."
+        local rawFeatureData = MySQL.scalar.await(
+            "SELECT feature_data FROM phone_services_plus_requests WHERE id = ?", { id }
+        )
+        if type(rawFeatureData) == "string" then
+            local ok, decoded = pcall(json.decode, rawFeatureData)
+            if ok and type(decoded) == "table" and type(decoded.amount) == "number" then
+                content = ("Your request has been completed. Total: $%.2f. Thank you."):format(decoded.amount)
+            end
+        end
+
         pcall(function()
             exports["lb-phone"]:SendNotification(before.requesterNumber, {
                 app = Config.App.identifier,
                 title = before.company and before.company.name or Config.App.name,
-                content = "Your request has been completed. Thank you.",
+                content = content,
             })
         end)
     end
@@ -789,7 +811,7 @@ RegisterCallback("getCompanyRequests", function(source, reply, page)
 
     local rows = MySQL.query.await([[
         SELECT r.id, r.company_id, r.status, r.pos_x AS x, r.pos_y AS y,
-               r.passenger_count, r.description, r.created_at,
+               r.passenger_count, r.description, r.created_at, r.feature_data,
                t.name AS type_name, t.icon AS type_icon, t.count_label,
                (r.employee_identifier = ?) AS is_mine
         FROM phone_services_plus_requests r
@@ -805,6 +827,14 @@ RegisterCallback("getCompanyRequests", function(source, reply, page)
     rows = rows or {}
     for i = 1, #rows do
         rows[i].is_mine = DatabaseBoolean(rows[i].is_mine)
+        -- Decoded here, not left as a JSON string, so the UI never has to
+        -- parse it - same convention as every other reply field.
+        if type(rows[i].feature_data) == "string" then
+            local ok, decoded = pcall(json.decode, rows[i].feature_data)
+            rows[i].feature_data = ok and decoded or nil
+        else
+            rows[i].feature_data = nil
+        end
     end
 
     reply(rows)

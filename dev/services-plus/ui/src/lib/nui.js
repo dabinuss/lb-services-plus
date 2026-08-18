@@ -259,6 +259,12 @@ let fixtureRequests = [
     type_name: 'Taxi Pickup', type_icon: 'taxi', is_mine: false, pos_x: -800, pos_y: -1200,
     created_at: new Date(Date.now() - 30 * 3600000).toISOString(),
   },
+  {
+    id: 5, status: 'completed', request_type_id: 2, company_id: 3, passenger_count: 1, description: null,
+    type_name: 'Taxi Pickup', type_icon: 'taxi', is_mine: true, pos_x: 300, pos_y: 400,
+    feature_data: { feature: 'taxi_pricing', billingMode: 'per_100m', rate: 2, metric: 850, amount: 17 },
+    created_at: new Date(Date.now() - 2 * 3600000).toISOString(),
+  },
 ]
 
 // Own call history across companies/states, for Activity > Calls.
@@ -316,6 +322,13 @@ let fixtureSettings = {
     { id: 4, label: 'Workshop', isMain: false, callsEnabled: true, messagesEnabled: true, mailboxEnabled: true },
   ],
 }
+
+// Mirrors what server/taxi_pricing.lua's getTaxiPricingSettings returns for
+// a company whose category has a taxi_pricing-enabled request type -
+// request type 2 (Taxi Pickup) above is the only one flagged for it.
+let fixtureTaxiPricing = [
+  { requestTypeId: 2, requestTypeName: 'Taxi Pickup', billingMode: 'per_100m', rate: 2 },
+]
 
 // Employee-side inbox for the logged-in company - a few conversations from
 // different contact numbers so the list (and its own pagination) has
@@ -402,6 +415,7 @@ let fixtureAdminRequestTypes = [
   {
     id: 2, category_id: 3, name: 'Taxi Pickup', icon: 'taxi_pickup', description: 'Request a ride.',
     passenger_count: 1, passenger_mode: 'required', description_enabled: 1, note_mode: 'optional', competition_enabled: 1, enabled: 1,
+    feature: 'taxi_pricing',
   },
   {
     id: 3, category_id: 1, name: 'Request Backup', icon: 'request_backup', description: 'Flag down the nearest available unit.',
@@ -480,6 +494,13 @@ async function fetchNuiFixture(action, data) {
       return fixtureTeam
     case 'getCompanyConversations':
       return paginate(fixtureCompanyConversations, data.page)
+    case 'getTaxiPricingSettings':
+      return fixtureTaxiPricing
+    case 'updateTaxiPricingSettings':
+      fixtureTaxiPricing = fixtureTaxiPricing.map((t) =>
+        t.requestTypeId === data.requestTypeId ? { ...t, ...data.settings } : t,
+      )
+      return true
     case 'getCompanySettings':
       return fixtureSettings
     case 'updateCompanySettings': {

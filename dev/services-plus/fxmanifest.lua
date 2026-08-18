@@ -37,6 +37,7 @@ server_scripts {
     'server/employees.lua',
     'server/calls.lua',
     'server/requests.lua',
+    'server/taxi_pricing.lua',
     'server/admin.lua',
     'server/main.lua',
     'server/seed.lua',

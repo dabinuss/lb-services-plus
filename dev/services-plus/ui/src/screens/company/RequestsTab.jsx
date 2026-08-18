@@ -80,6 +80,7 @@ export default function RequestsTab() {
               <div className="request-meta">
                 {r.passenger_count ? `${r.count_label || 'Passenger count'}: ${r.passenger_count} · ` : ''}
                 {r.description || 'No description'}
+                {r.feature_data?.amount != null ? ` · $${r.feature_data.amount.toFixed(2)}` : ''}
               </div>
             </div>
 
@@ -133,6 +134,12 @@ export default function RequestsTab() {
               <div className="request-detail-row">
                 <span className="hint">Notes</span>
                 <span>{details.description}</span>
+              </div>
+            )}
+            {details.feature_data?.amount != null && (
+              <div className="request-detail-row">
+                <span className="hint">Fare</span>
+                <span>${details.feature_data.amount.toFixed(2)}</span>
               </div>
             )}
             {details.created_at && (
