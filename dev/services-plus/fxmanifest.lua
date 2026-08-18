@@ -46,8 +46,7 @@ server_scripts {
 -- The custom app itself (ui/dist) is loaded by lb-phone as a plain iframe
 -- src via AddCustomApp's `ui` field (see client/main.lua) - it does NOT need
 -- this resource's own ui_page. That slot is used by PeekPlus' Sibling-NUI
--- controller instead. The legacy peekplus/client/legacy-overlay.lua remains
--- an unloaded migration reference until final acceptance.
+-- controller instead.
 ui_page 'peekplus/ui/overlay/index-peekplus-1.2.2.html'
 
 files {
