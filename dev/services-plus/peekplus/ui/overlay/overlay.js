@@ -48,6 +48,16 @@
         'tow-truck': ['M3 17V8h10v9', 'M13 11h4l4 4v2h-8', 'M6 17a2 2 0 1 0 0 4 2 2 0 0 0 0-4', 'M18 17a2 2 0 1 0 0 4 2 2 0 0 0 0-4', 'M3 5h7'],
         government: ['M3 10h18', 'M5 10v8', 'M9 10v8', 'M15 10v8', 'M19 10v8', 'M2 21h20', 'M12 3l9 5H3z'],
         news: ['M4 5h16v14H4z', 'M8 9h8', 'M8 13h8', 'M8 17h5'],
+        law: ['M12 3v18', 'M5 7h14', 'M5 7l-3 6a3 3 0 0 0 6 0z', 'M19 7l-3 6a3 3 0 0 0 6 0z', 'M8 21h8'],
+        'car-dealer': ['M4 12a4 4 0 1 0 8 0a4 4 0 1 0 -8 0', 'M12 12h9', 'M17 12v4', 'M20 12v3'],
+        'car-wash': ['M5 16h14v-5a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2z', 'M7.5 18h.01', 'M16.5 18h.01', 'M7 2l-1 2l2 2l-1 2', 'M12 1l-1 2l2 2l-1 2', 'M17 2l-1 2l2 2l-1 2'],
+        restaurant: ['M6 2v6a2 2 0 0 0 4 0V2', 'M8 2v4', 'M8 8v14', 'M15 2l2 7v13'],
+        bar: ['M4 4h16l-8 9z', 'M12 13v8', 'M8 21h8'],
+        barber: ['M3.5 6a2.5 2.5 0 1 0 5 0a2.5 2.5 0 1 0 -5 0', 'M3.5 18a2.5 2.5 0 1 0 5 0a2.5 2.5 0 1 0 -5 0', 'M8 7.5L20 20', 'M8 16.5L20 4'],
+        tattoo: ['M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 21 12 17.77 5.82 21 7 14.14 2 9.27l6.91-1.01L12 2z'],
+        music: ['M9 18V5l12-2v13', 'M3 18a3 3 0 1 0 6 0a3 3 0 1 0 -6 0', 'M15 16a3 3 0 1 0 6 0a3 3 0 1 0 -6 0'],
+        shop: ['M6 8h12l-1 12a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2z', 'M9 8V6a3 3 0 0 1 6 0v2'],
+        funeral: ['M12 3v18', 'M7 8h10'],
     }
     const ICON_ALIASES = {
         'taxi-ride': 'taxi',
@@ -58,6 +68,9 @@
         tow_truck: 'tow-truck',
         breaking_news: 'news',
         'breaking-news': 'news',
+        bank: 'government',
+        'car_dealer': 'car-dealer',
+        car_wash: 'car-wash',
     }
 
     function post(action, data) {

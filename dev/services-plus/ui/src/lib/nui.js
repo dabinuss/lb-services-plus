@@ -328,12 +328,30 @@ let fixtureCompanyConversations = [
 
 // --------------------------------------------------------- admin fixtures
 
+// Mirrors Config.DefaultCategories in shared/categories.lua - keep both in
+// sync when categories change, this one only feeds the browser-only preview.
+// Ids 1-5 are kept stable (fixtureAdminCompanies/fixtureAdminRequestTypes
+// below reference them by id, same as real foreign keys would) - sort_order,
+// not id, controls display order, exactly like the real DB.
 let fixtureAdminCategories = [
-  { id: 1, key: 'police', name: 'Police', icon: 'police', sort_order: 10, competition_allowed: 0 },
-  { id: 2, key: 'medical', name: 'Medical', icon: 'medical', sort_order: 20, competition_allowed: 0 },
-  { id: 3, key: 'taxi', name: 'Taxi', icon: 'taxi', sort_order: 30, competition_allowed: 1 },
-  { id: 4, key: 'mechanic', name: 'Mechanic', icon: 'wrench', sort_order: 40, competition_allowed: 1 },
-  { id: 5, key: 'news', name: 'News', icon: 'news', sort_order: 70, competition_allowed: 0 },
+  { id: 1, key: 'police', name: 'Law Enforcement', icon: 'police', sort_order: 10, competition_allowed: 0 },
+  { id: 2, key: 'medical', name: 'Medical & Hospitals', icon: 'medical', sort_order: 40, competition_allowed: 0 },
+  { id: 3, key: 'taxi', name: 'Taxi & Transportation', icon: 'taxi', sort_order: 50, competition_allowed: 1 },
+  { id: 4, key: 'mechanic', name: 'Auto Repair Shops', icon: 'wrench', sort_order: 70, competition_allowed: 1 },
+  { id: 5, key: 'news', name: 'News & Media', icon: 'news', sort_order: 150, competition_allowed: 0 },
+  { id: 6, key: 'government', name: 'Government', icon: 'bank', sort_order: 20, competition_allowed: 0 },
+  { id: 7, key: 'law', name: 'Law Firms & Attorneys', icon: 'law', sort_order: 30, competition_allowed: 0 },
+  { id: 8, key: 'car_dealer', name: 'Car Dealerships', icon: 'car-dealer', sort_order: 60, competition_allowed: 0 },
+  { id: 9, key: 'towing', name: 'Towing Services', icon: 'tow-truck', sort_order: 80, competition_allowed: 1 },
+  { id: 10, key: 'carwash', name: 'Car Washes', icon: 'car-wash', sort_order: 90, competition_allowed: 0 },
+  { id: 11, key: 'restaurant', name: 'Restaurants & Dining', icon: 'restaurant', sort_order: 100, competition_allowed: 0 },
+  { id: 12, key: 'bar', name: 'Clubs & Bars', icon: 'bar', sort_order: 110, competition_allowed: 0 },
+  { id: 13, key: 'barber', name: 'Barbershops', icon: 'barber', sort_order: 120, competition_allowed: 0 },
+  { id: 14, key: 'tattoo', name: 'Tattoo & Piercing Parlors', icon: 'tattoo', sort_order: 130, competition_allowed: 0 },
+  { id: 15, key: 'music', name: 'Record Labels', icon: 'music', sort_order: 140, competition_allowed: 0 },
+  { id: 16, key: 'shop', name: 'Retail Stores', icon: 'shop', sort_order: 160, competition_allowed: 0 },
+  { id: 17, key: 'community', name: 'Community & Organizations', icon: 'people', sort_order: 170, competition_allowed: 0 },
+  { id: 18, key: 'funeral', name: 'Funeral Homes', icon: 'funeral', sort_order: 180, competition_allowed: 0 },
 ]
 
 // Mirrors fixtures.bootstrap.companies above (same ids/backgrounds) so the

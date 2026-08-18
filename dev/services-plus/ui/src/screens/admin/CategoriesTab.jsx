@@ -96,7 +96,7 @@ export default function CategoriesTab() {
           />
           <input
             className="search-input"
-            placeholder="Icon (police, medical, taxi, wrench, tow-truck, bank)"
+            placeholder="Icon (police, bank, law, medical, taxi, car-dealer, wrench, tow-truck, car-wash, restaurant, bar, barber, tattoo, music, news, shop, people, funeral)"
             value={editing.icon}
             onChange={(e) => setEditing({ ...editing, icon: e.target.value })}
           />

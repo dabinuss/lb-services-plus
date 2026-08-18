@@ -57,12 +57,23 @@ end
 
 local categoryIcons = {
     police = "police",
+    government = "government",
+    law = "law",
     medical = "medical",
     taxi = "taxi",
+    car_dealer = "car-dealer",
     mechanic = "wrench",
     towing = "tow-truck",
-    government = "government",
+    carwash = "car-wash",
+    restaurant = "restaurant",
+    bar = "bar",
+    barber = "barber",
+    tattoo = "tattoo",
+    music = "music",
     news = "news",
+    shop = "shop",
+    community = "people",
+    funeral = "funeral",
 }
 
 local function requestIcon(payload)

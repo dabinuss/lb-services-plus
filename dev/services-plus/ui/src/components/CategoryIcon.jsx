@@ -12,6 +12,17 @@ const MAP = {
   'tow-truck': 'towTruck',
   bank: 'bank',
   news: 'news',
+  law: 'law',
+  'car-dealer': 'carDealer',
+  'car-wash': 'carWash',
+  restaurant: 'restaurant',
+  bar: 'bar',
+  barber: 'barber',
+  tattoo: 'tattoo',
+  music: 'music',
+  shop: 'shop',
+  people: 'people',
+  funeral: 'funeral',
 }
 
 export default function CategoryIcon({ icon, className, size, strokeWidth }) {

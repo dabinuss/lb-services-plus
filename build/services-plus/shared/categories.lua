@@ -3,13 +3,26 @@
 -- admin area (plan §54) - this table is only a convenience bootstrap, not the
 -- source of truth at runtime.
 Config.DefaultCategories = {
-    { key = "police", name = "Police", icon = "police", sort = 10, competitionAllowed = false },
-    { key = "medical", name = "Medical", icon = "medical", sort = 20, competitionAllowed = false },
-    { key = "taxi", name = "Taxi", icon = "taxi", sort = 30, competitionAllowed = true },
-    { key = "mechanic", name = "Mechanic", icon = "wrench", sort = 40, competitionAllowed = true },
-    { key = "towing", name = "Towing", icon = "tow-truck", sort = 50, competitionAllowed = true },
-    { key = "government", name = "Government", icon = "bank", sort = 60, competitionAllowed = false },
-    { key = "news", name = "News", icon = "news", sort = 70, competitionAllowed = false },
+    { key = "police", name = "Law Enforcement", icon = "police", sort = 10, competitionAllowed = false },
+    -- Government is the broad catch-all for anything state-run that isn't
+    -- police: mayor's office, city hall, DMV, courts/D.A. and similar.
+    { key = "government", name = "Government", icon = "bank", sort = 20, competitionAllowed = false },
+    { key = "law", name = "Law Firms & Attorneys", icon = "law", sort = 30, competitionAllowed = false },
+    { key = "medical", name = "Medical & Hospitals", icon = "medical", sort = 40, competitionAllowed = false },
+    { key = "taxi", name = "Taxi & Transportation", icon = "taxi", sort = 50, competitionAllowed = true },
+    { key = "car_dealer", name = "Car Dealerships", icon = "car-dealer", sort = 60, competitionAllowed = false },
+    { key = "mechanic", name = "Auto Repair Shops", icon = "wrench", sort = 70, competitionAllowed = true },
+    { key = "towing", name = "Towing Services", icon = "tow-truck", sort = 80, competitionAllowed = true },
+    { key = "carwash", name = "Car Washes", icon = "car-wash", sort = 90, competitionAllowed = false },
+    { key = "restaurant", name = "Restaurants & Dining", icon = "restaurant", sort = 100, competitionAllowed = false },
+    { key = "bar", name = "Clubs & Bars", icon = "bar", sort = 110, competitionAllowed = false },
+    { key = "barber", name = "Barbershops", icon = "barber", sort = 120, competitionAllowed = false },
+    { key = "tattoo", name = "Tattoo & Piercing Parlors", icon = "tattoo", sort = 130, competitionAllowed = false },
+    { key = "music", name = "Record Labels", icon = "music", sort = 140, competitionAllowed = false },
+    { key = "news", name = "News & Media", icon = "news", sort = 150, competitionAllowed = false },
+    { key = "shop", name = "Retail Stores", icon = "shop", sort = 160, competitionAllowed = false },
+    { key = "community", name = "Community & Organizations", icon = "people", sort = 170, competitionAllowed = false },
+    { key = "funeral", name = "Funeral Homes", icon = "funeral", sort = 180, competitionAllowed = false },
 }
 
 -- Default request types (plan §12, §55), seeded once the same way categories
