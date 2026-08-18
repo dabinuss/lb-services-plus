@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { fetchNui } from '../../lib/nui.js'
+import ConfirmButton from '../../components/ConfirmButton.jsx'
+import Icon from '../../components/Icon.jsx'
 
 function timeAgo(iso) {
   const seconds = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
@@ -42,8 +44,10 @@ export default function MessagesTab({ onOpen }) {
 
   return (
     <div className="tab-panel">
-      {entries === null && <div className="empty-state">Loading…</div>}
-      {entries !== null && entries.length === 0 && <div className="empty-state">No messages yet.</div>}
+      {entries === null && <div className="empty-state">Loading your conversations…</div>}
+      {entries !== null && entries.length === 0 && (
+        <div className="empty-state">No messages yet. Start a conversation from a company's page in Services.</div>
+      )}
 
       <div className="activity-list">
         {entries?.map((entry) => (
@@ -61,16 +65,11 @@ export default function MessagesTab({ onOpen }) {
             </div>
             <div className="activity-meta">
               <span className="activity-time">{timeAgo(entry.updated_at)}</span>
-              <button
-                className="icon-button subtle"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  archive(entry)
-                }}
-                aria-label="Remove"
-              >
-                ✕
-              </button>
+              <div onClick={(e) => e.stopPropagation()}>
+                <ConfirmButton className="icon-button subtle" ariaLabel="remove conversation" onConfirm={() => archive(entry)}>
+                  <Icon name="x" size={13} />
+                </ConfirmButton>
+              </div>
             </div>
           </div>
         ))}

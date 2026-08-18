@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { fetchNui, createCall } from '../../lib/nui.js'
+import Icon from '../../components/Icon.jsx'
 
 function timeAgo(iso) {
   const seconds = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
@@ -50,8 +51,10 @@ export default function CallsTab() {
 
   return (
     <div className="tab-panel">
-      {entries === null && <div className="empty-state">Loading…</div>}
-      {entries !== null && entries.length === 0 && <div className="empty-state">No calls yet.</div>}
+      {entries === null && <div className="empty-state">Loading your calls…</div>}
+      {entries !== null && entries.length === 0 && (
+        <div className="empty-state">No calls yet. Call a company from Services to see it here.</div>
+      )}
 
       <div className="activity-list">
         {entries?.map((entry) => (
@@ -73,7 +76,7 @@ export default function CallsTab() {
                 }}
                 aria-label="Call back"
               >
-                📞
+                <Icon name="phone" size={13} />
               </button>
             </div>
           </div>

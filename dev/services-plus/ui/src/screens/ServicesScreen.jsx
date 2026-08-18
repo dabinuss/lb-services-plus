@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import CompanyCard from '../components/CompanyCard.jsx'
 import CategoryIcon from '../components/CategoryIcon.jsx'
+import Icon from '../components/Icon.jsx'
 
 export default function ServicesScreen({ companies, categories, onCall, onMessage, onRequest }) {
   const [search, setSearch] = useState('')
@@ -47,11 +48,7 @@ export default function ServicesScreen({ companies, categories, onCall, onMessag
             aria-label="All"
             title="All"
           >
-            <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round">
-              <line x1="4" y1="7" x2="20" y2="7"></line>
-              <line x1="4" y1="12" x2="20" y2="12"></line>
-              <line x1="4" y1="17" x2="20" y2="17"></line>
-            </svg>
+            <Icon name="list" size={20} strokeWidth={2.5} />
           </button>
 
           <div className="category-divider" />
@@ -64,14 +61,20 @@ export default function ServicesScreen({ companies, categories, onCall, onMessag
               aria-label={cat.name}
               title={cat.name}
             >
-              <CategoryIcon icon={cat.icon} />
+              <CategoryIcon icon={cat.icon} size={19} strokeWidth={2.3} />
             </button>
           ))}
         </div>
       </div>
 
       <div className="company-list">
-        {filtered.length === 0 && <div className="empty-state">No companies found.</div>}
+        {filtered.length === 0 && (
+          <div className="empty-state">
+            {companies.length === 0
+              ? 'No companies have been set up yet. Check back later.'
+              : 'No companies match your search. Try a different name or category.'}
+          </div>
+        )}
         {filtered.map((company) => (
           <CompanyCard
             key={company.id}

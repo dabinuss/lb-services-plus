@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react'
 import Frame from './components/Frame.jsx'
 import Sheet from './components/Sheet.jsx'
 import RequestSheet from './components/RequestSheet.jsx'
+import Icon from './components/Icon.jsx'
+import Toast from './components/Toast.jsx'
 import ServicesScreen from './screens/ServicesScreen.jsx'
 import ActivityScreen from './screens/ActivityScreen.jsx'
 import CompanyScreen from './screens/CompanyScreen.jsx'
@@ -13,10 +15,10 @@ import { fetchNui, getSettings, onSettingsChange, onNuiEvent, createCall, devMod
 import './App.css'
 
 const TABS = [
-  { key: 'services', label: 'Services', icon: '🏢' },
-  { key: 'activity', label: 'Activity', icon: '🕓' },
-  { key: 'company', label: 'Company', icon: '💼', requires: 'employee' },
-  { key: 'admin', label: 'Admin', icon: '⚙️', requires: 'admin' },
+  { key: 'services', label: 'Services', icon: 'building' },
+  { key: 'activity', label: 'Activity', icon: 'clock' },
+  { key: 'company', label: 'Company', icon: 'briefcase', requires: 'employee' },
+  { key: 'admin', label: 'Admin', icon: 'settings', requires: 'admin' },
 ]
 
 export default function App() {
@@ -123,7 +125,7 @@ export default function App() {
   }
 
   const content = !bootstrap ? (
-    <div className="empty-state">Loading…</div>
+    <div className="empty-state">Loading Services+…</div>
   ) : (
     <>
       {tab === 'services' && (
@@ -159,7 +161,7 @@ export default function App() {
         <div className="nav-bar">
           {visibleTabs.map((t) => (
             <button key={t.key} className={`nav-item${tab === t.key ? ' active' : ''}`} onClick={() => setTab(t.key)}>
-              <span className="nav-icon">{t.icon}</span>
+              <Icon name={t.icon} size={22} className="nav-icon" />
               <span className="nav-label">{t.label}</span>
             </button>
           ))}
@@ -192,6 +194,8 @@ export default function App() {
       )}
 
       {requestSheet && <RequestSheet company={requestSheet.company} onClose={() => setRequestSheet(null)} />}
+
+      <Toast />
     </div>
   )
 
@@ -205,7 +209,8 @@ export default function App() {
         onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
         title="Toggle light/dark (dev only)"
       >
-        {theme === 'dark' ? '☀️ Light' : '🌙 Dark'}
+        <Icon name={theme === 'dark' ? 'sun' : 'moon'} size={14} />
+        {theme === 'dark' ? 'Light' : 'Dark'}
       </button>
       <Frame>{app}</Frame>
     </>

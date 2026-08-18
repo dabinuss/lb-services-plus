@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { fetchNui } from '../lib/nui.js'
+import Icon from '../components/Icon.jsx'
 
 // Mirrors Config.PageSize.messages in shared/config.lua - a page shorter
 // than this means there's nothing older left to load (plan review round 4 §5).
@@ -115,15 +116,15 @@ export default function ConversationScreen({ target, incoming, onClose }) {
   return (
     <div className="screen conversation-screen">
       <div className="conversation-header">
-        <button className="back-button" onClick={onClose}>
-          ‹
+        <button className="back-button" onClick={onClose} aria-label="Back">
+          <Icon name="chevronLeft" size={20} />
         </button>
         {target.icon && <img className="conversation-icon" src={target.icon} alt="" />}
         <div className="conversation-title">{target.title}</div>
       </div>
 
       <div className="conversation-messages" ref={listRef} onScroll={onScroll}>
-        {messages === null && <div className="empty-state">Loading…</div>}
+        {messages === null && <div className="empty-state">Loading messages…</div>}
         {loadingOlder && <div className="empty-state">Loading older messages…</div>}
         {messages?.map((m) => {
           const mine = viewerRole === 'employee' ? m.sender_type === 'company' : m.sender_type === 'customer'
@@ -142,8 +143,8 @@ export default function ConversationScreen({ target, incoming, onClose }) {
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && send()}
         />
-        <button className="send-button" onClick={send} disabled={!text.trim()}>
-          ➤
+        <button className="send-button" onClick={send} disabled={!text.trim()} aria-label="Send">
+          <Icon name="send" size={16} />
         </button>
       </div>
     </div>

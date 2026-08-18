@@ -31,8 +31,10 @@ export default function MessagesTab({ onOpenConversation }) {
 
   return (
     <div className="tab-panel">
-      {conversations === null && <div className="empty-state">Loading…</div>}
-      {conversations !== null && conversations.length === 0 && <div className="empty-state">No conversations.</div>}
+      {conversations === null && <div className="empty-state">Loading conversations…</div>}
+      {conversations !== null && conversations.length === 0 && (
+        <div className="empty-state">No conversations yet. Customer messages will show up here.</div>
+      )}
 
       <div className="activity-list">
         {conversations?.map((c) => (

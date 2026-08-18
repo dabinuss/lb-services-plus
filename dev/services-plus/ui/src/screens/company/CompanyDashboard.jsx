@@ -5,6 +5,7 @@ import RequestsTab from './RequestsTab.jsx'
 import MessagesTab from './MessagesTab.jsx'
 import CallsTab from './CallsTab.jsx'
 import SettingsTab from './SettingsTab.jsx'
+import Icon from '../../components/Icon.jsx'
 
 // "Team" used to be its own tab here, but a 6-way segmented control no
 // longer fits the phone screen width and got clipped - it now lives under
@@ -41,7 +42,7 @@ export default function CompanyDashboard({ session, employee, company, onLogout,
         </div>
 
         <button className="icon-button logout" onClick={onLogout} aria-label="Logout">
-          ⇥
+          <Icon name="logout" size={16} />
         </button>
       </div>
 

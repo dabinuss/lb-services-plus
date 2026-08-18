@@ -3,6 +3,8 @@ import { fetchNui, isValidBrandingUrl } from '../../lib/nui.js'
 import Sheet from '../../components/Sheet.jsx'
 import ConfirmButton from '../../components/ConfirmButton.jsx'
 import Switch from '../../components/Switch.jsx'
+import Icon from '../../components/Icon.jsx'
+import { showToast } from '../../lib/toast.js'
 
 const EMPTY_FORM = { job: '', name: '', categoryId: '', icon: '', background: '', bossGrade: 100, mainNumber: '', enabled: true }
 
@@ -91,6 +93,7 @@ export default function CompaniesTab() {
       if (result) {
         closeSheet()
         load()
+        showToast('Company created.')
       } else {
         setSaveError('Could not create the company. Check the required fields, phone number and HTTPS URLs.')
       }
@@ -99,6 +102,7 @@ export default function CompaniesTab() {
       if (ok) {
         closeSheet()
         load()
+        showToast('Company saved.')
       } else {
         setSaveError('Could not save the company. Check the required fields, phone number and HTTPS URLs.')
       }
@@ -127,7 +131,12 @@ export default function CompaniesTab() {
 
   const assignBoss = async () => {
     if (!playerId) return
-    if (await fetchNui('admin:assignBoss', { companyId: company.id, playerId: Number(playerId) })) setPlayerId('')
+    if (await fetchNui('admin:assignBoss', { companyId: company.id, playerId: Number(playerId) })) {
+      setPlayerId('')
+      showToast('Company leader updated.')
+    } else {
+      showToast('Could not assign that player. Check the player ID.', 'error')
+    }
   }
 
   const addNumber = async () => {
@@ -139,6 +148,9 @@ export default function CompaniesTab() {
     if (ok) {
       setNewNumber({ label: '', number: '' })
       load()
+      showToast('Number added.')
+    } else {
+      showToast('Could not add that number. It may already be in use.', 'error')
     }
   }
 
@@ -159,6 +171,9 @@ export default function CompaniesTab() {
     if (ok) {
       setEditingNumber(null)
       load()
+      showToast('Number saved.')
+    } else {
+      showToast('Could not save that number. It may already be in use.', 'error')
     }
   }
 
@@ -168,7 +183,7 @@ export default function CompaniesTab() {
         + New company
       </button>
 
-      {companies === null && <div className="empty-state">Loading…</div>}
+      {companies === null && <div className="empty-state">Loading companies…</div>}
 
       <div className="admin-list">
         {companies?.map((c) => (
@@ -304,8 +319,8 @@ export default function CompaniesTab() {
                     <button className="request-action accept" onClick={saveNumber}>
                       Save
                     </button>
-                    <button className="icon-button subtle" onClick={() => setEditingNumber(null)}>
-                      ✕
+                    <button className="icon-button subtle" onClick={() => setEditingNumber(null)} aria-label="Cancel editing this number">
+                      <Icon name="x" size={13} />
                     </button>
                   </div>
                 ) : (
@@ -323,8 +338,8 @@ export default function CompaniesTab() {
                       </button>
                       {n.is_main !== 1 &&
                         (n.enabled === 1 ? (
-                          <ConfirmButton className="icon-button subtle" onConfirm={() => deleteNumber(n.id)}>
-                            ✕
+                          <ConfirmButton className="icon-button subtle" ariaLabel="delete this number" onConfirm={() => deleteNumber(n.id)}>
+                            <Icon name="x" size={13} />
                           </ConfirmButton>
                         ) : (
                           <button className="request-action complete" onClick={() => enableNumber(n.id)}>

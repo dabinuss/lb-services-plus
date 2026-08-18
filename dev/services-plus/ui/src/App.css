@@ -486,9 +486,9 @@
 }
 
 .back-button {
-  font-size: 1.6rem;
+  display: flex;
+  align-items: center;
   color: var(--sp-accent);
-  line-height: 1;
   padding-right: 0.2rem;
 }
 
@@ -567,6 +567,9 @@
   border-radius: 0.6rem;
   background: var(--sp-accent);
   color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
   box-shadow: var(--shadow-sm);
 }
@@ -771,8 +774,20 @@
   border-left: 1px solid var(--sp-separator);
 }
 
-.status-pill-icon {
-  font-size: 0.6em;
+/* Always tinted to its own status color, independent of .active - unlike
+   the label text (which only picks up that color once selected, see
+   below), so all three options stay tellable apart before picking one,
+   the same as the old colored-emoji dots did. */
+.status-pill-icon.available {
+  color: var(--sp-success);
+}
+
+.status-pill-icon.pause {
+  color: var(--sp-warning);
+}
+
+.status-pill-icon.busy {
+  color: var(--sp-danger);
 }
 
 /* Same specificity (4 classes) as .status-pill.<key>.active's own
@@ -1485,7 +1500,10 @@
 }
 
 .admin-row-icon {
-  font-size: 1.4rem;
+  width: 1.4rem;
+  height: 1.4rem;
+  flex-shrink: 0;
+  color: var(--sp-text-secondary);
 }
 
 .admin-row-info {
@@ -1508,6 +1526,59 @@
   display: flex;
   gap: 0.4rem;
   flex-shrink: 0;
+}
+
+/* --------------------------------------------------------------- toast */
+
+/* A deliberate Save/Create/Delete used to just close its Sheet with no
+   other sign it worked (or silently didn't, on a few of them - see
+   SettingsTab/CompaniesTab/RequestTypesTab/CategoriesTab). This is that
+   missing confirmation: short-lived, non-blocking, sits above the nav bar
+   so it never blocks the content it's confirming a change to. */
+.toast {
+  position: absolute;
+  left: 50%;
+  bottom: 5rem;
+  transform: translateX(-50%);
+  z-index: 20;
+
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  max-width: calc(100% - 2rem);
+  padding: 0.55rem 0.9rem;
+  border-radius: 999px;
+  background: var(--sp-bg-highlight);
+  color: var(--sp-text-primary);
+  font-size: 0.78rem;
+  font-weight: 600;
+  box-shadow: var(--shadow-md);
+  animation: toast-in 0.15s ease-out;
+}
+
+.toast span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.toast-success {
+  color: var(--sp-success);
+}
+
+.toast-error {
+  color: var(--sp-danger);
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 0.4rem);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
 }
 
 .admin-detail {

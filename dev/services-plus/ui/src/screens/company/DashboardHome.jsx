@@ -1,13 +1,16 @@
 import { useEffect, useState } from 'react'
 import { fetchNui, createCall } from '../../lib/nui.js'
 import Switch from '../../components/Switch.jsx'
+import Icon from '../../components/Icon.jsx'
 
-// Colored presence dots instead of plain typographic symbols (✓ ‖ ●) - a
-// proper little status icon per option, not just a character.
+// A colored presence dot per option (same shared Icon set as the rest of
+// the app, colored via CSS below) plus its own label - never just a color
+// on its own, so the status still reads for anyone who can't tell the
+// colors apart.
 const STATUSES = [
-  { key: 'available', label: 'Available', icon: '🟢' },
-  { key: 'pause', label: 'Pause', icon: '🟡' },
-  { key: 'busy', label: 'Busy', icon: '🔴' },
+  { key: 'available', label: 'Available' },
+  { key: 'pause', label: 'Pause' },
+  { key: 'busy', label: 'Busy' },
 ]
 
 // Duty, status and hotlines (plan §19-23).
@@ -127,7 +130,7 @@ export default function DashboardHome({ initialOnDuty, initialStatus, employeeMe
                 className={`status-pill ${s.key}${status === s.key ? ' active' : ''}`}
                 onClick={() => changeStatus(s.key)}
               >
-                <span className="status-pill-icon">{s.icon}</span>
+                <Icon name="dot" size={10} className={`status-pill-icon ${s.key}`} />
                 {s.label}
               </button>
             ))}
@@ -139,7 +142,7 @@ export default function DashboardHome({ initialOnDuty, initialStatus, employeeMe
         <>
           <div className="section-title">Hotlines</div>
           <div className="hotline-list">
-            {hotlines === null && <div className="empty-state">Loading…</div>}
+            {hotlines === null && <div className="empty-state">Loading hotlines…</div>}
             {hotlines?.map((line) => (
               <div key={line.numberId} className="hotline-row">
                 <div className="hotline-info">
@@ -163,8 +166,12 @@ export default function DashboardHome({ initialOnDuty, initialStatus, employeeMe
             onChange={(e) => setTeamSearch(e.target.value)}
           />
           <div className="team-list">
-            {team === null && <div className="empty-state">Loading…</div>}
-            {team !== null && visibleTeam.length === 0 && <div className="empty-state">Nobody on duty.</div>}
+            {team === null && <div className="empty-state">Loading team…</div>}
+            {team !== null && visibleTeam.length === 0 && (
+              <div className="empty-state">
+                {teamSearch.trim() ? 'No colleague matches that search.' : 'No colleagues on duty right now.'}
+              </div>
+            )}
             {visibleTeam?.map((member) => (
               <div key={member.memberId} className="team-row">
                 <div className="team-row-main">
@@ -179,7 +186,7 @@ export default function DashboardHome({ initialOnDuty, initialStatus, employeeMe
                 </div>
                 {member.phoneNumber && (
                   <button className="icon-button call" onClick={() => createCall({ number: member.phoneNumber })} aria-label="Call">
-                    📞
+                    <Icon name="phone" size={15} />
                   </button>
                 )}
               </div>

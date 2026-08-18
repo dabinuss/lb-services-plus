@@ -4,6 +4,7 @@ import Sheet from '../../components/Sheet.jsx'
 import ConfirmButton from '../../components/ConfirmButton.jsx'
 import CategoryIcon from '../../components/CategoryIcon.jsx'
 import Switch from '../../components/Switch.jsx'
+import { showToast } from '../../lib/toast.js'
 
 const EMPTY = { key: '', name: '', icon: '', sort: 0, competitionAllowed: false }
 
@@ -21,9 +22,13 @@ export default function CategoriesTab() {
 
   const save = async () => {
     const action = editing.id ? 'admin:updateCategory' : 'admin:createCategory'
+    const wasNew = !editing.id
     if (await fetchNui(action, editing)) {
       setEditing(null)
       load()
+      showToast(wasNew ? 'Category created.' : 'Category saved.')
+    } else {
+      showToast('Could not save this category.', 'error')
     }
   }
 
@@ -31,6 +36,7 @@ export default function CategoriesTab() {
     if (await fetchNui('admin:deleteCategory', { id })) {
       setNotice('')
       load()
+      showToast('Category deleted.')
     } else {
       setNotice('Category is still assigned to a company or request type and cannot be deleted.')
     }
@@ -42,7 +48,7 @@ export default function CategoriesTab() {
         + New category
       </button>
 
-      {categories === null && <div className="empty-state">Loading…</div>}
+      {categories === null && <div className="empty-state">Loading categories…</div>}
       {notice && <div className="notice">{notice}</div>}
 
       <div className="admin-list">

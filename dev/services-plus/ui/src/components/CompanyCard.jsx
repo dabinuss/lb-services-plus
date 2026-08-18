@@ -1,3 +1,5 @@
+import Icon from './Icon.jsx'
+
 // One card of the Services overview (plan §5-9): a background/branding
 // image with the company's logo and name overlaid, an availability dot, and
 // a labeled action row below. Buttons only show when the company actually
@@ -23,14 +25,21 @@ export default function CompanyCard({ company, categoryName, onCall, onMessage, 
 
         <div className="company-logo">
           {company.icon ? <img src={company.icon} alt="" /> : <span>{company.name[0]}</span>}
-          <span className={`company-status-dot ${company.available ? 'available' : 'unavailable'}`} />
+          <span
+            className={`company-status-dot ${company.available ? 'available' : 'unavailable'}`}
+            title={company.available ? 'Available' : 'Unavailable'}
+          />
         </div>
 
         <div className="company-banner-text">
           <div className="company-name">{company.name}</div>
+          {/* The dot alone only ever said "available/unavailable" through
+              color - this spells it out in words too, not just for the
+              unavailable case where it used to be implicit from the action
+              row disappearing. */}
           <div className="company-subtitle">
             {!company.available
-              ? mainNumber?.number || categoryName || 'Company'
+              ? `Unavailable${mainNumber?.number ? ` · ${mainNumber.number}` : categoryName ? ` · ${categoryName}` : ''}`
               : `${categoryName || 'Company'}${mainNumber?.number ? ` · ${mainNumber.number}` : ''}`}
           </div>
         </div>
@@ -39,19 +48,19 @@ export default function CompanyCard({ company, categoryName, onCall, onMessage, 
       <div className="company-actions-row">
         {canCall && (
           <button className="company-action call" onClick={onCall}>
-            <span className="company-action-icon">📞</span>
+            <Icon name="phone" size={15} className="company-action-icon" />
             Call
           </button>
         )}
         {canRequest && (
           <button className="company-action request" onClick={onRequest}>
-            <span className="company-action-icon">📋</span>
+            <Icon name="clipboard" size={15} className="company-action-icon" />
             Request
           </button>
         )}
         {canMessage && (
           <button className="company-action message" onClick={onMessage}>
-            <span className="company-action-icon">💬</span>
+            <Icon name="message" size={15} className="company-action-icon" />
             Message
           </button>
         )}

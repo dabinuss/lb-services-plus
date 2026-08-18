@@ -50,7 +50,7 @@ export default function RequestSheet({ company, onClose }) {
 
   return (
     <Sheet title={`Request · ${company.name}`} onClose={onClose}>
-      {types === null && <div className="empty-state">Loading…</div>}
+      {types === null && <div className="empty-state">Loading request options…</div>}
 
       {types !== null && !type && (
         <>

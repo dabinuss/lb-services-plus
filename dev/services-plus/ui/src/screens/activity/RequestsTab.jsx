@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { fetchNui } from '../../lib/nui.js'
 import Sheet from '../../components/Sheet.jsx'
+import ConfirmButton from '../../components/ConfirmButton.jsx'
+import Icon from '../../components/Icon.jsx'
 
 function timeAgo(iso) {
   const seconds = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
@@ -47,8 +49,10 @@ export default function RequestsTab() {
 
   return (
     <div className="tab-panel">
-      {entries === null && <div className="empty-state">Loading…</div>}
-      {entries !== null && entries.length === 0 && <div className="empty-state">No requests yet.</div>}
+      {entries === null && <div className="empty-state">Loading your requests…</div>}
+      {entries !== null && entries.length === 0 && (
+        <div className="empty-state">No requests yet. Create one from a company's page in Services.</div>
+      )}
 
       <div className="activity-list">
         {entries?.map((entry) => (
@@ -65,16 +69,11 @@ export default function RequestsTab() {
             <div className="activity-meta">
               <span className="activity-time">{timeAgo(entry.created_at)}</span>
               {entry.status === 'open' && (
-                <button
-                  className="icon-button subtle"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    cancel(entry)
-                  }}
-                  aria-label="Cancel"
-                >
-                  ✕
-                </button>
+                <div onClick={(e) => e.stopPropagation()}>
+                  <ConfirmButton className="icon-button subtle" ariaLabel="cancel request" onConfirm={() => cancel(entry)}>
+                    <Icon name="x" size={13} />
+                  </ConfirmButton>
+                </div>
               )}
             </div>
           </div>
@@ -117,9 +116,9 @@ export default function RequestsTab() {
           </div>
 
           {details.status === 'open' && (
-            <button className="sheet-option" onClick={() => cancel(details)}>
+            <ConfirmButton className="sheet-option" onConfirm={() => cancel(details)}>
               Cancel request
-            </button>
+            </ConfirmButton>
           )}
         </Sheet>
       )}

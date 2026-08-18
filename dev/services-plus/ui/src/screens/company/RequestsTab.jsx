@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { fetchNui } from '../../lib/nui.js'
 import Sheet from '../../components/Sheet.jsx'
+import ConfirmButton from '../../components/ConfirmButton.jsx'
+import Icon from '../../components/Icon.jsx'
 
 // Mirrors Config.PageSize.requests in shared/config.lua - a page shorter
 // than this means there's nothing left to load (plan §68, plan review
@@ -65,8 +67,10 @@ export default function RequestsTab() {
 
   return (
     <div className="tab-panel">
-      {requests === null && <div className="empty-state">Loading…</div>}
-      {requests !== null && requests.length === 0 && <div className="empty-state">No requests.</div>}
+      {requests === null && <div className="empty-state">Loading requests…</div>}
+      {requests !== null && requests.length === 0 && (
+        <div className="empty-state">No requests yet. New customer requests will show up here.</div>
+      )}
 
       <div className="request-list">
         {requests?.map((r) => (
@@ -89,9 +93,9 @@ export default function RequestsTab() {
                 <button className="request-action complete" onClick={() => complete(r)}>
                   Complete
                 </button>
-                <button className="request-action cancel" onClick={() => cancel(r)}>
+                <ConfirmButton className="request-action cancel" onConfirm={() => cancel(r)}>
                   Cancel
-                </button>
+                </ConfirmButton>
               </div>
             )}
             {r.status === 'active' && !r.is_mine && <div className="request-status">In progress</div>}
@@ -141,26 +145,26 @@ export default function RequestsTab() {
 
           {((details.x ?? details.pos_x) != null && (details.y ?? details.pos_y) != null) && (
             <button className="sheet-option" onClick={() => setLocation(details)}>
-              <span className="sheet-option-icon">⌖</span>
+              <Icon name="target" size={16} className="sheet-option-icon" />
               <span className="sheet-option-label">Set location</span>
             </button>
           )}
           {details.status === 'open' && (
             <button className="sheet-option" onClick={() => accept(details)}>
-              <span className="sheet-option-icon">✓</span>
+              <Icon name="check" size={16} className="sheet-option-icon" />
               <span className="sheet-option-label">Accept request</span>
             </button>
           )}
           {details.status === 'active' && details.is_mine && (
             <>
               <button className="sheet-option" onClick={() => complete(details)}>
-                <span className="sheet-option-icon">✓</span>
+                <Icon name="check" size={16} className="sheet-option-icon" />
                 <span className="sheet-option-label">Complete request</span>
               </button>
-              <button className="sheet-option" onClick={() => cancel(details)}>
-                <span className="sheet-option-icon">✕</span>
+              <ConfirmButton className="sheet-option" onConfirm={() => cancel(details)}>
+                <Icon name="x" size={16} className="sheet-option-icon" />
                 <span className="sheet-option-label">Cancel request</span>
-              </button>
+              </ConfirmButton>
             </>
           )}
         </Sheet>

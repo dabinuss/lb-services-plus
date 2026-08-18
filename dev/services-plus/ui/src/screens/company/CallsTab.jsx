@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { fetchNui, createCall } from '../../lib/nui.js'
+import Icon from '../../components/Icon.jsx'
 
 const STATE_LABEL = { ringing: 'Ringing', answered: 'Answered', missed: 'Missed' }
 
@@ -32,8 +33,10 @@ export default function CallsTab() {
 
   return (
     <div className="tab-panel">
-      {calls === null && <div className="empty-state">Loading…</div>}
-      {calls !== null && calls.length === 0 && <div className="empty-state">No calls yet.</div>}
+      {calls === null && <div className="empty-state">Loading call history…</div>}
+      {calls !== null && calls.length === 0 && (
+        <div className="empty-state">No calls yet. Incoming and outgoing company calls will show up here.</div>
+      )}
 
       <div className="activity-list">
         {calls?.map((c) => (
@@ -45,7 +48,7 @@ export default function CallsTab() {
               </div>
             </div>
             <button className="icon-button call" onClick={() => createCall({ number: c.customer_number })} aria-label="Call back">
-              📞
+              <Icon name="phone" size={15} />
             </button>
           </div>
         ))}

@@ -3,6 +3,7 @@ import { fetchNui } from '../../lib/nui.js'
 import Sheet from '../../components/Sheet.jsx'
 import ConfirmButton from '../../components/ConfirmButton.jsx'
 import Switch from '../../components/Switch.jsx'
+import { showToast } from '../../lib/toast.js'
 
 const EMPTY = {
   categoryId: '', name: '', description: '',
@@ -27,16 +28,25 @@ export default function RequestTypesTab() {
 
   const save = async () => {
     const action = editing.id ? 'admin:updateRequestType' : 'admin:createRequestType'
+    const wasNew = !editing.id
     if (await fetchNui(action, { ...editing, categoryId: editing.categoryId || null })) {
       setEditing(null)
       load()
+      showToast(wasNew ? 'Request type created.' : 'Request type saved.')
+    } else {
+      showToast('Could not save this request type.', 'error')
     }
   }
 
   // Soft-delete only server-side (plan review round 3 §9) - this disables
   // the type instead of removing it, so its request history survives.
   const disable = async (id) => {
-    if (await fetchNui('admin:deleteRequestType', { id })) load()
+    if (await fetchNui('admin:deleteRequestType', { id })) {
+      load()
+      showToast('Request type disabled.')
+    } else {
+      showToast('Could not disable this request type.', 'error')
+    }
   }
 
   return (
@@ -45,7 +55,7 @@ export default function RequestTypesTab() {
         + New request type
       </button>
 
-      {types === null && <div className="empty-state">Loading…</div>}
+      {types === null && <div className="empty-state">Loading request types…</div>}
 
       <div className="admin-list">
         {types?.map((t) => (
