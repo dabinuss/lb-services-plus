@@ -609,6 +609,7 @@
         }
         frame.dataset.cardId = String(payload.id)
         frame.dataset.template = String(payload.template)
+        frame.dataset.mapplus = (definition.mapplus === true || String(payload.template).includes('taxi')) ? 'true' : 'false'
         frame.dataset.fullCard = definition.fullCard === true ? 'true' : 'false'
         frame.style.height = `${Number(definition.height) || 160}px`
         element.appendChild(frame)

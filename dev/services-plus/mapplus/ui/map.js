@@ -1,7 +1,7 @@
 // =============================================================================
-// MapPlus – GTA V Navigation Renderer (v52)
-// True Local Navigation Camera: 500m Horizon Focus, Balanced Optical Center,
-// and smooth non-jumping trim updates.
+// MapPlus – GTA V Navigation Renderer (v55)
+// Endpoint-Fit Navigation Camera: Player and Destination are ALWAYS fully visible
+// with asymmetric UI safe-insets, representative route extrema, and zoom safety margin.
 // =============================================================================
 
 /**
@@ -18,10 +18,17 @@ class MapPlusRenderer {
     constructor(container, options = {}) {
         this.container = container;
         this.style = options.style || 'styleAtlas';
+        this.cameraPadding = Object.assign({
+            top: 48,
+            right: 18,
+            bottom: 54,
+            left: 18,
+        }, options.cameraPadding);
+
         this._layoutTimers = [];
         this._lastPlayer = null;
         this._lastDestination = null;
-        this._focusBounds = null;
+        this._routeLatLngs = [];
         this._initialFramed = false;
 
         const t = window.GTA_MAP_TRANSFORM;
@@ -36,7 +43,7 @@ class MapPlusRenderer {
 
         this.map = L.map(container, {
             crs: this.GtaCRS,
-            minZoom: 1,
+            minZoom: 0,
             maxZoom: 5,
             zoomSnap: 0.25,
             zoomDelta: 0.5,
@@ -96,9 +103,7 @@ class MapPlusRenderer {
         const invalidate = () => {
             if (this.map) {
                 this.map.invalidateSize(false);
-                if (this._focusBounds) {
-                    this._frameNavigation(this._focusBounds, { animate: false });
-                }
+                this._frameCurrentNavigation({ animate: false });
             }
         };
         invalidate();
@@ -115,44 +120,93 @@ class MapPlusRenderer {
     }
 
     /**
-     * Frames the local ~500m navigation section at a balanced optical focus
-     * (55% width, 45% height) clear of header text and action buttons.
+     * Builds unified camera bounds containing Player + Destination + Sampled Route Extrema.
      */
-    _frameNavigation(bounds, opts = {}) {
-        if (!this.map || !bounds || !bounds.isValid()) return;
+    _buildNavigationBounds() {
+        const bounds = L.latLngBounds([]);
+
+        if (this._lastPlayer && typeof this._lastPlayer.x === 'number') {
+            bounds.extend([this._lastPlayer.y, this._lastPlayer.x]);
+        }
+
+        if (this._lastDestination && typeof this._lastDestination.x === 'number') {
+            bounds.extend([this._lastDestination.y, this._lastDestination.x]);
+        }
+
+        const pts = this._routeLatLngs;
+        if (pts && pts.length > 0) {
+            const ROUTE_BOUND_SAMPLES = 32;
+            const stride = Math.max(1, Math.floor(pts.length / ROUTE_BOUND_SAMPLES));
+            for (let i = 0; i < pts.length; i += stride) {
+                bounds.extend(pts[i]);
+            }
+            bounds.extend(pts[pts.length - 1]);
+        }
+
+        return bounds.isValid() ? bounds : null;
+    }
+
+    /**
+     * Checks if both player and destination are comfortably visible within safe UI insets.
+     */
+    _isNavigationVisible() {
+        if (!this.map) return true;
+        const size = this.map.getSize();
+        if (!size || size.x === 0 || size.y === 0) return true;
+
+        const pad = this.cameraPadding;
+        const isPointVisible = (lat, lng) => {
+            const p = this.map.latLngToContainerPoint([lat, lng]);
+            return p.x >= pad.left && p.x <= (size.x - pad.right)
+                && p.y >= pad.top && p.y <= (size.y - pad.bottom);
+        };
+
+        if (this._lastPlayer && !isPointVisible(this._lastPlayer.y, this._lastPlayer.x)) {
+            return false;
+        }
+        if (this._lastDestination && !isPointVisible(this._lastDestination.y, this._lastDestination.x)) {
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * Re-frames the camera to guarantee full visibility of both endpoints with safety margin.
+     */
+    _frameCurrentNavigation(opts = {}) {
+        const bounds = this._buildNavigationBounds();
+        if (!this.map || !bounds) return;
+
         this.map.stop();
+        const pad = this.cameraPadding;
+        const totalPad = L.point(pad.left + pad.right, pad.top + pad.bottom);
+
+        // Determine zoom so entire geometry fits within the padded area
+        let targetZoom = this.map.getBoundsZoom(bounds, false, totalPad);
+        // Safety margin of 0.25 zoom levels so markers never sit right against the border
+        targetZoom = Math.max(0, Math.min(4.25, targetZoom - 0.25));
 
         const size = this.map.getSize();
         const width = (size && size.x > 50) ? size.x : (this.container?.offsetWidth || 320);
         const height = (size && size.y > 50) ? size.y : (this.container?.offsetHeight || 224);
 
-        // Usable navigation window inside the notification card
-        const targetWidth = Math.max(120, width * 0.72);
-        const targetHeight = Math.max(90, height * 0.68);
-
-        // Compute zoom level so the local 500m section fits with breathing room
-        const padX = width - targetWidth;
-        const padY = height - targetHeight;
-        let zoom = this.map.getBoundsZoom(bounds, false, [padX, padY]);
-        zoom = Math.max(1.5, Math.min(4.25, zoom));
-
-        // Optical Navigation Focus Point: slightly right (55%) and slightly above center (45%)
-        const targetScreenX = width * 0.55;
-        const targetScreenY = height * 0.45;
+        // Center of the open usable area on screen
+        const usableCenterX = pad.left + (width - pad.left - pad.right) / 2;
+        const usableCenterY = pad.top + (height - pad.top - pad.bottom) / 2;
 
         const screenCenterX = width / 2;
         const screenCenterY = height / 2;
 
-        const dx = targetScreenX - screenCenterX;
-        const dy = targetScreenY - screenCenterY;
+        const shiftX = usableCenterX - screenCenterX;
+        const shiftY = usableCenterY - screenCenterY;
 
         const routeCenter = bounds.getCenter();
-        const projectedRoute = this.map.project(routeCenter, zoom);
+        const routeCenterProj = this.map.project(routeCenter, targetZoom);
 
-        const targetMapProjected = L.point(projectedRoute.x - dx, projectedRoute.y - dy);
-        const targetMapCenter = this.map.unproject(targetMapProjected, zoom);
+        const targetCenterPixel = L.point(routeCenterProj.x - shiftX, routeCenterProj.y - shiftY);
+        const targetCenter = this.map.unproject(targetCenterPixel, targetZoom);
 
-        this.map.setView(targetMapCenter, zoom, {
+        this.map.setView(targetCenter, targetZoom, {
             animate: opts.animate !== false,
             duration: opts.duration || 0.5,
             easeLinearity: 0.3,
@@ -177,18 +231,18 @@ class MapPlusRenderer {
             const iconHtml = `
                 <div class="mapplus-arrow-inner" style="
                     width: 0; height: 0;
-                    border-left: 6px solid transparent;
-                    border-right: 6px solid transparent;
-                    border-bottom: 14px solid #ffffff;
-                    filter: drop-shadow(0 0 5px rgba(167,66,255,0.9));
+                    border-left: 5px solid transparent;
+                    border-right: 5px solid transparent;
+                    border-bottom: 12px solid #ffffff;
+                    filter: drop-shadow(0 0 4px rgba(167,66,255,0.9));
                     transform: rotate(${rotateDeg}deg);
                     transform-origin: 50% 65%;
                 "></div>`;
             const icon = L.divIcon({
                 html: iconHtml,
                 className: 'mapplus-player-marker',
-                iconSize: [12, 14],
-                iconAnchor: [6, 9],
+                iconSize: [10, 12],
+                iconAnchor: [5, 8],
             });
             this.markers['player'] = L.marker([y, x], { icon, zIndexOffset: 1000 }).addTo(this.map);
         } else {
@@ -207,7 +261,8 @@ class MapPlusRenderer {
                 width: 14px; height: 14px; border-radius: 50%;
                 background: #f4b914; border: 2px solid #101114;
                 box-shadow: 0 2px 8px rgba(0,0,0,0.85);
-            "></div>`;
+                display: flex; align-items: center; justify-content: center;
+            "><div style="width: 4px; height: 4px; border-radius: 50%; background: #101114;"></div></div>`;
             const icon = L.divIcon({
                 html: iconHtml,
                 className: 'mapplus-dest-marker',
@@ -221,7 +276,7 @@ class MapPlusRenderer {
     }
 
     /**
-     * Main update – sets the route and frames the local 500m navigation horizon.
+     * Main update – sets the route and frames both endpoints.
      * reason: 'new' | 'reroute' | 'trim' | 'clear'
      */
     setRoute(points, destination, player, reason = 'new') {
@@ -249,17 +304,19 @@ class MapPlusRenderer {
         if (!points || points.length === 0) {
             if (this.routeOutline) { this.map.removeLayer(this.routeOutline); this.routeOutline = null; }
             if (this.routeLine)    { this.map.removeLayer(this.routeLine);    this.routeLine    = null; }
-            this._focusBounds = null;
+            this._routeLatLngs = [];
             this._initialFramed = false;
             return;
         }
 
         const latLngs = points.map(p => [p.y, p.x]);
+        this._routeLatLngs = latLngs;
+
         const polyOpts = { smoothFactor: 0, noClip: true, interactive: false, pane: 'mapplusRoute' };
 
         if (!this.routeOutline) {
             this.routeOutline = L.polyline(latLngs, {
-                color: '#2a0f40', weight: 9, opacity: 0.85,
+                color: '#2a0f40', weight: 8, opacity: 0.85,
                 lineCap: 'round', lineJoin: 'round', ...polyOpts,
             }).addTo(this.map);
         } else {
@@ -268,44 +325,27 @@ class MapPlusRenderer {
 
         if (!this.routeLine) {
             this.routeLine = L.polyline(latLngs, {
-                color: '#a742ff', weight: 6, opacity: 1.0,
+                color: '#a742ff', weight: 5.5, opacity: 1.0,
                 lineCap: 'round', lineJoin: 'round', ...polyOpts,
             }).addTo(this.map);
         } else {
             this.routeLine.setLatLngs(latLngs);
         }
 
-        // --- Local Navigation Horizon: focus on player + next ~500m of route ---
-        try {
-            const HORIZON_POINTS = 100; // 100 points * 5m = 500m forward horizon
-            const focusSlice = latLngs.slice(0, Math.min(latLngs.length, HORIZON_POINTS));
-            const bounds = L.latLngBounds(focusSlice);
-
-            if (effectivePlayer && typeof effectivePlayer.x === 'number') {
-                bounds.extend([effectivePlayer.y, effectivePlayer.x]);
+        // Re-frame on new route, reroute, initial mount, or if endpoints drifted outside safe insets
+        if (reason === 'new' || reason === 'reroute' || !this._initialFramed) {
+            this._initialFramed = true;
+            this._frameCurrentNavigation({ animate: true });
+        } else if (reason === 'trim') {
+            if (!this._isNavigationVisible()) {
+                this._frameCurrentNavigation({ animate: true });
             }
-
-            // Only include destination in camera focus if it's within the local 500m horizon
-            if (destination && typeof destination.x === 'number' && latLngs.length <= HORIZON_POINTS) {
-                bounds.extend([destination.y, destination.x]);
-            }
-
-            if (!bounds.isValid()) return;
-            this._focusBounds = bounds;
-
-            // Only re-frame camera on new route, reroute, or first render (never jump on trim)
-            if (reason === 'new' || reason === 'reroute' || !this._initialFramed) {
-                this._initialFramed = true;
-                this._frameNavigation(bounds, { animate: true });
-            }
-        } catch (error) {
-            if (window.MapPlusDebug) console.warn('[MapPlus] navigation framing error', error);
         }
     }
 
     /**
      * Lightweight player-only update – every 300ms tick.
-     * Smoothly follows player with panTo when drifting out of central zone.
+     * Ensures player and destination remain clearly within the visible safe insets.
      */
     updatePlayer(player) {
         if (!this.map || !player || typeof player.x !== 'number') return;
@@ -313,23 +353,9 @@ class MapPlusRenderer {
 
         if (window.MapPlusDebug && this._debugState) this._debugState.lastPlayerAt = Date.now();
 
-        try {
-            const size = this.map.getSize();
-            if (!size || size.x === 0 || size.y === 0) return;
-
-            const playerPoint = this.map.latLngToContainerPoint([player.y, player.x]);
-
-            // Keep vehicle inside central 56% safe zone
-            const marginX = size.x * 0.22;
-            const marginY = size.y * 0.22;
-            const outsideCenter = playerPoint.x < marginX || playerPoint.x > (size.x - marginX)
-                || playerPoint.y < marginY || playerPoint.y > (size.y - marginY);
-
-            if (outsideCenter) {
-                this.map.panTo([player.y, player.x], { animate: true, duration: 0.4, easeLinearity: 0.5 });
-            }
-        } catch (e) {
-            if (window.MapPlusDebug) console.warn('[MapPlus] pan error', e);
+        // Never blind panTo that could hide the destination; reframe endpoints if visibility is violated
+        if (!this._isNavigationVisible()) {
+            this._frameCurrentNavigation({ animate: true });
         }
     }
 
@@ -347,7 +373,7 @@ class MapPlusRenderer {
         Object.values(this.markers).forEach(m => this.map.removeLayer(m));
         this.markers = {};
         this._lastDestination = null;
-        this._focusBounds = null;
+        this._routeLatLngs = [];
         this._initialFramed = false;
     }
 
