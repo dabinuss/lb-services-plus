@@ -141,6 +141,13 @@
             return;
         }
 
+        if (payload.action === 'mapplus:playerUpdate') {
+            if (currentMapRenderer) {
+                currentMapRenderer.updatePlayer(payload.player);
+            }
+            return;
+        }
+
         const card = payload.card
         if (!card) return;
 
@@ -152,7 +159,7 @@
     }
 
     window.addEventListener('message', (event) => {
-        if (event.data?.action === 'mapplus:routeUpdate') {
+        if (event.data?.action === 'mapplus:routeUpdate' || event.data?.action === 'mapplus:playerUpdate') {
             render(event.data);
         }
     });

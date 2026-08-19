@@ -972,7 +972,7 @@
         }
         if (!data?.action) return
 
-        if (data.action === 'mapplus:routeUpdate') {
+        if (data.action === 'mapplus:routeUpdate' || data.action === 'mapplus:playerUpdate') {
             const frame = lbDocument?.querySelector('.sp-template-frame') || rootDocument?.querySelector('.sp-template-frame')
             if (frame?.contentWindow) {
                 frame.contentWindow.postMessage(data, '*')
