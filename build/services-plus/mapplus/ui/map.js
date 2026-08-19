@@ -1,9 +1,6 @@
 // =============================================================================
-// MapPlus – GTA V Navigation Renderer (v58)
-// True Visual Center Navigation Camera:
-// - Zoom derived from Player + Destination bounds (with symmetric safe-insets)
-// - Center derived from actual polyline length midpoint (_getRouteVisualCenter)
-// - Screen target fixed at exact 50% horizontal center.
+// MapPlus – GTA V Navigation Renderer (v60)
+// Look-Ahead Navigation Focus (125m ahead) with Endpoint Visibility Validation Loop.
 // =============================================================================
 
 /**
@@ -122,7 +119,7 @@ class MapPlusRenderer {
     }
 
     /**
-     * Builds endpoint bounds from Player + Destination to determine the optimal zoom level.
+     * Builds endpoint bounds from Player + Destination for zoom fitting.
      */
     _buildEndpointBounds() {
         const bounds = L.latLngBounds([]);
@@ -139,37 +136,36 @@ class MapPlusRenderer {
     }
 
     /**
-     * Calculates the true visual center point along the polyline path (50% traveled distance).
+     * Interpolates the navigation focus point exactly ~125m ahead along the active route.
      */
-    _getRouteVisualCenter() {
+    _getNavigationFocus(aheadMeters = 125) {
         const pts = this._routeLatLngs;
         if (!pts || pts.length === 0) {
             return this._buildEndpointBounds()?.getCenter() || null;
         }
-        if (pts.length === 1) {
-            return L.latLng(pts[0][0], pts[0][1]);
-        }
 
-        let total = 0;
-        const lengths = [];
+        let distance = 0;
         for (let i = 1; i < pts.length; i++) {
-            const dx = pts[i][1] - pts[i - 1][1];
-            const dy = pts[i][0] - pts[i - 1][0];
-            const d = Math.hypot(dx, dy);
-            lengths.push(d);
-            total += d;
-        }
+            const a = pts[i - 1];
+            const b = pts[i];
 
-        let walked = 0;
-        const halfway = total * 0.5;
-        for (let i = 1; i < pts.length; i++) {
-            walked += lengths[i - 1];
-            if (walked >= halfway) {
-                return L.latLng(pts[i][0], pts[i][1]);
+            const dx = b[1] - a[1];
+            const dy = b[0] - a[0];
+            const segment = Math.hypot(dx, dy);
+
+            if (distance + segment >= aheadMeters) {
+                const t = (aheadMeters - distance) / Math.max(segment, 0.001);
+                return L.latLng(
+                    a[0] + (b[0] - a[0]) * t,
+                    a[1] + (b[1] - a[1]) * t
+                );
             }
+
+            distance += segment;
         }
 
-        return L.latLng(pts[pts.length - 1][0], pts[pts.length - 1][1]);
+        const last = pts[pts.length - 1];
+        return L.latLng(last[0], last[1]);
     }
 
     /**
@@ -197,8 +193,7 @@ class MapPlusRenderer {
     }
 
     /**
-     * Re-frames the camera to center the visual route midpoint at exact 50% screen width,
-     * with zoom fitted to show both player and destination.
+     * Frames the camera focusing on the 125m ahead section, with validation to guarantee endpoint visibility.
      */
     _frameCurrentNavigation(opts = {}) {
         const bounds = this._buildEndpointBounds();
@@ -208,35 +203,36 @@ class MapPlusRenderer {
         const pad = this.cameraPadding;
         const totalPad = L.point(pad.left + pad.right, pad.top + pad.bottom);
 
-        // Compute optimal zoom so both endpoints fit with symmetric breathing room
         let targetZoom = this.map.getBoundsZoom(bounds, false, totalPad);
         targetZoom = Math.max(this.map.getMinZoom(), Math.min(4.25, targetZoom));
 
-        const size = this.map.getSize();
-        const width = (size && size.x > 50) ? size.x : (this.container?.offsetWidth || 320);
-        const height = (size && size.y > 50) ? size.y : (this.container?.offsetHeight || 224);
+        const focus = this._getNavigationFocus(125) || bounds.getCenter();
 
-        // Target screen center: exactly 50% horizontally, 48% vertically
-        const targetScreenX = width * 0.50;
-        const targetScreenY = height * 0.48;
+        // Apply initial view
+        this.map.setView(focus, targetZoom, { animate: false });
 
-        const screenCenterX = width / 2;
-        const screenCenterY = height / 2;
+        // Endpoint validation loop: zoom out if either player or destination is outside safe insets
+        let iterations = 0;
+        while (!this._isNavigationVisible() && targetZoom > this.map.getMinZoom() && iterations < 8) {
+            targetZoom = Math.max(this.map.getMinZoom(), targetZoom - 0.25);
+            this.map.setView(focus, targetZoom, { animate: false });
+            iterations++;
+        }
 
-        const shiftX = targetScreenX - screenCenterX; // 0
-        const shiftY = targetScreenY - screenCenterY;
+        // Fallback: if endpoints are still clipped, center on the geometric midpoint
+        if (!this._isNavigationVisible()) {
+            const midpoint = bounds.getCenter();
+            this.map.setView(midpoint, targetZoom, { animate: false });
+        }
 
-        const visualCenter = this._getRouteVisualCenter() || bounds.getCenter();
-        const visualCenterProj = this.map.project(visualCenter, targetZoom);
-
-        const targetCenterPixel = L.point(visualCenterProj.x - shiftX, visualCenterProj.y - shiftY);
-        const targetCenter = this.map.unproject(targetCenterPixel, targetZoom);
-
-        this.map.setView(targetCenter, targetZoom, {
-            animate: opts.animate !== false,
-            duration: opts.duration || 0.5,
-            easeLinearity: 0.3,
-        });
+        if (opts.animate !== false) {
+            const finalCenter = this.map.getCenter();
+            this.map.setView(finalCenter, targetZoom, {
+                animate: true,
+                duration: opts.duration || 0.4,
+                easeLinearity: 0.3,
+            });
+        }
     }
 
     setCenter(x, y, zoom = 3) {
@@ -302,7 +298,7 @@ class MapPlusRenderer {
     }
 
     /**
-     * Main update – sets the route and frames both endpoints.
+     * Main update – sets the route and frames with validation.
      * reason: 'new' | 'reroute' | 'trim' | 'clear'
      */
     setRoute(points, destination, player, reason = 'new') {
@@ -379,7 +375,7 @@ class MapPlusRenderer {
 
         if (window.MapPlusDebug && this._debugState) this._debugState.lastPlayerAt = Date.now();
 
-        // Never blind panTo that could hide the destination; reframe endpoints if visibility is violated
+        // If player or destination moved outside the safe insets, reframe with validation
         if (!this._isNavigationVisible()) {
             this._frameCurrentNavigation({ animate: true });
         }
