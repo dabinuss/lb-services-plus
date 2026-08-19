@@ -1,6 +1,7 @@
 // =============================================================================
-// MapPlus – GTA V Navigation Renderer (v51)
-// Direct and unconditional upper-right quadrant projection.
+// MapPlus – GTA V Navigation Renderer (v52)
+// True Local Navigation Camera: 500m Horizon Focus, Balanced Optical Center,
+// and smooth non-jumping trim updates.
 // =============================================================================
 
 /**
@@ -20,7 +21,8 @@ class MapPlusRenderer {
         this._layoutTimers = [];
         this._lastPlayer = null;
         this._lastDestination = null;
-        this._currentBounds = null;
+        this._focusBounds = null;
+        this._initialFramed = false;
 
         const t = window.GTA_MAP_TRANSFORM;
         this.GtaCRS = Object.assign({}, L.CRS.Simple, {
@@ -94,8 +96,8 @@ class MapPlusRenderer {
         const invalidate = () => {
             if (this.map) {
                 this.map.invalidateSize(false);
-                if (this._currentBounds) {
-                    this._frameRouteUpperRight(this._currentBounds, { animate: false });
+                if (this._focusBounds) {
+                    this._frameNavigation(this._focusBounds, { animate: false });
                 }
             }
         };
@@ -113,10 +115,10 @@ class MapPlusRenderer {
     }
 
     /**
-     * Mathematically projects the route bounding box (Player + Route + Destination)
-     * strictly into the free upper-right quadrant of the card (clear of left header and bottom buttons).
+     * Frames the local ~500m navigation section at a balanced optical focus
+     * (55% width, 45% height) clear of header text and action buttons.
      */
-    _frameRouteUpperRight(bounds, opts = {}) {
+    _frameNavigation(bounds, opts = {}) {
         if (!this.map || !bounds || !bounds.isValid()) return;
         this.map.stop();
 
@@ -124,41 +126,35 @@ class MapPlusRenderer {
         const width = (size && size.x > 50) ? size.x : (this.container?.offsetWidth || 320);
         const height = (size && size.y > 50) ? size.y : (this.container?.offsetHeight || 224);
 
-        // The free upper-right window in the PeekPlus card is:
-        // Left offset: 145px (completely clears the Taxi Header on the left)
-        // Bottom offset: 95px (completely clears the Action Buttons at the bottom)
-        const targetWidth = Math.max(90, width - 160);
-        const targetHeight = Math.max(75, height - 120);
+        // Usable navigation window inside the notification card
+        const targetWidth = Math.max(120, width * 0.72);
+        const targetHeight = Math.max(90, height * 0.68);
 
-        // Compute zoom level so the full route (player to destination) fits inside the window
+        // Compute zoom level so the local 500m section fits with breathing room
         const padX = width - targetWidth;
         const padY = height - targetHeight;
         let zoom = this.map.getBoundsZoom(bounds, false, [padX, padY]);
-        zoom = Math.max(1.0, Math.min(4.25, zoom));
+        zoom = Math.max(1.5, Math.min(4.25, zoom));
 
-        // Center of the target window in screen pixel space
-        const targetScreenX = 145 + (targetWidth / 2);  // ~225px (comfortably on the right)
-        const targetScreenY = 25 + (targetHeight / 2);   // ~77px (comfortably at top)
+        // Optical Navigation Focus Point: slightly right (55%) and slightly above center (45%)
+        const targetScreenX = width * 0.55;
+        const targetScreenY = height * 0.45;
 
-        // Screen center
         const screenCenterX = width / 2;
         const screenCenterY = height / 2;
 
-        // Pixel offset from screen center to target window center
         const dx = targetScreenX - screenCenterX;
         const dy = targetScreenY - screenCenterY;
 
-        // The geographic center of the route
         const routeCenter = bounds.getCenter();
         const projectedRoute = this.map.project(routeCenter, zoom);
 
-        // Shift camera center so the route appears at targetScreenX, targetScreenY
         const targetMapProjected = L.point(projectedRoute.x - dx, projectedRoute.y - dy);
         const targetMapCenter = this.map.unproject(targetMapProjected, zoom);
 
         this.map.setView(targetMapCenter, zoom, {
             animate: opts.animate !== false,
-            duration: opts.duration || 0.4,
+            duration: opts.duration || 0.5,
             easeLinearity: 0.3,
         });
     }
@@ -225,10 +221,10 @@ class MapPlusRenderer {
     }
 
     /**
-     * Main update – sets the route polyline and projects BOTH player and destination
-     * into the upper-right quadrant.
+     * Main update – sets the route and frames the local 500m navigation horizon.
+     * reason: 'new' | 'reroute' | 'trim' | 'clear'
      */
-    setRoute(points, destination, player) {
+    setRoute(points, destination, player, reason = 'new') {
         if (!this.map) return;
 
         const effectivePlayer = player || this._lastPlayer;
@@ -253,7 +249,8 @@ class MapPlusRenderer {
         if (!points || points.length === 0) {
             if (this.routeOutline) { this.map.removeLayer(this.routeOutline); this.routeOutline = null; }
             if (this.routeLine)    { this.map.removeLayer(this.routeLine);    this.routeLine    = null; }
-            this._currentBounds = null;
+            this._focusBounds = null;
+            this._initialFramed = false;
             return;
         }
 
@@ -278,30 +275,37 @@ class MapPlusRenderer {
             this.routeLine.setLatLngs(latLngs);
         }
 
-        // --- Framing: ALWAYS project Player, Destination, and Route in upper-right ---
+        // --- Local Navigation Horizon: focus on player + next ~500m of route ---
         try {
-            const bounds = L.latLngBounds(latLngs);
+            const HORIZON_POINTS = 100; // 100 points * 5m = 500m forward horizon
+            const focusSlice = latLngs.slice(0, Math.min(latLngs.length, HORIZON_POINTS));
+            const bounds = L.latLngBounds(focusSlice);
 
             if (effectivePlayer && typeof effectivePlayer.x === 'number') {
                 bounds.extend([effectivePlayer.y, effectivePlayer.x]);
             }
-            if (destination && typeof destination.x === 'number') {
+
+            // Only include destination in camera focus if it's within the local 500m horizon
+            if (destination && typeof destination.x === 'number' && latLngs.length <= HORIZON_POINTS) {
                 bounds.extend([destination.y, destination.x]);
             }
 
             if (!bounds.isValid()) return;
-            this._currentBounds = bounds;
+            this._focusBounds = bounds;
 
-            // Frame unconditionally to ensure the view updates immediately
-            this._frameRouteUpperRight(bounds);
+            // Only re-frame camera on new route, reroute, or first render (never jump on trim)
+            if (reason === 'new' || reason === 'reroute' || !this._initialFramed) {
+                this._initialFramed = true;
+                this._frameNavigation(bounds, { animate: true });
+            }
         } catch (error) {
-            if (window.MapPlusDebug) console.warn('[MapPlus] framing error', error);
+            if (window.MapPlusDebug) console.warn('[MapPlus] navigation framing error', error);
         }
     }
 
     /**
      * Lightweight player-only update – every 300ms tick.
-     * Ensures player and destination remain clearly within the visible upper-right quadrant.
+     * Smoothly follows player with panTo when drifting out of central zone.
      */
     updatePlayer(player) {
         if (!this.map || !player || typeof player.x !== 'number') return;
@@ -315,37 +319,17 @@ class MapPlusRenderer {
 
             const playerPoint = this.map.latLngToContainerPoint([player.y, player.x]);
 
-            if (this._lastDestination && typeof this._lastDestination.x === 'number') {
-                const destPoint = this.map.latLngToContainerPoint([this._lastDestination.y, this._lastDestination.x]);
+            // Keep vehicle inside central 56% safe zone
+            const marginX = size.x * 0.22;
+            const marginY = size.y * 0.22;
+            const outsideCenter = playerPoint.x < marginX || playerPoint.x > (size.x - marginX)
+                || playerPoint.y < marginY || playerPoint.y > (size.y - marginY);
 
-                const isOutOfSafeZone = (p) => {
-                    return p.x < 140 || p.x > (size.x - 15) || p.y < 20 || p.y > (size.y - 90);
-                };
-
-                if (isOutOfSafeZone(playerPoint) || isOutOfSafeZone(destPoint)) {
-                    const bounds = L.latLngBounds([
-                        [player.y, player.x],
-                        [this._lastDestination.y, this._lastDestination.x]
-                    ]);
-                    if (this.routeLine) {
-                        bounds.extend(this.routeLine.getBounds());
-                    }
-                    this._currentBounds = bounds;
-                    this._frameRouteUpperRight(bounds);
-                }
-            } else {
-                const marginX = size.x * 0.20;
-                const marginY = size.y * 0.20;
-                const outsideSafeZone =
-                    playerPoint.x < marginX || playerPoint.x > (size.x - marginX) ||
-                    playerPoint.y < marginY || playerPoint.y > (size.y - marginY);
-
-                if (outsideSafeZone) {
-                    this.map.panTo([player.y, player.x], { animate: true, duration: 0.4, easeLinearity: 0.5 });
-                }
+            if (outsideCenter) {
+                this.map.panTo([player.y, player.x], { animate: true, duration: 0.4, easeLinearity: 0.5 });
             }
         } catch (e) {
-            if (window.MapPlusDebug) console.warn('[MapPlus] pan/frame error', e);
+            if (window.MapPlusDebug) console.warn('[MapPlus] pan error', e);
         }
     }
 
@@ -363,7 +347,8 @@ class MapPlusRenderer {
         Object.values(this.markers).forEach(m => this.map.removeLayer(m));
         this.markers = {};
         this._lastDestination = null;
-        this._currentBounds = null;
+        this._focusBounds = null;
+        this._initialFramed = false;
     }
 
     destroy() {

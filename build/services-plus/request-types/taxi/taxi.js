@@ -136,7 +136,7 @@
                 currentMapRenderer.updatePlayer(pendingPlayer.player);
             }
             if (pendingRoute) {
-                currentMapRenderer.setRoute(pendingRoute.points, pendingRoute.destination, pendingPlayer?.player);
+                currentMapRenderer.setRoute(pendingRoute.points, pendingRoute.destination, pendingPlayer?.player, pendingRoute.reason);
             } else if (card.templateData?.pos) {
                 currentMapRenderer.setCenter(card.templateData.pos.x, card.templateData.pos.y, 3);
                 currentMapRenderer.addMarker('pickup', card.templateData.pos.x, card.templateData.pos.y, 'destination');
@@ -150,7 +150,7 @@
         if (payload.action === 'mapplus:routeUpdate') {
             pendingRoute = payload;
             if (currentMapRenderer) {
-                currentMapRenderer.setRoute(payload.points, payload.destination, pendingPlayer?.player);
+                currentMapRenderer.setRoute(payload.points, payload.destination, pendingPlayer?.player, payload.reason);
             }
             return;
         }

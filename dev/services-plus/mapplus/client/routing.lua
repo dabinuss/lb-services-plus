@@ -127,8 +127,10 @@ local function sampleGpsRoute(playerCoords, destination)
                 bestPoints   = points
                 lastGoodSlot = slot
             end
-            -- If the primary slot was complete and close to the player (< 30m), finish immediately
-            if score < 60.0 then
+            -- If the primary slot was complete and starts right at the player (< 25m), finish immediately
+            local firstPt = points[1]
+            local startDist = #(vector2(firstPt.x, firstPt.y) - vector2(playerCoords.x, playerCoords.y))
+            if startDist < 25.0 then
                 break
             end
         end
@@ -169,6 +171,7 @@ end
 CreateThread(function()
     local lastRouteVersion   = -1
     local currentRoutePoints = {}
+    local routeUpdateReason  = "new"
 
     while true do
         Wait(300)
@@ -196,10 +199,12 @@ CreateThread(function()
                 lastSentClosestIndex   = 1
                 staleSince             = nil
                 routeVersion           = routeVersion + 1
-                SendNUIMessage({ action = "mapplus:routeUpdate", points = {}, destination = nil })
+                routeUpdateReason      = "clear"
+                SendNUIMessage({ action = "mapplus:routeUpdate", points = {}, destination = nil, reason = "clear" })
             end
         else
-            local needsResample = (#cachedRoute == 0) or destChanged(destination)
+            local isInitialRoute = (#cachedRoute == 0)
+            local needsResample  = isInitialRoute or destChanged(destination)
 
             if not needsResample and #cachedRoute > 1 then
                 local closestIdx, minDist = findClosestRouteIndex(playerCoords, cachedRoute, lastClosestIndex)
@@ -219,7 +224,8 @@ CreateThread(function()
                     -- Send trim update every ~40m of forward progress (8 points * 5m)
                     if closestIdx - lastSentClosestIndex >= TRIM_STEP then
                         lastSentClosestIndex = closestIdx
-                        routeVersion = routeVersion + 1
+                        routeVersion         = routeVersion + 1
+                        routeUpdateReason    = "trim"
                     end
                 end
             end
@@ -234,6 +240,7 @@ CreateThread(function()
                     lastSentClosestIndex = 1
                     currentRoutePoints   = freshPoints
                     routeVersion         = routeVersion + 1
+                    routeUpdateReason    = isInitialRoute and "new" or "reroute"
                 else
                     -- Start grace timer on first failure; GTA may be briefly re-routing
                     if staleSince == nil then
@@ -246,6 +253,7 @@ CreateThread(function()
                         cachedRoute          = {}
                         lastSentClosestIndex = 1
                         routeVersion         = routeVersion + 1
+                        routeUpdateReason    = "clear"
                     end
                 end
             end
@@ -257,6 +265,7 @@ CreateThread(function()
                     action      = "mapplus:routeUpdate",
                     points      = currentRoutePoints,
                     destination = destination,
+                    reason      = routeUpdateReason,
                 })
             end
         end
