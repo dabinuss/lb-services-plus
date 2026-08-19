@@ -7,8 +7,6 @@
         price: ['M12 1v22', 'M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6'],
     })
 
-    // Decorative location thumbnail only - this NUI has no live map/routing
-    // data source, so it's a stylized road pattern, not a real map render.
     function miniMap() {
         const wrap = el('div', 'dispatch-map')
         wrap.innerHTML = '<svg viewBox="0 0 46 46" xmlns="http://www.w3.org/2000/svg">'
@@ -20,24 +18,30 @@
         return wrap
     }
 
-    function render(payload) {
-        const card = payload.card
-        const active = card.state === 'active'
+    let currentMapRenderer = null;
+    let activeCardMounted = false;
+    let currentActiveElements = null;
+
+    function renderPending(payload, card) {
+        activeCardMounted = false;
+        currentActiveElements = null;
+        if (currentMapRenderer) {
+            currentMapRenderer.destroy();
+            currentMapRenderer = null;
+        }
 
         const surface = el('article', 'dispatch-card')
-        surface.setAttribute('aria-label', `${card.title}: ${active ? 'active ride' : 'incoming request'}`)
+        surface.setAttribute('aria-label', `${card.title}: incoming request`)
 
         const header = el('div', 'dispatch-header')
         const badgeEl = el('div')
         badge(badgeEl, 'car', card.iconUrl)
         const heading = el('div', 'dispatch-heading')
         heading.append(
-            el('div', 'dispatch-eyebrow', active ? 'Active ride' : 'New request'),
+            el('div', 'dispatch-eyebrow', 'New request'),
             el('div', 'dispatch-title', card.title),
             el('div', 'dispatch-subtitle', card.subtitle),
         )
-        // Distance first, then passenger count, then the fare - highlighted,
-        // it's the number that actually decides whether to take the job.
         header.append(badgeEl, heading, headerStats([
             { value: detail(card, 'distance', null), icon: 'distance' },
             { value: String(detail(card, 'people', '--')), icon: 'people' },
@@ -55,6 +59,103 @@
         surface.append(header, body, footer)
         root.replaceChildren(surface)
     }
+
+    function updateActive(payload, card) {
+        if (!currentActiveElements) return;
+        const { distanceEl, peopleEl, heading } = currentActiveElements;
+        if (distanceEl) distanceEl.textContent = detail(card, 'distance', '');
+        if (heading) {
+            const titleEl = heading.querySelector('.dispatch-title');
+            const subEl = heading.querySelector('.dispatch-subtitle');
+            if (titleEl) titleEl.textContent = card.title;
+            if (subEl) subEl.textContent = card.subtitle;
+        }
+        if (peopleEl) {
+            peopleEl.innerHTML = `<svg class="dispatch-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg> ${detail(card, 'people', '--')}`;
+        }
+    }
+
+    function renderActive(payload, card) {
+        if (activeCardMounted && currentActiveElements) {
+            updateActive(payload, card);
+            return;
+        }
+
+        activeCardMounted = true;
+        const surface = el('article', 'dispatch-card has-map')
+        surface.setAttribute('aria-label', `${card.title}: active ride`)
+
+        const mapContainer = el('div', 'dispatch-map-bg mapplus-container')
+        const scrim = el('div', 'dispatch-map-scrim')
+        const content = el('div', 'dispatch-map-content')
+
+        const header = el('div', 'dispatch-header')
+        const badgeEl = el('div')
+        badge(badgeEl, 'car', card.iconUrl)
+        const heading = el('div', 'dispatch-heading')
+        heading.append(
+            el('div', 'dispatch-eyebrow', 'Active ride'),
+            el('div', 'dispatch-title', card.title),
+            el('div', 'dispatch-subtitle', card.subtitle),
+        )
+        const distanceEl = el('div', 'dispatch-map-distance', detail(card, 'distance', ''))
+        
+        header.append(badgeEl, heading, distanceEl)
+
+        const footer = el('div', 'dispatch-footer')
+        const buttons = el('div', 'dispatch-buttons')
+        card.actions.forEach((action) => buttons.appendChild(button(payload, action)))
+        
+        const peopleEl = el('div', 'dispatch-map-people')
+        peopleEl.innerHTML = `<svg class="dispatch-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg> ${detail(card, 'people', '--')}`
+        
+        footer.append(buttons, peopleEl)
+
+        content.append(header, footer)
+        surface.append(mapContainer, scrim, content)
+        root.replaceChildren(surface)
+
+        currentActiveElements = { distanceEl, peopleEl, heading };
+
+        // Initialize MapPlus
+        if (currentMapRenderer) {
+            currentMapRenderer.destroy();
+            currentMapRenderer = null;
+        }
+        setTimeout(() => {
+            currentMapRenderer = new window.MapPlusRenderer(mapContainer);
+            if (card.templateData?.pos) {
+                currentMapRenderer.setCenter(card.templateData.pos.x, card.templateData.pos.y, 3);
+                currentMapRenderer.addMarker('pickup', card.templateData.pos.x, card.templateData.pos.y, 'destination');
+            } else {
+                currentMapRenderer.setCenter(0, 0, 3);
+            }
+        }, 20);
+    }
+
+    function render(payload) {
+        if (payload.action === 'mapplus:routeUpdate') {
+            if (currentMapRenderer) {
+                currentMapRenderer.setRoute(payload.points, payload.destination, payload.player);
+            }
+            return;
+        }
+
+        const card = payload.card
+        if (!card) return;
+
+        if (card.state === 'active') {
+            renderActive(payload, card)
+        } else {
+            renderPending(payload, card)
+        }
+    }
+
+    window.addEventListener('message', (event) => {
+        if (event.data?.action === 'mapplus:routeUpdate') {
+            render(event.data);
+        }
+    });
 
     onMessage(render)
 })()

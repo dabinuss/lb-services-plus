@@ -115,6 +115,11 @@
         return lbDocument?.documentElement?.getAttribute('data-theme') || 'dark'
     }
 
+    function isNativeBannerActive() {
+        const wrapper = lbDocument?.querySelector('.phoneVisbility')
+        return wrapper && wrapper.style.marginTop === '45rem'
+    }
+
     function reportCapability(name) {
         if (reportedCapabilities.has(name)) return
         reportedCapabilities.add(name)
@@ -339,6 +344,15 @@
         /* A call banner occupies the top of the phone. Lift the same native
            wrapper a little further so the request remains fully visible below
            it while LB Phone keeps the higher input/visual priority. */
+        .phoneVisbility[${LOCK_ATTRIBUTE}='active']:not([${CALL_PRIORITY_ATTRIBUTE}]) .lockscreen-notification-container {
+            opacity: 0 !important;
+            pointer-events: none !important;
+            transition: opacity .3s ease;
+        }
+        .phoneVisbility[${LOCK_ATTRIBUTE}='active'][${CALL_PRIORITY_ATTRIBUTE}] .lockscreen-notification-container {
+            opacity: 1 !important;
+            transition: opacity .3s ease;
+        }
         .phoneVisbility[${LOCK_ATTRIBUTE}='active'][${CALL_PRIORITY_ATTRIBUTE}] {
             margin-top: calc(39rem - var(--peekplus-card-lift, 0px)) !important;
         }
@@ -397,7 +411,7 @@
         }
         container.dataset.host = lockscreenHost ? 'lockscreen' : phoneHost ? 'phone' : 'fallback'
         container.dataset.theme = getPhoneTheme()
-        container.dataset.callPriority = callHasPriority ? 'true' : 'false'
+        container.dataset.callPriority = (callHasPriority || isNativeBannerActive()) ? 'true' : 'false'
         return container
     }
 
@@ -546,7 +560,7 @@
             presentation: {
                 host: frame.closest(`#${OVERLAY_ID}`)?.dataset.host || 'fallback',
                 theme: getPhoneTheme(),
-                callPriority: callHasPriority,
+                callPriority: callHasPriority || isNativeBannerActive(),
             },
             card: {
                 id: payload.id,
@@ -577,20 +591,20 @@
         const canReuse = reusableFrame
             && reusableFrame.dataset.cardId === String(payload.id)
             && reusableFrame.dataset.template === String(payload.template)
-            && reusableFrame.getAttribute('src') === definition.ui
-        const frame = canReuse ? reusableFrame : targetDocument.createElement('iframe')
-        if (!canReuse) {
-            frame.className = 'sp-template-frame'
-            frame.src = definition.ui
-            frame.sandbox = 'allow-scripts'
+        if (canReuse) {
+            postTemplateFrame(reusableFrame, payload)
+            return
         }
+        const frame = targetDocument.createElement('iframe')
+        frame.className = 'sp-template-frame'
+        frame.src = definition.ui + '?v=' + Date.now()
+        frame.sandbox = 'allow-scripts allow-same-origin allow-popups'
         frame.onload = () => postTemplateFrame(frame, payload)
         frame.dataset.cardId = String(payload.id)
         frame.dataset.template = String(payload.template)
         frame.dataset.fullCard = definition.fullCard === true ? 'true' : 'false'
         frame.style.height = `${Number(definition.height) || 160}px`
         element.appendChild(frame)
-        if (canReuse) postTemplateFrame(frame, payload)
     }
 
     function renderCard(targetDocument, element, payload, reusableFrame) {
@@ -628,7 +642,7 @@
             button.textContent = payload.confirmAction === action.id
                 ? action.confirm?.label || 'Confirm?'
                 : action.label
-            button.disabled = payload.actionInFlight === true || callHasPriority
+            button.disabled = payload.actionInFlight === true || callHasPriority || isNativeBannerActive()
             button.onclick = () => post('peekplusAction', {
                 id: payload.id,
                 revision: payload.revision,
@@ -649,10 +663,11 @@
             card: lastState?.card || null,
             host: container.dataset.host,
             theme: container.dataset.theme,
-            call: callHasPriority,
+            call: callHasPriority || isNativeBannerActive(),
         })
         if (renderKey === lastRenderKey && container.firstElementChild) return
         lastRenderKey = renderKey
+        const existingCard = container.querySelector('.sp-card')
         const reusableFrame = container.querySelector('.sp-template-frame')
         clearRenderedTimer()
         if (!lastState) {
@@ -660,6 +675,15 @@
             return
         }
         if (lastState.card.layout !== 'timer') clearTimerAnchor()
+
+        if (reusableFrame && existingCard && lastState.card.layout === 'custom' && lastState.card.templateDefinition?.fullCard === true) {
+            existingCard.dataset.variant = lastState.card.variant || 'neutral'
+            existingCard.dataset.state = lastState.card.state || 'pending'
+            existingCard.dataset.template = lastState.card.template || 'default'
+            existingCard.dataset.fullCard = 'true'
+            renderCard(container.ownerDocument, existingCard, lastState.card, reusableFrame)
+            return
+        }
 
         const card = container.ownerDocument.createElement('div')
         card.className = 'sp-card'
@@ -721,7 +745,7 @@
         }
         if (wrapper) {
             syncPeekHeightLift(wrapper)
-            if (callHasPriority && wrapper.getAttribute(LOCK_ATTRIBUTE) === 'active') {
+            if ((callHasPriority || isNativeBannerActive()) && wrapper.getAttribute(LOCK_ATTRIBUTE) === 'active') {
                 wrapper.setAttribute(CALL_PRIORITY_ATTRIBUTE, '')
             } else {
                 wrapper.removeAttribute(CALL_PRIORITY_ATTRIBUTE)
@@ -948,6 +972,14 @@
         }
         if (!data?.action) return
 
+        if (data.action === 'mapplus:routeUpdate') {
+            const frame = lbDocument?.querySelector('.sp-template-frame') || rootDocument?.querySelector('.sp-template-frame')
+            if (frame?.contentWindow) {
+                frame.contentWindow.postMessage(data, '*')
+            }
+            return
+        }
+
         if (data.action === 'peekplus:render') {
             phoneIsOpen = data.phoneOpen === true
             callHasPriority = data.callActive === true
@@ -991,7 +1023,7 @@
             callHasPriority = data.active === true
             const wrapper = lbDocument?.querySelector('.phoneVisbility')
             if (wrapper) {
-                if (callHasPriority && wrapper.getAttribute(LOCK_ATTRIBUTE) === 'active') {
+                if ((callHasPriority || isNativeBannerActive()) && wrapper.getAttribute(LOCK_ATTRIBUTE) === 'active') {
                     wrapper.setAttribute(CALL_PRIORITY_ATTRIBUTE, '')
                 } else {
                     wrapper.removeAttribute(CALL_PRIORITY_ATTRIBUTE)

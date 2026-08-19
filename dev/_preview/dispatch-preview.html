@@ -66,6 +66,42 @@ const TEMPLATES = [
     },
   },
   {
+    key: 'taxi-map', title: 'Taxi - active map (prototype)', src: 'prototypes/taxi-active-map/index.html',
+    iconUrl: 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="%23222"/><circle cx="32" cy="32" r="24" fill="%2337c2ff"/><text x="32" y="40" font-size="26" text-anchor="middle" fill="%23fff" font-family="sans-serif">DC</text></svg>'),
+    pending: {
+      title: 'Taxi Pickup', subtitle: 'Downtown Cab Co.', variant: 'info', description: '',
+      details: [
+        { label: 'Passenger count', value: '2', icon: 'people' },
+        { label: 'Reported location', value: 'Vespucci Boulevard / Alta Street', icon: 'location' },
+        { label: 'Distance', value: '2.6 mi', icon: 'distance' },
+        { label: 'Estimated fare', value: '~$13', icon: 'price' },
+      ],
+      actions: [{ id: 'decline', label: 'Decline' }, { id: 'accept', label: 'Accept' }],
+      remainingMs: 15000,
+    },
+    active: {
+      title: 'Taxi Pickup', subtitle: 'Downtown Cab Co.', variant: 'success', description: '',
+      details: [
+        { label: 'Passenger count', value: '2', icon: 'people' },
+        { label: 'Reported location', value: 'Vespucci Boulevard / Alta Street', icon: 'location' },
+        { label: 'Distance', value: '2.6 mi', icon: 'distance' },
+      ],
+      actions: [{ id: 'cancel', label: 'Cancel' }, { id: 'complete', label: 'Complete' }],
+      remainingMs: -1,
+    },
+    long: {
+      title: 'Taxi Pickup', subtitle: 'Downtown Cab Co. & Airport Shuttle Services LLC', variant: 'info', description: '',
+      details: [
+        { label: 'Passenger count', value: '4', icon: 'people' },
+        { label: 'Reported location', value: 'Vespucci Boulevard / Alta Street, near the big intersection by the gas station', icon: 'location' },
+        { label: 'Distance', value: '126.4 mi', icon: 'distance' },
+        { label: 'Estimated fare', value: '~$1337', icon: 'price' },
+      ],
+      actions: [{ id: 'decline', label: 'Decline' }, { id: 'accept', label: 'Accept' }],
+      remainingMs: 15000,
+    },
+  },
+  {
     key: 'police', title: 'Police Emergency', src: '../services-plus/request-types/police_emergency/index.html',
     pending: {
       title: 'Police Emergency', subtitle: 'Los Santos Police Department', variant: 'error',

@@ -368,13 +368,7 @@ local function historySnapshot(card)
     return snapshot
 end
 
-local function notifyHistory()
-    pcall(function()
-        exports["lb-phone"]:SendCustomAppMessage(Config.PeekPlusApp.identifier, {
-            type = "peekplusHistoryChanged",
-        })
-    end)
-end
+local function notifyHistory() SendNUIMessage({ type = "peekplusHistoryChanged" }) end
 
 local function trimHistory()
     while #history > limits.maxHistory do
@@ -1048,3 +1042,5 @@ AddEventHandler("onClientResourceStop", function(resourceName)
     PeekPlus.ClearOwner(resourceName)
     PeekPlus.ClearTemplates(resourceName)
 end)
+
+

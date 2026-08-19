@@ -24,6 +24,7 @@ shared_scripts {
 client_scripts {
     'client/callback.lua',
     'client/main.lua',
+    'mapplus/client/routing.lua',
     'peekplus/client/app.lua',
     'peekplus/client/lbphone.lua',
     'peekplus/client/controller.lua',
@@ -64,6 +65,11 @@ ui_page 'peekplus/ui/overlay/index-peekplus-1.2.2.html'
 files {
     'peekplus/ui/overlay/index-peekplus-1.2.2.html',
     'peekplus/ui/overlay/overlay.js',
+    'mapplus/ui/leaflet/leaflet.css',
+    'mapplus/ui/leaflet/leaflet.js',
+    'mapplus/ui/map.css',
+    'mapplus/ui/map.js',
+    'mapplus/ui/map.jpg',
     'request-types/**/*',
     'ui/dist/index.html',
     'ui/dist/**/*',

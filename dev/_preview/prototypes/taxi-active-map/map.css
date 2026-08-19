@@ -1,0 +1,114 @@
+/* Prototype-only additions on top of ../../../services-plus/request-types/
+   _shared/dispatch.css. Nothing here touches the real dispatch design
+   system - this is purely for the dev/_preview visual test. If this idea
+   is approved, folding it into dispatch.css/taxi.js for real is a separate
+   step. */
+
+/* Map fills the WHOLE card as a background, edge to edge. .dispatch-card's
+   own padding (12px 13px 10px) would otherwise leave a padding-colored
+   margin around the art, so this variant zeroes it on the card itself and
+   moves it onto .dispatch-map-content instead - bg/scrim then get a clean
+   inset:0 over the true full card instead of fighting negative offsets
+   against a padding box. The map layer is absolutely positioned so it
+   never adds height of its own; .dispatch-map-content (normal flow) is
+   what actually gives the card its height. */
+.dispatch-card.has-map { padding: 0; }
+.dispatch-map-bg, .dispatch-map-scrim { position: absolute; inset: 0; }
+.dispatch-map-bg { background: #0a0b0d; }
+
+/* One consistent map texture (roads/grid) across the whole card, same
+   clarity everywhere - no blur, no fade, no separate layers. Only the
+   actual route/pin/unit are confined to a fixed inner area, via an SVG
+   clipPath in map.js (not CSS) so it stays exact regardless of card
+   scaling. The outer area's map art is purely for orientation/atmosphere -
+   it was never meant to carry real route data anyway. */
+.dispatch-map-bg svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+/* Fades to the SAME gray the pending (non-map) card uses (--dispatch-bg's
+   dark end, #101114 - see dispatch.css), not an arbitrary black, so the
+   bottom of the active card blends into the same tone the rest of the
+   design already uses instead of looking like a different surface. */
+.dispatch-map-scrim {
+    background: linear-gradient(180deg,
+        rgba(16, 17, 20, .4) 0%,
+        rgba(16, 17, 20, .06) 22%,
+        rgba(16, 17, 20, .12) 50%,
+        rgba(16, 17, 20, .72) 80%,
+        #101114 100%);
+}
+.dispatch-map-content {
+    position: relative; z-index: 1; min-height: 224px;
+    display: flex; flex-direction: column;
+    padding: 12px 13px 10px;
+}
+
+.dispatch-map-road { stroke: #1f222a; stroke-width: 3; fill: none; }
+.dispatch-map-road.cross { stroke-width: 2; opacity: .6; }
+
+.dispatch-map-route-dim { stroke: rgba(242, 242, 247, .18); stroke-width: 2.5; fill: none; stroke-dasharray: 3 5; stroke-linecap: round; }
+.dispatch-map-route-done { stroke: var(--dispatch-accent); stroke-width: 2.5; fill: none; stroke-linecap: round; filter: drop-shadow(0 0 4px color-mix(in srgb, var(--dispatch-accent) 70%, transparent)); }
+
+.dispatch-map-pin { transform-box: fill-box; transform-origin: center; }
+.dispatch-map-pin-ring { fill: none; stroke: var(--dispatch-danger); stroke-width: 2; opacity: .55; }
+.dispatch-map-pin-dot { fill: var(--dispatch-danger); }
+
+.dispatch-map-unit { transform-box: fill-box; transform-origin: center; }
+.dispatch-map-unit-pulse { fill: var(--dispatch-accent); opacity: .35; animation: dispatch-map-pulse 1.6s ease-out infinite; }
+.dispatch-map-unit-dot { fill: var(--dispatch-accent); stroke: #101114; stroke-width: 2; }
+@keyframes dispatch-map-pulse {
+    0% { transform: scale(.4); opacity: .5; }
+    100% { transform: scale(2.6); opacity: 0; }
+}
+
+/* Everything below sits on the map with no card-colored box behind it -
+   a text-shadow does the legibility work a solid background used to,
+   same idea PeekPlus's own overlay uses for text on top of arbitrary
+   company art. */
+.has-map .dispatch-header { text-shadow: 0 1px 4px rgba(0, 0, 0, .85); }
+/* Reserves room for the top-right distance text (which floats, not a flex
+   sibling, so it doesn't push the heading over on its own) - without this
+   a long company name/title truncates right under it instead of before it. */
+.has-map .dispatch-heading { padding-right: 64px; }
+.has-map .dispatch-eyebrow { display: none; } /* the map itself already reads as "active" - no need to also say so in text */
+
+/* Distance: top-right, plain text over the map - no pill, no border, just
+   the same text-shadow treatment as the pickup line. It's read at a
+   glance, not tapped, so it gets no chip unlike the two real buttons. */
+.dispatch-map-distance {
+    position: absolute; top: 10px; right: 13px;
+    display: flex; align-items: baseline; gap: 4px;
+    font-size: 13px; font-weight: 800; color: var(--dispatch-text);
+    font-variant-numeric: tabular-nums;
+    text-shadow: 0 1px 4px rgba(0, 0, 0, .85);
+}
+.dispatch-map-distance span { font-size: 9px; font-weight: 700; color: var(--dispatch-dim); text-transform: uppercase; letter-spacing: .04em; }
+
+.dispatch-map-pickup {
+    margin-top: auto;
+    display: flex; align-items: center; gap: 7px;
+    font-size: 12.5px; font-weight: 650; color: var(--dispatch-text);
+    text-shadow: 0 1px 4px rgba(0, 0, 0, .85);
+}
+.dispatch-map-pickup .dispatch-icon { width: 14px; height: 14px; color: var(--dispatch-accent); filter: drop-shadow(0 1px 3px rgba(0, 0, 0, .8)); }
+
+/* One row: Cancel, Complete, passenger count - the map is the point, the
+   actions (and this bit of trip info) take a back seat instead of a full-
+   width Accept/Decline-style pair. Buttons hug their label instead of
+   stretching (flex: 0 0 auto); the passenger count sits plain (like the
+   distance above) at the row's far end via margin-left: auto. */
+.has-map .dispatch-footer { margin-top: 8px; }
+.has-map .dispatch-buttons { gap: 10px; align-items: center; }
+.has-map .dispatch-btn { flex: 0 0 auto; height: 28px; padding: 0 12px; font-size: 11.5px; }
+.has-map .dispatch-btn.secondary { background: transparent; color: var(--dispatch-dim); padding: 0 4px; }
+.has-map .dispatch-btn.primary { box-shadow: none; }
+.dispatch-map-people {
+    margin-left: auto;
+    display: flex; align-items: center; gap: 4px;
+    font-size: 12px; font-weight: 800; color: var(--dispatch-text);
+    text-shadow: 0 1px 4px rgba(0, 0, 0, .85);
+}
+.dispatch-map-people .dispatch-icon { width: 13px; height: 13px; color: var(--dispatch-dim); }
+
+.dispatch-map-note {
+    margin-top: 5px; text-align: center;
+    font-size: 9px; color: var(--dispatch-dim-2);
+}

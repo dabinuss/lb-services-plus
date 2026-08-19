@@ -3,7 +3,6 @@
    them instead of a one-off design per request type - only the accent
    color and the row content differ per template. */
 :root {
-    color-scheme: dark;
     font-family: -apple-system, 'Segoe UI', sans-serif;
     --dispatch-bg: linear-gradient(165deg, #1c1d22, #101114);
     --dispatch-border: rgba(255, 255, 255, .08);
@@ -12,8 +11,10 @@
     --dispatch-dim-2: rgba(242, 242, 247, .38);
     --dispatch-row-bg: rgba(255, 255, 255, .035);
     --dispatch-accent: #f4b914;
+    --dispatch-accent-rgb: 244, 185, 20;
     --dispatch-accent-ink: #171100;
     --dispatch-danger: #ff453a;
+    --dispatch-danger-rgb: 255, 69, 58;
 }
 
 * { box-sizing: border-box; }
@@ -21,8 +22,17 @@
    reports that natural height to overlay.js (see dispatch.js reportHeight),
    which then sizes the actual iframe to match - up to the registered
    template height, which acts as a maximum, not a fixed size. */
-html, body { width: 100%; margin: 0; overflow: hidden; background: transparent; }
+html, body { width: 100%; margin: 0; padding: 10px 12px; box-sizing: border-box; overflow: hidden; background: transparent !important; }
 
+/* fullCard templates are handed a fully unstyled slot on purpose - PeekPlus'
+   own overlay.js sets border-radius/padding/border to 0 for
+   .sp-card[data-full-card='true'] ("full-card consumers own their visual
+   surface"). We're the consumer, so the rounding has to live here - it was
+   never actually supplied anywhere, only ever *looked* rounded in dev/
+   _preview because that harness's own .phone-frame test wrapper clips to a
+   rounded rect for visualization, independent of the real card's own CSS.
+   1rem matches PeekPlus' own standard (non-fullCard) card radius in its
+   phone-host context, so a full-card template still reads as "a card". */
 .dispatch-card {
     position: relative;
     width: 100%;
@@ -31,6 +41,7 @@ html, body { width: 100%; margin: 0; overflow: hidden; background: transparent; 
     padding: 12px 13px 10px;
     color: var(--dispatch-text);
     background: var(--dispatch-bg);
+    border-radius: 1rem;
     overflow: hidden;
 }
 
@@ -38,8 +49,8 @@ html, body { width: 100%; margin: 0; overflow: hidden; background: transparent; 
 .dispatch-badge {
     position: relative; display: grid; place-items: center; flex: 0 0 auto; overflow: hidden;
     width: 34px; height: 34px; border-radius: 10px;
-    background: color-mix(in srgb, var(--dispatch-accent) 20%, transparent);
-    border: 1px solid color-mix(in srgb, var(--dispatch-accent) 35%, transparent);
+    background: rgba(var(--dispatch-accent-rgb), 0.2);
+    border: 1px solid rgba(var(--dispatch-accent-rgb), 0.35);
     color: var(--dispatch-accent);
 }
 .dispatch-badge .dispatch-icon { width: 19px; height: 19px; }
@@ -62,7 +73,7 @@ html, body { width: 100%; margin: 0; overflow: hidden; background: transparent; 
 .dispatch-header-stat .dispatch-icon { width: 12px; height: 12px; flex: 0 0 auto; color: var(--dispatch-dim-2); }
 /* The one number that actually decides whether to take the job - gets its
    own highlighted chip instead of blending in with the rest. */
-.dispatch-header-stat.highlight { padding: 3px 7px; border-radius: 7px; background: color-mix(in srgb, var(--dispatch-accent) 22%, transparent); }
+.dispatch-header-stat.highlight { padding: 3px 7px; border-radius: 7px; background: rgba(var(--dispatch-accent-rgb), 0.22); }
 .dispatch-header-stat.highlight .dispatch-header-stat-value { color: var(--dispatch-accent); font-size: 13.5px; }
 .dispatch-header-stat.highlight .dispatch-icon { color: var(--dispatch-accent); }
 
@@ -102,7 +113,7 @@ html, body { width: 100%; margin: 0; overflow: hidden; background: transparent; 
 }
 .dispatch-btn .dispatch-icon { width: 15px; height: 15px; flex: 0 0 auto; }
 .dispatch-btn.secondary { color: var(--dispatch-text); background: rgba(255, 255, 255, .08); }
-.dispatch-btn.primary { color: var(--dispatch-accent-ink); background: linear-gradient(180deg, color-mix(in srgb, var(--dispatch-accent) 100%, white 12%), var(--dispatch-accent)); box-shadow: 0 3px 8px color-mix(in srgb, var(--dispatch-accent) 35%, transparent); }
+.dispatch-btn.primary { color: var(--dispatch-accent-ink); background: linear-gradient(180deg, rgba(255, 255, 255, 0.12), transparent), var(--dispatch-accent); box-shadow: 0 3px 8px rgba(var(--dispatch-accent-rgb), 0.35); }
 .dispatch-btn:disabled { cursor: default; filter: saturate(.55); opacity: .55; }
 
 .dispatch-info { margin-top: 7px; display: flex; align-items: center; justify-content: center; gap: 5px; font-size: 10.5px; font-weight: 650; color: var(--dispatch-dim-2); }

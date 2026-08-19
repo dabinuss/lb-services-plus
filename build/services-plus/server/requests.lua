@@ -602,12 +602,6 @@ function Requests.Accept(source, requestId)
 
         clearNotifications(requestId, source)
 
-        exports["lb-phone"]:SendNotification(request.requester_number, {
-            app = Config.App.identifier,
-            title = company.name,
-            content = ("%s is on the way."):format(requestType.name),
-        })
-
         local category = Companies.GetCategory(requestType.category_id)
         local activePayload = {
             requestId = requestId,

@@ -1,0 +1,30 @@
+.mapplus-container {
+    width: 100%;
+    height: 100%;
+    background-color: #0d2133;
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+}
+
+/* Ensure Leaflet container has exact matching ocean background */
+.leaflet-container {
+    background: #0d2133 !important;
+    background-color: #0d2133 !important;
+}
+
+.leaflet-tile {
+    outline: 1px solid transparent;
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+}
+
+/* Smooth route line transition */
+.leaflet-interactive {
+    transition: stroke-width 0.2s;
+}
+
+/* Hide leaflet branding entirely for seamless integration */
+.leaflet-control-container {
+    display: none !important;
+}

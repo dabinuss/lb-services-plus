@@ -178,6 +178,15 @@ activeDetails = function(payload, distance)
 end
 
 local function activeCard(payload)
+    -- Real world coords for the pickup point, for templates that render an
+    -- actual lb-phone GameMap (components.GameMap - see docs.lbscripts.com/
+    -- phone/custom-apps) instead of a decorative graphic. nil for request
+    -- types whose template doesn't use it - GameMap.setShowSelf(true)
+    -- handles the player's own live position on its own, this is only the
+    -- fixed pickup marker.
+    local pos = (type(payload.x) == "number" and type(payload.y) == "number")
+        and { x = payload.x, y = payload.y } or nil
+
     return {
         key = ("service-request:%s"):format(payload.requestId),
         state = "active",
@@ -185,7 +194,11 @@ local function activeCard(payload)
         template = requestTemplate(payload, "active"),
         icon = requestIcon(payload),
         iconUrl = payload.companyIcon,
-        templateData = { statusLabel = "Active request" },
+        -- templateData is the one field controller.lua's normalizeSpec()
+        -- passes through opaque (JSON round-tripped, size-capped) instead
+        -- of validating against a fixed field list - pos has to live here,
+        -- not as a top-level card field, or it gets silently dropped.
+        templateData = { statusLabel = "Active request", pos = pos },
         title = tostring(payload.typeName or "Active request"),
         subtitle = tostring(payload.companyName or Config.App.name),
         description = type(payload.description) == "string" and payload.description ~= ""

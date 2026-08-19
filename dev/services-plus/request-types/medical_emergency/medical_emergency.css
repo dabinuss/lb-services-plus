@@ -1,5 +1,5 @@
 /* Medical dispatch tweaks on top of ../shared/dispatch.css - red accent,
    same family as police but its own template/file so the two can diverge
    independently later without fighting over one shared stylesheet. */
-:root { --dispatch-accent: #ff453a; --dispatch-accent-ink: #2a0605; }
+:root { --dispatch-accent: #ff453a; --dispatch-accent-rgb: 255, 69, 58; --dispatch-accent-ink: #2a0605; }
 #dispatch-request { width: 100%; height: 100%; }

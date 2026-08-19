@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>MapPlus - GTA V Navigation Map (Atlas Style)</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: #0a0b0d; font-family: -apple-system, system-ui, sans-serif; overflow: hidden; }
+        #map { width: 100%; height: 100%; background: #14161a; }
+        .hud-overlay {
+            position: absolute; top: 16px; left: 16px; z-index: 1000;
+            background: rgba(20, 22, 26, 0.92); color: #fff; padding: 14px 18px;
+            border-radius: 12px; border: 1px solid rgba(255,255,255,0.12);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5); backdrop-filter: blur(10px);
+        }
+        .hud-title { font-weight: 800; font-size: 15px; color: #a742ff; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+        .hud-sub { font-size: 12px; color: #aaa; }
+        .style-switch { margin-top: 10px; display: flex; gap: 8px; }
+        .btn-style {
+            background: rgba(255,255,255,0.08); color: #eee; border: 1px solid rgba(255,255,255,0.15);
+            padding: 6px 12px; border-radius: 6px; font-size: 11px; font-weight: 700; cursor: pointer;
+        }
+        .btn-style.active { background: #a742ff; color: #fff; border-color: #a742ff; }
+    </style>
+</head>
+<body>
+    <div class="hud-overlay">
+        <div class="hud-title">GTA V GPS Navigation Map</div>
+        <div class="hud-sub">Atlas / Minimap Style + Real Street Curves</div>
+        <div class="style-switch">
+            <button class="btn-style active" onclick="switchStyle('styleAtlas')">Atlas (Minimap)</button>
+            <button class="btn-style" onclick="switchStyle('styleGrid')">Grid (Dark Vector)</button>
+        </div>
+    </div>
+    <div id="map"></div>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // Custom GTA V CRS with native Transformation
+        var GtaCRS = Object.assign({}, L.CRS.Simple, {
+            projection: L.Projection.LonLat,
+            scale: function(zoom) { return Math.pow(2, zoom); },
+            zoom: function(sc) { return Math.log(sc) / Math.LN2; },
+            distance: function(pos1, pos2) { return Math.hypot(pos2.lng - pos1.lng, pos2.lat - pos1.lat); },
+            transformation: new L.Transformation(0.02072, 117.3, -0.0205, 172.8),
+            infinite: true,
+        });
+
+        var map = L.map('map', {
+            crs: GtaCRS,
+            minZoom: 1,
+            maxZoom: 5,
+            center: [-1034.5, 153.2],
+            zoom: 3,
+            zoomControl: true,
+            attributionControl: false
+        });
+
+        var currentTileLayer = null;
+
+        function switchStyle(styleName) {
+            if (currentTileLayer) {
+                map.removeLayer(currentTileLayer);
+            }
+            var ext = styleName === 'styleGrid' ? 'png' : 'jpg';
+            currentTileLayer = L.tileLayer('https://raw.githubusercontent.com/Trusted-Studios/mapStyles/main/' + styleName + '/{z}/{x}/{y}.' + ext, {
+                minZoom: 0,
+                maxZoom: 5,
+                noWrap: true
+            }).addTo(map);
+
+            document.querySelectorAll('.btn-style').forEach(function(btn) {
+                btn.classList.toggle('active', btn.getAttribute('onclick').includes(styleName));
+            });
+        }
+
+        switchStyle('styleAtlas');
+
+        // High-density realistic street route sample (Alta St -> Power St -> Vinewood)
+        var testRoute = [
+            [-1034.5, 153.2], // Legion Square
+            [-1000.0, 168.0],
+            [-960.0, 185.0],
+            [-920.0, 202.0],
+            [-880.0, 218.0],
+            [-830.0, 230.0],
+            [-780.0, 240.0],
+            [-730.0, 252.0],
+            [-680.0, 268.0],
+            [-630.0, 280.0],
+            [-580.0, 292.0],
+            [-530.0, 298.0],
+            [-480.0, 305.0],
+            [-430.0, 310.0],
+            [-380.0, 315.0],
+            [-330.0, 320.0],
+            [-280.0, 325.0],
+            [-230.0, 330.0],
+            [-180.0, 338.0],
+            [-130.0, 345.0],
+            [-80.0, 352.0],
+            [-30.0, 358.0],
+            [20.0, 365.0],
+            [70.0, 372.0],
+            [120.0, 380.0]  // Vinewood Plaza
+        ];
+
+        // Purple GTA GPS Polyline with rounded joints
+        var routeLine = L.polyline(testRoute, {
+            color: '#a742ff',
+            weight: 7,
+            opacity: 0.95,
+            lineCap: 'round',
+            lineJoin: 'round'
+        }).addTo(map);
+
+        // Custom Player & Destination icons
+        var playerIcon = L.divIcon({
+            html: '<div style="background:#fff;width:12px;height:12px;border-radius:50%;border:2px solid #a742ff;box-shadow:0 0 8px rgba(167,66,255,0.9);"></div>',
+            iconSize: [12, 12],
+            iconAnchor: [6, 6]
+        });
+        var destIcon = L.divIcon({
+            html: '<div style="background:#f4b914;width:16px;height:16px;border-radius:50%;border:2px solid #101114;box-shadow:0 2px 6px rgba(0,0,0,0.8);"></div>',
+            iconSize: [16, 16],
+            iconAnchor: [8, 8]
+        });
+
+        L.marker(testRoute[0], { icon: playerIcon }).addTo(map).bindPopup('Player (Start)');
+        L.marker(testRoute[testRoute.length - 1], { icon: destIcon }).addTo(map).bindPopup('Destination (Taxi Pickup)');
+
+        map.setView([-1034.5, 153.2], 3);
+    </script>
+</body>
+</html>

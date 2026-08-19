@@ -1,85 +1,22 @@
-/* Taxi-specific tweaks on top of ../_shared/dispatch.css. Yellow is already
-   the shared default accent, so there's nothing to override there. */
+/* Taxi-specific tweaks on top of ../shared/dispatch.css. */
 #taxi-request { width: 100%; height: 100%; }
-.taxi-fare { font-family: inherit; font-variant-numeric: tabular-nums; }
 
-/* Active ride: a real lb-phone GameMap (components.GameMap - see
-   docs.lbscripts.com/phone/custom-apps) fills the whole card as a
-   background, with the header/pickup/footer floating on top of it instead
-   of the plain flat card background. .dispatch-card's own padding
-   (12px 13px 10px) would leave a padding-colored margin around the map, so
-   this variant zeroes it on the card itself and moves it onto
-   .dispatch-map-content instead. */
+/* Map card layout */
 .dispatch-card.has-map { padding: 0; }
-.dispatch-map-bg, .dispatch-map-scrim { position: absolute; inset: 0; }
-.dispatch-map-bg { background: #0a0b0d; overflow: hidden; }
-/* GameMap needs an element with real pixel dimensions to mount into -
-   this is that element, sized by its absolute inset:0 above. */
-.dispatch-map-bg > * { width: 100%; height: 100%; }
+.dispatch-map-bg { position: absolute; inset: 0; z-index: 0; background: #0d2133; }
+.dispatch-map-scrim { position: absolute; inset: 0; pointer-events: none; z-index: 1; background: linear-gradient(to bottom, rgba(16,17,20,0.8) 0%, transparent 28%, transparent 70%, rgba(16,17,20,0.85) 100%); }
+.dispatch-map-content { position: relative; z-index: 2; padding: 12px 13px 10px; min-height: 224px; display: flex; flex-direction: column; justify-content: space-between; }
 
-/* Fades to the SAME gray the pending (non-map) card uses (--dispatch-bg's
-   dark end, #101114 - see dispatch.css), not an arbitrary black, so the
-   bottom of the active card blends into the same tone the rest of the
-   design already uses instead of looking like a different surface. */
-.dispatch-map-scrim {
-    background: linear-gradient(180deg,
-        rgba(16, 17, 20, .4) 0%,
-        rgba(16, 17, 20, .06) 22%,
-        rgba(16, 17, 20, .12) 50%,
-        rgba(16, 17, 20, .72) 80%,
-        #101114 100%);
-}
-.dispatch-map-content {
-    position: relative; z-index: 1; min-height: 224px;
-    display: flex; flex-direction: column;
-    padding: 12px 13px 10px;
-}
-
-/* Everything below sits on the map with no card-colored box behind it -
-   a text-shadow does the legibility work a solid background used to,
-   same idea PeekPlus's own overlay uses for text on top of arbitrary
-   company art. */
 .has-map .dispatch-header { text-shadow: 0 1px 4px rgba(0, 0, 0, .85); }
-/* Reserves room for the top-right distance text (floats, not a flex
-   sibling, so it doesn't push the heading over on its own) - without this
-   a long company name/title truncates right under it instead of before it. */
 .has-map .dispatch-heading { padding-right: 64px; }
-.has-map .dispatch-eyebrow { display: none; } /* the map itself already reads as "active" - no need to also say so in text */
+.dispatch-map-distance { position: absolute; top: 12px; right: 13px; font-size: 16px; font-weight: 800; font-family: ui-sans-serif, system-ui, sans-serif; letter-spacing: -.03em; color: var(--dispatch-text); text-shadow: 0 2px 6px rgba(0, 0, 0, .9); }
+.dispatch-map-distance span { font-size: 11px; font-weight: 700; color: var(--dispatch-dim); margin-left: 2px; }
 
-/* Distance: top-right, plain text over the map - no pill, no border, just
-   the same text-shadow treatment as the pickup line. It's read at a
-   glance, not tapped, so it gets no chip unlike the two real buttons. */
-.dispatch-map-distance {
-    position: absolute; top: 10px; right: 13px;
-    display: flex; align-items: baseline; gap: 4px;
-    font-size: 13px; font-weight: 800; color: var(--dispatch-text);
-    font-variant-numeric: tabular-nums;
-    text-shadow: 0 1px 4px rgba(0, 0, 0, .85);
-}
-.dispatch-map-distance span { font-size: 9px; font-weight: 700; color: var(--dispatch-dim); text-transform: uppercase; letter-spacing: .04em; }
-
-.dispatch-map-pickup {
-    margin-top: auto;
-    display: flex; align-items: center; gap: 7px;
-    font-size: 12.5px; font-weight: 650; color: var(--dispatch-text);
-    text-shadow: 0 1px 4px rgba(0, 0, 0, .85);
-}
-.dispatch-map-pickup .dispatch-icon { width: 14px; height: 14px; color: var(--dispatch-accent); filter: drop-shadow(0 1px 3px rgba(0, 0, 0, .8)); }
-
-/* One row: Cancel, Complete, passenger count - the map is the point, the
-   actions (and this bit of trip info) take a back seat instead of a full-
-   width Accept/Decline-style pair. Buttons hug their label instead of
-   stretching (flex: 0 0 auto); the passenger count sits plain (like the
-   distance above) at the row's far end via margin-left: auto. */
 .has-map .dispatch-footer { margin-top: 8px; }
 .has-map .dispatch-buttons { gap: 10px; align-items: center; }
 .has-map .dispatch-btn { flex: 0 0 auto; height: 28px; padding: 0 12px; font-size: 11.5px; }
-.has-map .dispatch-btn.secondary { background: transparent; color: var(--dispatch-dim); padding: 0 4px; }
-.has-map .dispatch-btn.primary { box-shadow: none; }
-.dispatch-map-people {
-    margin-left: auto;
-    display: flex; align-items: center; gap: 4px;
-    font-size: 12px; font-weight: 800; color: var(--dispatch-text);
-    text-shadow: 0 1px 4px rgba(0, 0, 0, .85);
-}
+.has-map .dispatch-btn.secondary { background: rgba(16,17,20,0.65); color: var(--dispatch-dim); padding: 0 8px; backdrop-filter: blur(4px); }
+.has-map .dispatch-btn.primary { box-shadow: 0 2px 8px rgba(0,0,0,0.4); }
+
+.dispatch-map-people { margin-left: auto; display: flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 800; color: var(--dispatch-text); text-shadow: 0 1px 4px rgba(0, 0, 0, .85); }
 .dispatch-map-people .dispatch-icon { width: 13px; height: 13px; color: var(--dispatch-dim); }

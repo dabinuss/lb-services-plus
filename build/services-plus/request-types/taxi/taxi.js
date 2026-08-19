@@ -1,16 +1,12 @@
 ;(function () {
     const root = document.getElementById('taxi-request')
-    const { el, icon, badge, row, button, detail, onMessage } = Dispatch
+    const { el, badge, row, headerStats, button, detail, onMessage } = Dispatch
 
     Dispatch.registerIcons({
         car: ['M5 11l1.4-4.3A2 2 0 0 1 8.3 5.3h7.4a2 2 0 0 1 1.9 1.4L19 11', 'M3 11h18v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z', 'M7 18v1', 'M17 18v1'],
         price: ['M12 1v22', 'M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6'],
     })
 
-    // Decorative location thumbnail only, pending state only - this has no
-    // live position to show yet (the request isn't accepted), so it stays
-    // a stylized road pattern rather than a real map. See renderActive()
-    // for the real one.
     function miniMap() {
         const wrap = el('div', 'dispatch-map')
         wrap.innerHTML = '<svg viewBox="0 0 46 46" xmlns="http://www.w3.org/2000/svg">'
@@ -22,114 +18,17 @@
         return wrap
     }
 
-    // Icon-then-value, unlike Dispatch.headerStats() (value-then-icon) -
-    // used for the passenger count in the active/map footer row, where it
-    // sits over map art rather than the flat card background.
-    function iconValue(className, iconName, value) {
-        const wrap = el('div', className)
-        wrap.appendChild(icon(iconName))
-        wrap.appendChild(el('span', null, value))
-        return wrap
-    }
+    let currentMapRenderer = null;
+    let activeCardMounted = false;
+    let currentActiveElements = null;
 
-    // Real lb-phone GameMap instance (docs.lbscripts.com/phone/custom-apps),
-    // kept alive across re-renders instead of recreated - see comment on
-    // renderActive() for why that matters. `components` is injected by
-    // lb-phone into pages it loads as a custom app; whether it's also
-    // present in a PeekPlus Sibling-NUI full-card iframe (this file) is
-    // NOT yet confirmed in a live client - if it's missing, this
-    // degrades to a plain gradient background instead of throwing.
-    let map = null // { key, container, instance }
-
-    function destroyMap() {
-        if (map?.instance) {
-            try { map.instance.destroy() } catch { /* best-effort cleanup */ }
+    function renderPending(payload, card) {
+        activeCardMounted = false;
+        currentActiveElements = null;
+        if (currentMapRenderer) {
+            currentMapRenderer.destroy();
+            currentMapRenderer = null;
         }
-        map = null
-    }
-
-    // Builds (or reuses, if this is still the same request) the map
-    // container + GameMap instance. Reuse matters: the server pushes a
-    // fresh details update roughly every 2s while a ride is active
-    // (client/services/requests.lua's startDistanceUpdates), which
-    // triggers a fresh render() call here every time - recreating the
-    // GameMap that often would reload/flicker it constantly instead of
-    // it just quietly tracking the player's live position on its own via
-    // setShowSelf().
-    function startGameMap(container, pos) {
-        if (!pos || !window.components?.GameMap || !map) return
-        // defaultZoom is a guess (the lb-phone docs example uses 3 for a
-        // different, full-screen map context) - needs live tuning once
-        // this actually renders in-game.
-        const instance = new window.components.GameMap(container, {
-            allowMoving: false,
-            center: pos,
-            defaultZoom: 15,
-        })
-        map.instance = instance
-        instance.ready
-            .then(() => {
-                instance.addLocation({ title: 'Pickup', coords: pos })
-                return instance.setShowSelf(true)
-            })
-            .catch(() => { /* GameMap failed to load - container just stays empty over the scrim */ })
-    }
-
-    function mapContainer(key, pos) {
-        if (map && map.key === key) {
-            // components can plausibly become available after the first
-            // render already ran without it - retry on a later render
-            // (there's always one coming, every ~2s while active) instead
-            // of staying empty forever once it does.
-            if (!map.instance) startGameMap(map.container, pos)
-            return map.container
-        }
-
-        destroyMap()
-        const container = el('div', 'dispatch-map-bg')
-        map = { key, container, instance: null }
-        startGameMap(container, pos)
-        return container
-    }
-
-    function renderActive(card, payload) {
-        const surface = el('article', 'dispatch-card has-map')
-        surface.setAttribute('aria-label', `${card.title}: active ride`)
-
-        const bg = mapContainer(card.key, payload.data?.pos)
-        const scrim = el('div', 'dispatch-map-scrim')
-
-        const header = el('div', 'dispatch-header')
-        const badgeEl = el('div')
-        badge(badgeEl, 'car', card.iconUrl)
-        const heading = el('div', 'dispatch-heading')
-        heading.append(el('div', 'dispatch-title', card.title), el('div', 'dispatch-subtitle', card.subtitle))
-        header.append(badgeEl, heading)
-
-        const distanceChip = el('div', 'dispatch-map-distance')
-        distanceChip.innerHTML = '<span>Distance</span>'
-        const distanceText = detail(card, 'distance', null)
-        distanceChip.appendChild(el('strong', null, distanceText || '—'))
-
-        const pickup = el('div', 'dispatch-map-pickup')
-        pickup.append(icon('location'), el('span', null, detail(card, 'location', 'Marked location')))
-
-        const footer = el('div', 'dispatch-footer')
-        const buttons = el('div', 'dispatch-buttons')
-        card.actions.forEach((action) => buttons.appendChild(button(payload, action)))
-        const peopleValue = detail(card, 'people', null)
-        if (peopleValue) buttons.appendChild(iconValue('dispatch-map-people', 'people', String(peopleValue)))
-        footer.appendChild(buttons)
-
-        const content = el('div', 'dispatch-map-content')
-        content.append(header, distanceChip, pickup, footer)
-
-        surface.append(bg, scrim, content)
-        return surface
-    }
-
-    function renderPending(card, payload) {
-        destroyMap() // leftover from a previous active render of a different request
 
         const surface = el('article', 'dispatch-card')
         surface.setAttribute('aria-label', `${card.title}: incoming request`)
@@ -143,7 +42,7 @@
             el('div', 'dispatch-title', card.title),
             el('div', 'dispatch-subtitle', card.subtitle),
         )
-        header.append(badgeEl, heading, Dispatch.headerStats([
+        header.append(badgeEl, heading, headerStats([
             { value: detail(card, 'distance', null), icon: 'distance' },
             { value: String(detail(card, 'people', '--')), icon: 'people' },
             { value: detail(card, 'price', null), icon: 'price', highlight: true },
@@ -158,15 +57,105 @@
         footer.appendChild(buttons)
 
         surface.append(header, body, footer)
-        return surface
+        root.replaceChildren(surface)
+    }
+
+    function updateActive(payload, card) {
+        if (!currentActiveElements) return;
+        const { distanceEl, peopleEl, heading } = currentActiveElements;
+        if (distanceEl) distanceEl.textContent = detail(card, 'distance', '');
+        if (heading) {
+            const titleEl = heading.querySelector('.dispatch-title');
+            const subEl = heading.querySelector('.dispatch-subtitle');
+            if (titleEl) titleEl.textContent = card.title;
+            if (subEl) subEl.textContent = card.subtitle;
+        }
+        if (peopleEl) {
+            peopleEl.innerHTML = `<svg class="dispatch-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg> ${detail(card, 'people', '--')}`;
+        }
+    }
+
+    function renderActive(payload, card) {
+        if (activeCardMounted && currentActiveElements) {
+            updateActive(payload, card);
+            return;
+        }
+
+        activeCardMounted = true;
+        const surface = el('article', 'dispatch-card has-map')
+        surface.setAttribute('aria-label', `${card.title}: active ride`)
+
+        const mapContainer = el('div', 'dispatch-map-bg mapplus-container')
+        const scrim = el('div', 'dispatch-map-scrim')
+        const content = el('div', 'dispatch-map-content')
+
+        const header = el('div', 'dispatch-header')
+        const badgeEl = el('div')
+        badge(badgeEl, 'car', card.iconUrl)
+        const heading = el('div', 'dispatch-heading')
+        heading.append(
+            el('div', 'dispatch-eyebrow', 'Active ride'),
+            el('div', 'dispatch-title', card.title),
+            el('div', 'dispatch-subtitle', card.subtitle),
+        )
+        const distanceEl = el('div', 'dispatch-map-distance', detail(card, 'distance', ''))
+        
+        header.append(badgeEl, heading, distanceEl)
+
+        const footer = el('div', 'dispatch-footer')
+        const buttons = el('div', 'dispatch-buttons')
+        card.actions.forEach((action) => buttons.appendChild(button(payload, action)))
+        
+        const peopleEl = el('div', 'dispatch-map-people')
+        peopleEl.innerHTML = `<svg class="dispatch-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg> ${detail(card, 'people', '--')}`
+        
+        footer.append(buttons, peopleEl)
+
+        content.append(header, footer)
+        surface.append(mapContainer, scrim, content)
+        root.replaceChildren(surface)
+
+        currentActiveElements = { distanceEl, peopleEl, heading };
+
+        // Initialize MapPlus
+        if (currentMapRenderer) {
+            currentMapRenderer.destroy();
+            currentMapRenderer = null;
+        }
+        setTimeout(() => {
+            currentMapRenderer = new window.MapPlusRenderer(mapContainer);
+            if (card.templateData?.pos) {
+                currentMapRenderer.setCenter(card.templateData.pos.x, card.templateData.pos.y, 3);
+                currentMapRenderer.addMarker('pickup', card.templateData.pos.x, card.templateData.pos.y, 'destination');
+            } else {
+                currentMapRenderer.setCenter(0, 0, 3);
+            }
+        }, 20);
     }
 
     function render(payload) {
+        if (payload.action === 'mapplus:routeUpdate') {
+            if (currentMapRenderer) {
+                currentMapRenderer.setRoute(payload.points, payload.destination, payload.player);
+            }
+            return;
+        }
+
         const card = payload.card
-        const active = card.state === 'active'
-        const surface = active ? renderActive(card, payload) : renderPending(card, payload)
-        root.replaceChildren(surface)
+        if (!card) return;
+
+        if (card.state === 'active') {
+            renderActive(payload, card)
+        } else {
+            renderPending(payload, card)
+        }
     }
+
+    window.addEventListener('message', (event) => {
+        if (event.data?.action === 'mapplus:routeUpdate') {
+            render(event.data);
+        }
+    });
 
     onMessage(render)
 })()

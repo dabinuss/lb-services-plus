@@ -132,7 +132,7 @@ window.Dispatch = (function () {
     // visible screen right now), which would delay the resize for no reason.
     function reportHeight() {
         const card = document.querySelector('.dispatch-card')
-        const height = card ? Math.ceil(card.getBoundingClientRect().height) : document.body.scrollHeight
+        const height = card ? Math.ceil(card.getBoundingClientRect().height) + 20 : document.body.scrollHeight
         window.parent.postMessage({ type: 'peekplus:template:resize', height }, '*')
     }
 
