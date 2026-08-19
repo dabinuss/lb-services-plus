@@ -1,6 +1,6 @@
 // =============================================================================
-// MapPlus – GTA V Navigation Renderer (v60)
-// Look-Ahead Navigation Focus (125m ahead) with Endpoint Visibility Validation Loop.
+// MapPlus – GTA V Navigation Renderer (v61)
+// Deterministic 125m Route Focus with Top-Down Zoom Fitting (No Midpoint Fallback)
 // =============================================================================
 
 /**
@@ -119,7 +119,7 @@ class MapPlusRenderer {
     }
 
     /**
-     * Builds endpoint bounds from Player + Destination for zoom fitting.
+     * Builds endpoint bounds from Player + Destination for visibility validation.
      */
     _buildEndpointBounds() {
         const bounds = L.latLngBounds([]);
@@ -193,44 +193,55 @@ class MapPlusRenderer {
     }
 
     /**
-     * Frames the camera focusing on the 125m ahead section, with validation to guarantee endpoint visibility.
+     * Deterministically centers the 125m route focus, stepping down zoom from 4.25 until both endpoints fit.
+     * The route focus is NEVER overwritten by a geometric midpoint fallback.
      */
     _frameCurrentNavigation(opts = {}) {
         const bounds = this._buildEndpointBounds();
         if (!this.map || !bounds) return;
 
         this.map.stop();
-        const pad = this.cameraPadding;
-        const totalPad = L.point(pad.left + pad.right, pad.top + pad.bottom);
-
-        let targetZoom = this.map.getBoundsZoom(bounds, false, totalPad);
-        targetZoom = Math.max(this.map.getMinZoom(), Math.min(4.25, targetZoom));
 
         const focus = this._getNavigationFocus(125) || bounds.getCenter();
+        const minZoom = this.map.getMinZoom();
+        let zoom = 4.25;
 
-        // Apply initial view
-        this.map.setView(focus, targetZoom, { animate: false });
-
-        // Endpoint validation loop: zoom out if either player or destination is outside safe insets
-        let iterations = 0;
-        while (!this._isNavigationVisible() && targetZoom > this.map.getMinZoom() && iterations < 8) {
-            targetZoom = Math.max(this.map.getMinZoom(), targetZoom - 0.25);
-            this.map.setView(focus, targetZoom, { animate: false });
-            iterations++;
+        // Search top-down for the highest zoom level that keeps route focus centered and both endpoints visible
+        while (zoom >= minZoom) {
+            this.map.setView(focus, zoom, { animate: false });
+            if (this._isNavigationVisible()) {
+                break;
+            }
+            zoom -= 0.25;
         }
 
-        // Fallback: if endpoints are still clipped, center on the geometric midpoint
-        if (!this._isNavigationVisible()) {
-            const midpoint = bounds.getCenter();
-            this.map.setView(midpoint, targetZoom, { animate: false });
-        }
+        zoom = Math.max(minZoom, zoom);
 
-        if (opts.animate !== false) {
-            const finalCenter = this.map.getCenter();
-            this.map.setView(finalCenter, targetZoom, {
-                animate: true,
-                duration: opts.duration || 0.4,
-                easeLinearity: 0.3,
+        this.map.setView(focus, zoom, {
+            animate: opts.animate !== false,
+            duration: opts.duration || 0.4,
+            easeLinearity: 0.3,
+        });
+
+        if (window.MapPlusDebug) {
+            if (!this._focusDebugMarker) {
+                this._focusDebugMarker = L.circleMarker(focus, {
+                    radius: 4,
+                    color: '#00ffcc',
+                    fillColor: '#00ffcc',
+                    weight: 2,
+                    fillOpacity: 1,
+                    pane: 'mapplusRoute',
+                }).addTo(this.map);
+            } else {
+                this._focusDebugMarker.setLatLng(focus);
+            }
+            console.log('[MapPlus Camera]', {
+                focus: { lat: focus.lat, lng: focus.lng },
+                zoom,
+                size: this.map.getSize(),
+                player: this._lastPlayer,
+                destination: this._lastDestination,
             });
         }
     }
