@@ -1,7 +1,9 @@
 // =============================================================================
-// MapPlus – GTA V Navigation Renderer (v55)
-// Endpoint-Fit Navigation Camera: Player and Destination are ALWAYS fully visible
-// with asymmetric UI safe-insets, representative route extrema, and zoom safety margin.
+// MapPlus – GTA V Navigation Renderer (v58)
+// True Visual Center Navigation Camera:
+// - Zoom derived from Player + Destination bounds (with symmetric safe-insets)
+// - Center derived from actual polyline length midpoint (_getRouteVisualCenter)
+// - Screen target fixed at exact 50% horizontal center.
 // =============================================================================
 
 /**
@@ -19,10 +21,10 @@ class MapPlusRenderer {
         this.container = container;
         this.style = options.style || 'styleAtlas';
         this.cameraPadding = Object.assign({
-            top: 48,
-            right: 18,
-            bottom: 54,
-            left: 18,
+            top: 40,
+            right: 20,
+            bottom: 50,
+            left: 20,
         }, options.cameraPadding);
 
         this._layoutTimers = [];
@@ -120,9 +122,9 @@ class MapPlusRenderer {
     }
 
     /**
-     * Builds unified camera bounds containing Player + Destination + Sampled Route Extrema.
+     * Builds endpoint bounds from Player + Destination to determine the optimal zoom level.
      */
-    _buildNavigationBounds() {
+    _buildEndpointBounds() {
         const bounds = L.latLngBounds([]);
 
         if (this._lastPlayer && typeof this._lastPlayer.x === 'number') {
@@ -133,17 +135,41 @@ class MapPlusRenderer {
             bounds.extend([this._lastDestination.y, this._lastDestination.x]);
         }
 
+        return bounds.isValid() ? bounds : null;
+    }
+
+    /**
+     * Calculates the true visual center point along the polyline path (50% traveled distance).
+     */
+    _getRouteVisualCenter() {
         const pts = this._routeLatLngs;
-        if (pts && pts.length > 0) {
-            const ROUTE_BOUND_SAMPLES = 32;
-            const stride = Math.max(1, Math.floor(pts.length / ROUTE_BOUND_SAMPLES));
-            for (let i = 0; i < pts.length; i += stride) {
-                bounds.extend(pts[i]);
-            }
-            bounds.extend(pts[pts.length - 1]);
+        if (!pts || pts.length === 0) {
+            return this._buildEndpointBounds()?.getCenter() || null;
+        }
+        if (pts.length === 1) {
+            return L.latLng(pts[0][0], pts[0][1]);
         }
 
-        return bounds.isValid() ? bounds : null;
+        let total = 0;
+        const lengths = [];
+        for (let i = 1; i < pts.length; i++) {
+            const dx = pts[i][1] - pts[i - 1][1];
+            const dy = pts[i][0] - pts[i - 1][0];
+            const d = Math.hypot(dx, dy);
+            lengths.push(d);
+            total += d;
+        }
+
+        let walked = 0;
+        const halfway = total * 0.5;
+        for (let i = 1; i < pts.length; i++) {
+            walked += lengths[i - 1];
+            if (walked >= halfway) {
+                return L.latLng(pts[i][0], pts[i][1]);
+            }
+        }
+
+        return L.latLng(pts[pts.length - 1][0], pts[pts.length - 1][1]);
     }
 
     /**
@@ -171,39 +197,39 @@ class MapPlusRenderer {
     }
 
     /**
-     * Re-frames the camera to guarantee full visibility of both endpoints with safety margin.
+     * Re-frames the camera to center the visual route midpoint at exact 50% screen width,
+     * with zoom fitted to show both player and destination.
      */
     _frameCurrentNavigation(opts = {}) {
-        const bounds = this._buildNavigationBounds();
+        const bounds = this._buildEndpointBounds();
         if (!this.map || !bounds) return;
 
         this.map.stop();
         const pad = this.cameraPadding;
         const totalPad = L.point(pad.left + pad.right, pad.top + pad.bottom);
 
-        // Determine zoom so entire geometry fits within the padded area
+        // Compute optimal zoom so both endpoints fit with symmetric breathing room
         let targetZoom = this.map.getBoundsZoom(bounds, false, totalPad);
-        // Safety margin of 0.25 zoom levels so markers never sit right against the border
-        targetZoom = Math.max(0, Math.min(4.25, targetZoom - 0.25));
+        targetZoom = Math.max(this.map.getMinZoom(), Math.min(4.25, targetZoom));
 
         const size = this.map.getSize();
         const width = (size && size.x > 50) ? size.x : (this.container?.offsetWidth || 320);
         const height = (size && size.y > 50) ? size.y : (this.container?.offsetHeight || 224);
 
-        // Center of the open usable area on screen
-        const usableCenterX = pad.left + (width - pad.left - pad.right) / 2;
-        const usableCenterY = pad.top + (height - pad.top - pad.bottom) / 2;
+        // Target screen center: exactly 50% horizontally, 48% vertically
+        const targetScreenX = width * 0.50;
+        const targetScreenY = height * 0.48;
 
         const screenCenterX = width / 2;
         const screenCenterY = height / 2;
 
-        const shiftX = usableCenterX - screenCenterX;
-        const shiftY = usableCenterY - screenCenterY;
+        const shiftX = targetScreenX - screenCenterX; // 0
+        const shiftY = targetScreenY - screenCenterY;
 
-        const routeCenter = bounds.getCenter();
-        const routeCenterProj = this.map.project(routeCenter, targetZoom);
+        const visualCenter = this._getRouteVisualCenter() || bounds.getCenter();
+        const visualCenterProj = this.map.project(visualCenter, targetZoom);
 
-        const targetCenterPixel = L.point(routeCenterProj.x - shiftX, routeCenterProj.y - shiftY);
+        const targetCenterPixel = L.point(visualCenterProj.x - shiftX, visualCenterProj.y - shiftY);
         const targetCenter = this.map.unproject(targetCenterPixel, targetZoom);
 
         this.map.setView(targetCenter, targetZoom, {

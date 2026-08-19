@@ -130,7 +130,7 @@
         requestAnimationFrame(() => {
             if (!mapContainer.isConnected) return;
             currentMapRenderer = new window.MapPlusRenderer(mapContainer, {
-                cameraPadding: { top: 48, right: 20, bottom: 60, left: 135 }
+                cameraPadding: { top: 40, right: 20, bottom: 50, left: 20 }
             });
 
             // Replay pending player and route immediately if received during mount
