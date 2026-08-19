@@ -28,6 +28,7 @@ class MapPlusRenderer {
         this.style = options.style || 'styleAtlas';
         this._layoutTimers = [];
         this._overviewDone = false;
+        this._isFraming = false;  // true while fitBounds animation is running
 
         const t = window.GTA_MAP_TRANSFORM;
         this.GtaCRS = Object.assign({}, L.CRS.Simple, {
@@ -61,6 +62,10 @@ class MapPlusRenderer {
             boxZoom: false,
         });
 
+        // Custom pane for route layers – guarantees draw order: tiles → route outline → route → markers
+        this.map.createPane('mapplusRoute');
+        this.map.getPane('mapplusRoute').style.zIndex = 450;
+
         const ext = this.style === 'styleGrid' ? 'png' : 'jpg';
         this.tileLayer = L.tileLayer(
             `https://raw.githubusercontent.com/Trusted-Studios/mapStyles/main/${this.style}/{z}/{x}/{y}.${ext}`,
@@ -68,27 +73,39 @@ class MapPlusRenderer {
                 minZoom: 0,
                 maxZoom: 5,
                 noWrap: true,
-                keepBuffer: 2,  // Small buffer sufficient for a fixed-size notification panel
+                keepBuffer: 2,
             }
         ).addTo(this.map);
+
+        // Debug: log tile failures so we can distinguish "no route" from "no tiles"
+        this.tileLayer.on('tileerror', (event) => {
+            if (window.MapPlusDebug) {
+                console.warn('[MapPlus] tile failed:', event.tile?.src);
+                if (this._debugState) this._debugState.tileErrors++;
+            }
+        });
 
         this.routeOutline = null;
         this.routeLine = null;
         this.markers = {};
         this._lastFramedSpan = null;
 
+        // Debug health state – populated only when MapPlusDebug is set
+        if (window.MapPlusDebug) {
+            this._debugState = { routePoints: 0, lastRouteAt: 0, lastPlayerAt: 0, tileErrors: 0 };
+        }
+
+        // Release _isFraming guard after every map movement ends
+        this.map.on('moveend', () => { this._isFraming = false; });
+
         this._setupObservers();
         this._refreshLayout();
     }
 
     _refreshLayout() {
-        // Cancel any pending layout timers before scheduling new ones
         for (const id of this._layoutTimers) clearTimeout(id);
         this._layoutTimers = [];
-
-        const invalidate = () => {
-            if (this.map) this.map.invalidateSize(false);
-        };
+        const invalidate = () => { if (this.map) this.map.invalidateSize(false); };
         invalidate();
         this._layoutTimers.push(setTimeout(invalidate, 80));
         this._layoutTimers.push(setTimeout(invalidate, 250));
@@ -99,6 +116,20 @@ class MapPlusRenderer {
             this._resizeObserver = new ResizeObserver(() => this._refreshLayout());
             this._resizeObserver.observe(this.container);
         }
+    }
+
+    _fitBounds(bounds, opts = {}) {
+        // Stop any ongoing pan/zoom before starting a new fitBounds
+        this.map.stop();
+        this._isFraming = true;
+        this.map.fitBounds(bounds, {
+            paddingTopLeft: [75, 50],
+            paddingBottomRight: [35, 90],
+            maxZoom: 4,
+            animate: true,
+            duration: 0.5,
+            ...opts,
+        });
     }
 
     setCenter(x, y, zoom = 3) {
@@ -115,7 +146,6 @@ class MapPlusRenderer {
         const rotateDeg = (heading == null) ? 0 : (360 - heading) % 360;
 
         if (!this.markers['player']) {
-            // Arrow shape pointing up; inner div is rotated for heading
             const iconHtml = `
                 <div class="mapplus-arrow-inner" style="
                     width: 0; height: 0;
@@ -145,8 +175,7 @@ class MapPlusRenderer {
         if (!this.markers['destination']) {
             const iconHtml = `<div style="
                 width: 14px; height: 14px; border-radius: 50%;
-                background: #f4b914;
-                border: 2px solid #101114;
+                background: #f4b914; border: 2px solid #101114;
                 box-shadow: 0 2px 8px rgba(0,0,0,0.85);
             "></div>`;
             const icon = L.divIcon({
@@ -162,8 +191,8 @@ class MapPlusRenderer {
     }
 
     /**
-     * Main update entry point for full route+player state.
-     * Called only when route changes (not on every player tick).
+     * Main update – called when the route actually changes.
+     * Player position is embedded in the first call; subsequent player ticks use updatePlayer().
      */
     setRoute(points, destination, player) {
         if (!this.map) return;
@@ -175,13 +204,17 @@ class MapPlusRenderer {
             delete this.markers['destination'];
         }
 
-        if (player) {
-            this.setPlayer(player.x, player.y, player.heading);
+        if (player) this.setPlayer(player.x, player.y, player.heading);
+
+        if (window.MapPlusDebug && this._debugState) {
+            this._debugState.routePoints = points ? points.length : 0;
+            this._debugState.lastRouteAt = Date.now();
+            console.debug('[MapPlus] setRoute', this._debugState);
         }
 
         if (!points || points.length === 0) {
             if (this.routeOutline) { this.map.removeLayer(this.routeOutline); this.routeOutline = null; }
-            if (this.routeLine) { this.map.removeLayer(this.routeLine); this.routeLine = null; }
+            if (this.routeLine)    { this.map.removeLayer(this.routeLine);    this.routeLine    = null; }
             this._overviewDone = false;
             this._lastFramedSpan = null;
             return;
@@ -189,76 +222,63 @@ class MapPlusRenderer {
 
         const latLngs = points.map(p => [p.y, p.x]);
 
-        // Outline layer beneath for contrast (dark halo)
+        // smoothFactor: 0  – no geometry simplification at any zoom level
+        // noClip: true     – never clip segments outside the current viewport
+        // pane: 'mapplusRoute' – guaranteed draw order above tiles, below markers
+        const polyOpts = { smoothFactor: 0, noClip: true, interactive: false, pane: 'mapplusRoute' };
+
         if (!this.routeOutline) {
             this.routeOutline = L.polyline(latLngs, {
-                color: '#2a0f40',
-                weight: 9,
-                opacity: 0.85,
-                lineCap: 'round',
-                lineJoin: 'round',
-                interactive: false,
+                color: '#2a0f40', weight: 9, opacity: 0.85,
+                lineCap: 'round', lineJoin: 'round', ...polyOpts,
             }).addTo(this.map);
         } else {
             this.routeOutline.setLatLngs(latLngs);
         }
 
-        // Foreground lila line
         if (!this.routeLine) {
             this.routeLine = L.polyline(latLngs, {
-                color: '#a742ff',
-                weight: 6,
-                opacity: 1.0,
-                lineCap: 'round',
-                lineJoin: 'round',
-                interactive: false,
+                color: '#a742ff', weight: 6, opacity: 1.0,
+                lineCap: 'round', lineJoin: 'round', ...polyOpts,
             }).addTo(this.map);
         } else {
             this.routeLine.setLatLngs(latLngs);
         }
 
-        // --- Framing logic ---
+        // --- Framing ---
         try {
-            const bounds = L.latLngBounds(latLngs);
-            if (player && typeof player.x === 'number') bounds.extend([player.y, player.x]);
-            if (destination && typeof destination.x === 'number') bounds.extend([destination.y, destination.x]);
-            if (!bounds.isValid()) return;
-
             if (!this._overviewDone) {
-                // OVERVIEW MODE: First render – fit entire route so nothing is cropped
                 this._overviewDone = true;
-                this._lastFramedSpan = Math.hypot(
-                    bounds.getNorth() - bounds.getSouth(),
-                    bounds.getEast() - bounds.getWest()
-                );
-                this.map.fitBounds(bounds, {
-                    paddingTopLeft: [75, 50],
-                    paddingBottomRight: [35, 90],
-                    maxZoom: 4,
-                    animate: true,
-                    duration: 0.5,
-                });
+
+                // OVERVIEW MODE: show player + first ~500m of route (not entire long route)
+                const OVERVIEW_POINTS = Math.min(points.length, 63); // 63 × 8m ≈ 500m
+                const overviewLatLngs = latLngs.slice(0, OVERVIEW_POINTS);
+                const bounds = L.latLngBounds(overviewLatLngs);
+                if (player && typeof player.x === 'number') bounds.extend([player.y, player.x]);
+                if (destination && typeof destination.x === 'number') bounds.extend([destination.y, destination.x]);
+
+                if (bounds.isValid()) {
+                    this._lastFramedSpan = Math.hypot(
+                        bounds.getNorth() - bounds.getSouth(),
+                        bounds.getEast() - bounds.getWest()
+                    );
+                    this._fitBounds(bounds);
+                }
             } else {
-                // NAVIGATION MODE: Only re-zoom when span changes significantly (>15%)
-                const span = Math.hypot(
-                    bounds.getNorth() - bounds.getSouth(),
-                    bounds.getEast() - bounds.getWest()
-                );
+                // NAVIGATION MODE: re-fit only when remaining span changes significantly
+                const bounds = L.latLngBounds(latLngs);
+                if (player && typeof player.x === 'number') bounds.extend([player.y, player.x]);
+                if (destination && typeof destination.x === 'number') bounds.extend([destination.y, destination.x]);
+                if (!bounds.isValid()) return;
+
+                const span = Math.hypot(bounds.getNorth() - bounds.getSouth(), bounds.getEast() - bounds.getWest());
                 const spanChange = this._lastFramedSpan
-                    ? Math.abs(span - this._lastFramedSpan) / this._lastFramedSpan
-                    : 1;
+                    ? Math.abs(span - this._lastFramedSpan) / this._lastFramedSpan : 1;
 
                 if (spanChange > 0.15) {
                     this._lastFramedSpan = span;
-                    this.map.fitBounds(bounds, {
-                        paddingTopLeft: [75, 50],
-                        paddingBottomRight: [35, 90],
-                        maxZoom: 4,
-                        animate: true,
-                        duration: 0.5,
-                    });
+                    this._fitBounds(bounds);
                 }
-                // Player position update is handled separately by updatePlayer()
             }
         } catch (error) {
             if (window.MapPlusDebug) console.warn('[MapPlus] framing error', error);
@@ -266,19 +286,31 @@ class MapPlusRenderer {
     }
 
     /**
-     * Lightweight player-only update (no route redraw, no framing).
-     * Called on every 300ms tick from Lua.
+     * Lightweight player-only update – every 300ms tick.
+     * Pans the map smoothly using pixel-space drift check (zoom-aware).
      */
     updatePlayer(player) {
         if (!this.map || !player || typeof player.x !== 'number') return;
         this.setPlayer(player.x, player.y, player.heading);
 
-        // In navigation mode (after first overview fit), pan to keep player in view
-        if (!this._overviewDone) return;
+        if (window.MapPlusDebug && this._debugState) this._debugState.lastPlayerAt = Date.now();
+
+        // Don't pan while a fitBounds animation is running – they would conflict
+        if (!this._overviewDone || this._isFraming) return;
+
         try {
-            const center = this.map.getCenter();
-            const drift = Math.hypot(player.y - center.lat, player.x - center.lng);
-            if (drift > 40) {
+            // Pixel-space drift: zoom-aware, uses actual rendered container size
+            const playerPoint = this.map.latLngToContainerPoint([player.y, player.x]);
+            const size = this.map.getSize();
+
+            // Safe zone: central 60% of the map panel
+            const marginX = size.x * 0.20;
+            const marginY = size.y * 0.20;
+            const outsideSafeZone =
+                playerPoint.x < marginX || playerPoint.x > (size.x - marginX) ||
+                playerPoint.y < marginY || playerPoint.y > (size.y - marginY);
+
+            if (outsideSafeZone) {
                 this.map.panTo([player.y, player.x], { animate: true, duration: 0.4, easeLinearity: 0.5 });
             }
         } catch (e) {
@@ -287,10 +319,7 @@ class MapPlusRenderer {
     }
 
     addMarker(id, x, y, type = 'destination') {
-        if (type === 'destination') {
-            this.setDestination(x, y);
-            return;
-        }
+        if (type === 'destination') { this.setDestination(x, y); return; }
         if (this.markers[id]) this.map.removeLayer(this.markers[id]);
         const iconHtml = `<div style="background:#fff;width:12px;height:12px;border-radius:50%;border:2px solid #101114;box-shadow:0 1px 4px rgba(0,0,0,0.8);"></div>`;
         const icon = L.divIcon({ html: iconHtml, className: 'mapplus-marker', iconSize: [12, 12], iconAnchor: [6, 6] });
@@ -299,10 +328,11 @@ class MapPlusRenderer {
 
     clear() {
         if (this.routeOutline) { this.map.removeLayer(this.routeOutline); this.routeOutline = null; }
-        if (this.routeLine) { this.map.removeLayer(this.routeLine); this.routeLine = null; }
+        if (this.routeLine)    { this.map.removeLayer(this.routeLine);    this.routeLine    = null; }
         Object.values(this.markers).forEach(m => this.map.removeLayer(m));
         this.markers = {};
         this._overviewDone = false;
+        this._isFraming = false;
         this._lastFramedSpan = null;
     }
 
@@ -311,10 +341,7 @@ class MapPlusRenderer {
         this._layoutTimers = [];
         if (this._resizeObserver) this._resizeObserver.disconnect();
         this.clear();
-        if (this.map) {
-            this.map.remove();
-            this.map = null;
-        }
+        if (this.map) { this.map.remove(); this.map = null; }
     }
 }
 

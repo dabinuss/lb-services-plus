@@ -35,6 +35,8 @@
     let timerAnchorCardId = null
     let timerAnchorKey = null
     let timerAnchorStartedAt = 0
+    let lastMapRoute = null   // last mapplus:routeUpdate – rehydrates iframe on remount
+    let lastMapPlayer = null  // last mapplus:playerUpdate – rehydrates iframe on remount
     const reportedCapabilities = new Set()
     const ICON_PATHS = {
         request: ['M5 5h14v14H5z', 'M8 9h8', 'M8 13h5'],
@@ -599,7 +601,12 @@
         frame.className = 'sp-template-frame'
         frame.src = definition.ui + '?v=' + Date.now()
         frame.sandbox = 'allow-scripts allow-same-origin allow-popups'
-        frame.onload = () => postTemplateFrame(frame, payload)
+        frame.onload = () => {
+            postTemplateFrame(frame, payload)
+            // Rehydrate MapPlus state – the iframe's MapPlusRenderer is fresh on every remount
+            if (lastMapRoute)  frame.contentWindow?.postMessage(lastMapRoute,  '*')
+            if (lastMapPlayer) frame.contentWindow?.postMessage(lastMapPlayer, '*')
+        }
         frame.dataset.cardId = String(payload.id)
         frame.dataset.template = String(payload.template)
         frame.dataset.fullCard = definition.fullCard === true ? 'true' : 'false'
@@ -973,7 +980,12 @@
         if (!data?.action) return
 
         if (data.action === 'mapplus:routeUpdate' || data.action === 'mapplus:playerUpdate') {
-            const frame = lbDocument?.querySelector('.sp-template-frame') || rootDocument?.querySelector('.sp-template-frame')
+            // Cache for iframe re-hydration on remount
+            if (data.action === 'mapplus:routeUpdate') lastMapRoute = data
+            if (data.action === 'mapplus:playerUpdate') lastMapPlayer = data
+            // Use template-aware selector to avoid sending to a wrong/stale frame
+            const frame = lbDocument?.querySelector('.sp-template-frame[data-template]')
+                || rootDocument?.querySelector('.sp-template-frame[data-template]')
             if (frame?.contentWindow) {
                 frame.contentWindow.postMessage(data, '*')
             }
