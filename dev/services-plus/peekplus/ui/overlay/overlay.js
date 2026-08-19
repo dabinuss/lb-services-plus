@@ -983,11 +983,16 @@
             // Cache for iframe re-hydration on remount
             if (data.action === 'mapplus:routeUpdate') lastMapRoute = data
             if (data.action === 'mapplus:playerUpdate') lastMapPlayer = data
-            // Use template-aware selector to avoid sending to a wrong/stale frame
-            const frame = lbDocument?.querySelector('.sp-template-frame[data-template]')
-                || rootDocument?.querySelector('.sp-template-frame[data-template]')
-            if (frame?.contentWindow) {
-                frame.contentWindow.postMessage(data, '*')
+            // Broadcast to all active template frames across documents
+            const frames = [
+                ...(lbDocument ? Array.from(lbDocument.querySelectorAll('.sp-template-frame')) : []),
+                ...(rootDocument ? Array.from(rootDocument.querySelectorAll('.sp-template-frame')) : []),
+                ...Array.from(document.querySelectorAll('.sp-template-frame')),
+            ]
+            for (const frame of frames) {
+                try {
+                    frame.contentWindow?.postMessage(data, '*')
+                } catch (e) {}
             }
             return
         }
@@ -1000,6 +1005,8 @@
                 clearTimerAnchor()
                 lastState = null
                 lastRenderKey = null
+                lastMapRoute = null
+                lastMapPlayer = null
                 releasePeek(true)
                 rootDocument?.getElementById(OVERLAY_ID)?.remove()
                 lbDocument?.getElementById(OVERLAY_ID)?.remove()
@@ -1018,6 +1025,8 @@
             clearTimerAnchor()
             lastState = null
             lastRenderKey = null
+            lastMapRoute = null
+            lastMapPlayer = null
             releasePeek()
             rootDocument?.getElementById(OVERLAY_ID)?.remove()
             lbDocument?.getElementById(OVERLAY_ID)?.remove()

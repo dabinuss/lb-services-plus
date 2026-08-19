@@ -1,22 +1,17 @@
 -- =============================================================================
--- MapPlus – GPS Route Sampler  (Round 2)
--- Key changes:
---   • isRouteComplete() validation – incomplete routes never replace a good cache
---   • GetGpsBlipRouteLength() as primary maxDistance source
---   • Global fallback in findClosestRouteIndex() removed – bad proximity → resample
---   • Route-trim update every ~40m of progress (not only on full reroute)
---   • Slot selected only from validated (complete) candidates
---   • Destination snap threshold tightened to 15m
+-- MapPlus – GPS Route Sampler (v46)
+-- High-precision 5m curve sampling, slot optimization, smart route completeness
 -- =============================================================================
 
-local cachedRoute        = {}
-local cachedDest         = nil
-local lastClosestIndex   = 1
+local cachedRoute          = {}
+local cachedDest           = nil
+local lastClosestIndex     = 1
 local lastSentClosestIndex = 1   -- tracks when to push a trim update
-local staleSince         = nil   -- GetGameTimer() timestamp of first failed resample; nil = healthy
-local STALE_GRACE_MS     = 2500  -- ms to show old route before clearing after failed resamples
-local routeVersion       = 0
-local TRIM_STEP          = 5     -- send trim update every 5 route points ≈ 40m at 8m/step
+local lastGoodSlot         = 0   -- cached slot (0 or 1) to halve sampling calls
+local staleSince           = nil -- GetGameTimer() timestamp of first failed resample; nil = healthy
+local STALE_GRACE_MS       = 2500-- ms to show old route before clearing after failed resamples
+local routeVersion         = 0
+local TRIM_STEP            = 8   -- send trim update every 8 route points ≈ 40m at 5m/step
 
 local function getWaypointDestination()
     local waypointBlip = GetFirstBlipInfoId(8)
@@ -29,13 +24,20 @@ local function getWaypointDestination()
     return nil
 end
 
--- A route is only valid when its last point is within 100m of the destination.
--- This prevents accepting GPS samples that ran out before reaching the target.
-local function isRouteComplete(points, destination)
-    if not destination or #points < 2 then return false end
-    local last = points[#points]
-    local dist = #(vector2(last.x, last.y) - vector2(destination.x, destination.y))
-    return dist < 100.0
+-- Smart route completion validation:
+-- If GTA reported a GPS route length, we verify we sampled almost to the end (within 25m of total length).
+-- If not, fallback to checking distance from the last node to destination (< 100m).
+local function isRouteComplete(points, destination, gtaRouteLength, lastSuccessfulDist)
+    if not points or #points < 2 then return false end
+    if gtaRouteLength > 0 and lastSuccessfulDist > 0 then
+        return lastSuccessfulDist >= (gtaRouteLength - 25.0)
+    end
+    if destination then
+        local last = points[#points]
+        local dist = #(vector2(last.x, last.y) - vector2(destination.x, destination.y))
+        return dist < 100.0
+    end
+    return true
 end
 
 -- Score how well a set of GPS points aligns with player start and destination end.
@@ -64,25 +66,29 @@ local function sampleGpsRoute(playerCoords, destination)
 
     local maxDistance
     if gtaRouteLength > 0 then
-        -- Add 100m buffer; GTA may not place the final sample exactly at the destination
+        -- Add 100m buffer for safe sampling past the destination blip
         maxDistance = gtaRouteLength + 100.0
     else
         -- Fallback: 2.5× air-line distance, capped 2km–30km
         maxDistance = math.min(math.max(directDist * 2.5, 2000.0), 30000.0)
     end
 
-    local step                = 8.0
-    local MAX_CONSECUTIVE_FAILS = 15   -- tolerate longer gaps (bridges, tunnels)
+    local step                  = 5.0  -- 5.0m step for razor-sharp curve tracing without clipping
+    local MAX_CONSECUTIVE_FAILS = 15   -- tolerate bridges, junctions and tunnels
 
     local bestPoints = {}
     local bestScore  = 999999.0
     local anyValid   = false
 
-    for _, slot in ipairs({ 0, 1 }) do
-        local points           = {}
-        local distance         = 0.0
-        local lastPoint        = nil
-        local consecutiveFails = 0
+    -- Try last good slot first to halve sampling cost when route is stable
+    local slotsToTry = { lastGoodSlot, (lastGoodSlot == 0) and 1 or 0 }
+
+    for _, slot in ipairs(slotsToTry) do
+        local points               = {}
+        local distance             = 0.0
+        local lastPoint            = nil
+        local lastSuccessfulDist   = 0.0
+        local consecutiveFails     = 0
 
         while distance <= maxDistance and consecutiveFails < MAX_CONSECUTIVE_FAILS do
             local success, coords = GetPosAlongGpsTypeRoute(true, distance, slot)
@@ -91,8 +97,9 @@ local function sampleGpsRoute(playerCoords, destination)
                 and (coords.x ~= 0.0 or coords.y ~= 0.0)
             then
                 consecutiveFails = 0
+                lastSuccessfulDist = distance
                 if not lastPoint
-                    or #(vector2(lastPoint.x, lastPoint.y) - vector2(coords.x, coords.y)) > 2.0
+                    or #(vector2(lastPoint.x, lastPoint.y) - vector2(coords.x, coords.y)) > 1.5
                 then
                     table.insert(points, { x = coords.x, y = coords.y })
                     lastPoint = coords
@@ -103,7 +110,7 @@ local function sampleGpsRoute(playerCoords, destination)
             distance = distance + step
         end
 
-        -- Snap last point to destination only when very close (≤15m) to avoid diagonal
+        -- Snap last point to destination only when very close (≤15m) to avoid diagonal cuts
         if destination and lastPoint then
             local distToDest = #(vector2(lastPoint.x, lastPoint.y) - vector2(destination.x, destination.y))
             if distToDest > 1.0 and distToDest <= 15.0 then
@@ -112,17 +119,21 @@ local function sampleGpsRoute(playerCoords, destination)
         end
 
         -- Only consider this slot if the route actually reaches the destination
-        if isRouteComplete(points, destination) then
+        if isRouteComplete(points, destination, gtaRouteLength, lastSuccessfulDist) then
             anyValid = true
             local score = scoreSlotPoints(points, playerCoords, destination)
             if score < bestScore then
-                bestScore  = score
-                bestPoints = points
+                bestScore    = score
+                bestPoints   = points
+                lastGoodSlot = slot
+            end
+            -- If the primary slot was complete and close to the player (< 30m), finish immediately
+            if score < 60.0 then
+                break
             end
         end
     end
 
-    -- If no slot produced a complete route, return empty to signal failure
     if not anyValid then
         return {}
     end
@@ -130,11 +141,10 @@ local function sampleGpsRoute(playerCoords, destination)
 end
 
 -- Monotone window search.
--- IMPORTANT: global fallback removed. If minDist > 45m the caller triggers a resample.
--- This prevents route jumping on parallel roads and loops.
+-- If minDist > 45m the caller triggers a resample (no global index jumps).
 local function findClosestRouteIndex(playerPos, points, lastIdx)
     local windowStart = math.max(1, lastIdx - 10)
-    local windowEnd   = math.min(#points, lastIdx + 80)
+    local windowEnd   = math.min(#points, lastIdx + 120) -- 120 * 5m = 600m forward window
 
     local closestIdx = lastIdx
     local minDist    = 999999.0
@@ -147,8 +157,6 @@ local function findClosestRouteIndex(playerPos, points, lastIdx)
         end
     end
 
-    -- No global fallback: if we're too far from the window, just return lastIdx
-    -- The caller will see minDist > 45 and trigger a resample.
     return closestIdx, minDist
 end
 
@@ -171,11 +179,13 @@ CreateThread(function()
         local destination   = getWaypointDestination()
         local isNavActive   = IsWaypointActive() or destination ~= nil
 
-        -- ── Player update (always, every tick) ──────────────────────────────
-        SendNUIMessage({
-            action = "mapplus:playerUpdate",
-            player = { x = playerCoords.x, y = playerCoords.y, heading = playerHeading },
-        })
+        -- ── Player update: only stream NUI traffic when navigation is active ──
+        if isNavActive then
+            SendNUIMessage({
+                action = "mapplus:playerUpdate",
+                player = { x = playerCoords.x, y = playerCoords.y, heading = playerHeading },
+            })
+        end
 
         -- ── Route logic ─────────────────────────────────────────────────────
         if not isNavActive then
@@ -196,7 +206,7 @@ CreateThread(function()
                 lastClosestIndex = closestIdx
 
                 if minDist > 45.0 then
-                    -- Too far from known route window → reroute instead of jumping
+                    -- Too far from known route window → reroute cleanly
                     needsResample = true
                 else
                     -- Build trimmed remaining route (no player position prepended)
@@ -206,7 +216,7 @@ CreateThread(function()
                     end
                     currentRoutePoints = remaining
 
-                    -- Send trim update every ~40m of forward progress
+                    -- Send trim update every ~40m of forward progress (8 points * 5m)
                     if closestIdx - lastSentClosestIndex >= TRIM_STEP then
                         lastSentClosestIndex = closestIdx
                         routeVersion = routeVersion + 1
@@ -217,7 +227,6 @@ CreateThread(function()
             if needsResample then
                 local freshPoints = sampleGpsRoute(playerCoords, destination)
                 if #freshPoints > 1 then
-                    -- freshPoints is already validated complete by sampleGpsRoute
                     staleSince           = nil
                     cachedRoute          = freshPoints
                     cachedDest           = destination

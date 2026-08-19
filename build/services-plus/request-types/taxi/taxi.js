@@ -21,10 +21,14 @@
     let currentMapRenderer = null;
     let activeCardMounted = false;
     let currentActiveElements = null;
+    let pendingRoute = null;
+    let pendingPlayer = null;
 
     function renderPending(payload, card) {
         activeCardMounted = false;
         currentActiveElements = null;
+        pendingRoute = null;
+        pendingPlayer = null;
         if (currentMapRenderer) {
             currentMapRenderer.destroy();
             currentMapRenderer = null;
@@ -117,31 +121,42 @@
 
         currentActiveElements = { distanceEl, peopleEl, heading };
 
-        // Initialize MapPlus
+        // Initialize MapPlus deterministically via requestAnimationFrame
         if (currentMapRenderer) {
             currentMapRenderer.destroy();
             currentMapRenderer = null;
         }
-        setTimeout(() => {
+
+        requestAnimationFrame(() => {
+            if (!mapContainer.isConnected) return;
             currentMapRenderer = new window.MapPlusRenderer(mapContainer);
-            if (card.templateData?.pos) {
+
+            // Replay pending player and route immediately if received during mount
+            if (pendingPlayer) {
+                currentMapRenderer.updatePlayer(pendingPlayer.player);
+            }
+            if (pendingRoute) {
+                currentMapRenderer.setRoute(pendingRoute.points, pendingRoute.destination, pendingPlayer?.player);
+            } else if (card.templateData?.pos) {
                 currentMapRenderer.setCenter(card.templateData.pos.x, card.templateData.pos.y, 3);
                 currentMapRenderer.addMarker('pickup', card.templateData.pos.x, card.templateData.pos.y, 'destination');
             } else {
                 currentMapRenderer.setCenter(0, 0, 3);
             }
-        }, 20);
+        });
     }
 
     function render(payload) {
         if (payload.action === 'mapplus:routeUpdate') {
+            pendingRoute = payload;
             if (currentMapRenderer) {
-                currentMapRenderer.setRoute(payload.points, payload.destination, payload.player);
+                currentMapRenderer.setRoute(payload.points, payload.destination, pendingPlayer?.player);
             }
             return;
         }
 
         if (payload.action === 'mapplus:playerUpdate') {
+            pendingPlayer = payload;
             if (currentMapRenderer) {
                 currentMapRenderer.updatePlayer(payload.player);
             }

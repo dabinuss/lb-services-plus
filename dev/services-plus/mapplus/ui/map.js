@@ -1,19 +1,10 @@
 // =============================================================================
-// MapPlus – GTA V Navigation Renderer
-// Single source of truth for CRS calibration and rendering.
+// MapPlus – GTA V Navigation Renderer (v51)
+// Direct and unconditional upper-right quadrant projection.
 // =============================================================================
 
 /**
  * Single authoritative GTA V → Leaflet coordinate transform.
- * debug.html MUST import this file and use window.GTA_MAP_TRANSFORM instead
- * of defining its own CRS, to guarantee zero drift between debug and production.
- *
- * How to re-calibrate:
- *   1. Open debug.html with calibration mode enabled
- *   2. Place 10 markers across the full map (LSIA to Paleto Bay)
- *   3. Adjust scaleX/offsetX until ALL markers match their GTA coordinates
- *   4. If only LS fits but Paleto drifts → adjust scaleX (scale error)
- *   5. If all drift uniformly → adjust offsetX / offsetY (offset error)
  */
 window.GTA_MAP_TRANSFORM = {
     scaleX:  0.02072,
@@ -27,8 +18,9 @@ class MapPlusRenderer {
         this.container = container;
         this.style = options.style || 'styleAtlas';
         this._layoutTimers = [];
-        this._overviewDone = false;
-        this._isFraming = false;  // true while fitBounds animation is running
+        this._lastPlayer = null;
+        this._lastDestination = null;
+        this._currentBounds = null;
 
         const t = window.GTA_MAP_TRANSFORM;
         this.GtaCRS = Object.assign({}, L.CRS.Simple, {
@@ -47,26 +39,22 @@ class MapPlusRenderer {
             zoomSnap: 0.25,
             zoomDelta: 0.5,
             zoomAnimation: true,
-            fadeAnimation: true,
+            fadeAnimation: false,
             markerZoomAnimation: true,
             center: [-1000, 150],
             zoom: 3,
             zoomControl: false,
             attributionControl: false,
-            // Non-interactive: this is a navigation display, not an explorable map
             dragging: false,
             scrollWheelZoom: false,
             doubleClickZoom: false,
             touchZoom: false,
             keyboard: false,
             boxZoom: false,
-            // GTA V world bounds – prevents Leaflet from requesting tiles outside coverage
-            // South/West corner ≈ (-4000, -4400), North/East corner ≈ (8000, 8000) in GTA coords
             maxBounds: [[-4400, -4000], [8000, 8000]],
-            maxBoundsViscosity: 0.0, // don't rubber-band – map is non-interactive anyway
+            maxBoundsViscosity: 0.0,
         });
 
-        // Custom pane for route layers – guarantees draw order: tiles → route outline → route → markers
         this.map.createPane('mapplusRoute');
         this.map.getPane('mapplusRoute').style.zIndex = 450;
 
@@ -81,7 +69,6 @@ class MapPlusRenderer {
             }
         ).addTo(this.map);
 
-        // Debug: log tile failures so we can distinguish "no route" from "no tiles"
         this.tileLayer.on('tileerror', (event) => {
             if (window.MapPlusDebug) {
                 console.warn('[MapPlus] tile failed:', event.tile?.src);
@@ -92,15 +79,10 @@ class MapPlusRenderer {
         this.routeOutline = null;
         this.routeLine = null;
         this.markers = {};
-        this._lastFramedSpan = null;
 
-        // Debug health state – populated only when MapPlusDebug is set
         if (window.MapPlusDebug) {
             this._debugState = { routePoints: 0, lastRouteAt: 0, lastPlayerAt: 0, tileErrors: 0 };
         }
-
-        // Release _isFraming guard after every map movement ends
-        this.map.on('moveend', () => { this._isFraming = false; });
 
         this._setupObservers();
         this._refreshLayout();
@@ -109,10 +91,18 @@ class MapPlusRenderer {
     _refreshLayout() {
         for (const id of this._layoutTimers) clearTimeout(id);
         this._layoutTimers = [];
-        const invalidate = () => { if (this.map) this.map.invalidateSize(false); };
+        const invalidate = () => {
+            if (this.map) {
+                this.map.invalidateSize(false);
+                if (this._currentBounds) {
+                    this._frameRouteUpperRight(this._currentBounds, { animate: false });
+                }
+            }
+        };
         invalidate();
-        this._layoutTimers.push(setTimeout(invalidate, 80));
-        this._layoutTimers.push(setTimeout(invalidate, 250));
+        this._layoutTimers.push(setTimeout(invalidate, 50));
+        this._layoutTimers.push(setTimeout(invalidate, 150));
+        this._layoutTimers.push(setTimeout(invalidate, 350));
     }
 
     _setupObservers() {
@@ -122,17 +112,54 @@ class MapPlusRenderer {
         }
     }
 
-    _fitBounds(bounds, opts = {}) {
-        // Stop any ongoing pan/zoom before starting a new fitBounds
+    /**
+     * Mathematically projects the route bounding box (Player + Route + Destination)
+     * strictly into the free upper-right quadrant of the card (clear of left header and bottom buttons).
+     */
+    _frameRouteUpperRight(bounds, opts = {}) {
+        if (!this.map || !bounds || !bounds.isValid()) return;
         this.map.stop();
-        this._isFraming = true;
-        this.map.fitBounds(bounds, {
-            paddingTopLeft: [75, 50],
-            paddingBottomRight: [35, 90],
-            maxZoom: 4,
-            animate: true,
-            duration: 0.5,
-            ...opts,
+
+        const size = this.map.getSize();
+        const width = (size && size.x > 50) ? size.x : (this.container?.offsetWidth || 320);
+        const height = (size && size.y > 50) ? size.y : (this.container?.offsetHeight || 224);
+
+        // The free upper-right window in the PeekPlus card is:
+        // Left offset: 145px (completely clears the Taxi Header on the left)
+        // Bottom offset: 95px (completely clears the Action Buttons at the bottom)
+        const targetWidth = Math.max(90, width - 160);
+        const targetHeight = Math.max(75, height - 120);
+
+        // Compute zoom level so the full route (player to destination) fits inside the window
+        const padX = width - targetWidth;
+        const padY = height - targetHeight;
+        let zoom = this.map.getBoundsZoom(bounds, false, [padX, padY]);
+        zoom = Math.max(1.0, Math.min(4.25, zoom));
+
+        // Center of the target window in screen pixel space
+        const targetScreenX = 145 + (targetWidth / 2);  // ~225px (comfortably on the right)
+        const targetScreenY = 25 + (targetHeight / 2);   // ~77px (comfortably at top)
+
+        // Screen center
+        const screenCenterX = width / 2;
+        const screenCenterY = height / 2;
+
+        // Pixel offset from screen center to target window center
+        const dx = targetScreenX - screenCenterX;
+        const dy = targetScreenY - screenCenterY;
+
+        // The geographic center of the route
+        const routeCenter = bounds.getCenter();
+        const projectedRoute = this.map.project(routeCenter, zoom);
+
+        // Shift camera center so the route appears at targetScreenX, targetScreenY
+        const targetMapProjected = L.point(projectedRoute.x - dx, projectedRoute.y - dy);
+        const targetMapCenter = this.map.unproject(targetMapProjected, zoom);
+
+        this.map.setView(targetMapCenter, zoom, {
+            animate: opts.animate !== false,
+            duration: opts.duration || 0.4,
+            easeLinearity: 0.3,
         });
     }
 
@@ -144,6 +171,7 @@ class MapPlusRenderer {
 
     setPlayer(x, y, heading) {
         if (!this.map || typeof x !== 'number' || typeof y !== 'number') return;
+        this._lastPlayer = { x, y, heading };
 
         // GTA V heading: 0=North, counter-clockwise (90=West, 270=East).
         // CSS rotation: clockwise from up. Conversion: (360 - gtaHeading) % 360
@@ -176,6 +204,8 @@ class MapPlusRenderer {
 
     setDestination(x, y) {
         if (!this.map || typeof x !== 'number' || typeof y !== 'number') return;
+        this._lastDestination = { x, y };
+
         if (!this.markers['destination']) {
             const iconHtml = `<div style="
                 width: 14px; height: 14px; border-radius: 50%;
@@ -195,40 +225,39 @@ class MapPlusRenderer {
     }
 
     /**
-     * Main update – called when the route actually changes.
-     * Player position is embedded in the first call; subsequent player ticks use updatePlayer().
+     * Main update – sets the route polyline and projects BOTH player and destination
+     * into the upper-right quadrant.
      */
     setRoute(points, destination, player) {
         if (!this.map) return;
+
+        const effectivePlayer = player || this._lastPlayer;
 
         if (destination) {
             this.setDestination(destination.x, destination.y);
         } else if (this.markers['destination']) {
             this.map.removeLayer(this.markers['destination']);
             delete this.markers['destination'];
+            this._lastDestination = null;
         }
 
-        if (player) this.setPlayer(player.x, player.y, player.heading);
+        if (effectivePlayer) {
+            this.setPlayer(effectivePlayer.x, effectivePlayer.y, effectivePlayer.heading);
+        }
 
         if (window.MapPlusDebug && this._debugState) {
             this._debugState.routePoints = points ? points.length : 0;
             this._debugState.lastRouteAt = Date.now();
-            console.debug('[MapPlus] setRoute', this._debugState);
         }
 
         if (!points || points.length === 0) {
             if (this.routeOutline) { this.map.removeLayer(this.routeOutline); this.routeOutline = null; }
             if (this.routeLine)    { this.map.removeLayer(this.routeLine);    this.routeLine    = null; }
-            this._overviewDone = false;
-            this._lastFramedSpan = null;
+            this._currentBounds = null;
             return;
         }
 
         const latLngs = points.map(p => [p.y, p.x]);
-
-        // smoothFactor: 0  – no geometry simplification at any zoom level
-        // noClip: true     – never clip segments outside the current viewport
-        // pane: 'mapplusRoute' – guaranteed draw order above tiles, below markers
         const polyOpts = { smoothFactor: 0, noClip: true, interactive: false, pane: 'mapplusRoute' };
 
         if (!this.routeOutline) {
@@ -249,44 +278,22 @@ class MapPlusRenderer {
             this.routeLine.setLatLngs(latLngs);
         }
 
-        // --- Framing ---
+        // --- Framing: ALWAYS project Player, Destination, and Route in upper-right ---
         try {
-            if (!this._overviewDone) {
-                this._overviewDone = true;
+            const bounds = L.latLngBounds(latLngs);
 
-                // OVERVIEW MODE: show player + first ~500m of route (not entire long route)
-                const OVERVIEW_POINTS = Math.min(points.length, 63); // 63 × 8m ≈ 500m
-                const overviewLatLngs = latLngs.slice(0, OVERVIEW_POINTS);
-                const bounds = L.latLngBounds(overviewLatLngs);
-                if (player && typeof player.x === 'number') bounds.extend([player.y, player.x]);
-                if (destination && typeof destination.x === 'number') bounds.extend([destination.y, destination.x]);
-
-                if (bounds.isValid()) {
-                    this._lastFramedSpan = Math.hypot(
-                        bounds.getNorth() - bounds.getSouth(),
-                        bounds.getEast() - bounds.getWest()
-                    );
-                    this._fitBounds(bounds);
-                }
-            } else {
-                // NAVIGATION MODE: re-fit only when horizon span changes significantly.
-                // Use the same forward-horizon as overview (first ~640m) so the map
-                // never zooms out to show a 5km route in a tiny notification panel.
-                const NAV_POINTS = Math.min(latLngs.length, 80); // 80 × 8m ≈ 640m
-                const navLatLngs = latLngs.slice(0, NAV_POINTS);
-                const bounds = L.latLngBounds(navLatLngs);
-                if (player && typeof player.x === 'number') bounds.extend([player.y, player.x]);
-                if (!bounds.isValid()) return;
-
-                const span = Math.hypot(bounds.getNorth() - bounds.getSouth(), bounds.getEast() - bounds.getWest());
-                const spanChange = this._lastFramedSpan
-                    ? Math.abs(span - this._lastFramedSpan) / this._lastFramedSpan : 1;
-
-                if (spanChange > 0.15) {
-                    this._lastFramedSpan = span;
-                    this._fitBounds(bounds);
-                }
+            if (effectivePlayer && typeof effectivePlayer.x === 'number') {
+                bounds.extend([effectivePlayer.y, effectivePlayer.x]);
             }
+            if (destination && typeof destination.x === 'number') {
+                bounds.extend([destination.y, destination.x]);
+            }
+
+            if (!bounds.isValid()) return;
+            this._currentBounds = bounds;
+
+            // Frame unconditionally to ensure the view updates immediately
+            this._frameRouteUpperRight(bounds);
         } catch (error) {
             if (window.MapPlusDebug) console.warn('[MapPlus] framing error', error);
         }
@@ -294,7 +301,7 @@ class MapPlusRenderer {
 
     /**
      * Lightweight player-only update – every 300ms tick.
-     * Pans the map smoothly using pixel-space drift check (zoom-aware).
+     * Ensures player and destination remain clearly within the visible upper-right quadrant.
      */
     updatePlayer(player) {
         if (!this.map || !player || typeof player.x !== 'number') return;
@@ -302,26 +309,43 @@ class MapPlusRenderer {
 
         if (window.MapPlusDebug && this._debugState) this._debugState.lastPlayerAt = Date.now();
 
-        // Don't pan while a fitBounds animation is running – they would conflict
-        if (!this._overviewDone || this._isFraming) return;
-
         try {
-            // Pixel-space drift: zoom-aware, uses actual rendered container size
-            const playerPoint = this.map.latLngToContainerPoint([player.y, player.x]);
             const size = this.map.getSize();
+            if (!size || size.x === 0 || size.y === 0) return;
 
-            // Safe zone: central 60% of the map panel
-            const marginX = size.x * 0.20;
-            const marginY = size.y * 0.20;
-            const outsideSafeZone =
-                playerPoint.x < marginX || playerPoint.x > (size.x - marginX) ||
-                playerPoint.y < marginY || playerPoint.y > (size.y - marginY);
+            const playerPoint = this.map.latLngToContainerPoint([player.y, player.x]);
 
-            if (outsideSafeZone) {
-                this.map.panTo([player.y, player.x], { animate: true, duration: 0.4, easeLinearity: 0.5 });
+            if (this._lastDestination && typeof this._lastDestination.x === 'number') {
+                const destPoint = this.map.latLngToContainerPoint([this._lastDestination.y, this._lastDestination.x]);
+
+                const isOutOfSafeZone = (p) => {
+                    return p.x < 140 || p.x > (size.x - 15) || p.y < 20 || p.y > (size.y - 90);
+                };
+
+                if (isOutOfSafeZone(playerPoint) || isOutOfSafeZone(destPoint)) {
+                    const bounds = L.latLngBounds([
+                        [player.y, player.x],
+                        [this._lastDestination.y, this._lastDestination.x]
+                    ]);
+                    if (this.routeLine) {
+                        bounds.extend(this.routeLine.getBounds());
+                    }
+                    this._currentBounds = bounds;
+                    this._frameRouteUpperRight(bounds);
+                }
+            } else {
+                const marginX = size.x * 0.20;
+                const marginY = size.y * 0.20;
+                const outsideSafeZone =
+                    playerPoint.x < marginX || playerPoint.x > (size.x - marginX) ||
+                    playerPoint.y < marginY || playerPoint.y > (size.y - marginY);
+
+                if (outsideSafeZone) {
+                    this.map.panTo([player.y, player.x], { animate: true, duration: 0.4, easeLinearity: 0.5 });
+                }
             }
         } catch (e) {
-            if (window.MapPlusDebug) console.warn('[MapPlus] pan error', e);
+            if (window.MapPlusDebug) console.warn('[MapPlus] pan/frame error', e);
         }
     }
 
@@ -338,9 +362,8 @@ class MapPlusRenderer {
         if (this.routeLine)    { this.map.removeLayer(this.routeLine);    this.routeLine    = null; }
         Object.values(this.markers).forEach(m => this.map.removeLayer(m));
         this.markers = {};
-        this._overviewDone = false;
-        this._isFraming = false;
-        this._lastFramedSpan = null;
+        this._lastDestination = null;
+        this._currentBounds = null;
     }
 
     destroy() {
