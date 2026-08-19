@@ -3,22 +3,25 @@ class MapPlusRenderer {
         this.container = container;
         this.style = options.style || 'styleAtlas';
         
-        // Fine-tuned GTA V CRS with native Transformation matrix
+        // Calibrated GTA V CRS transformation with exact road alignment
         this.GtaCRS = Object.assign({}, L.CRS.Simple, {
             projection: L.Projection.LonLat,
             scale: (zoom) => Math.pow(2, zoom),
             zoom: (sc) => Math.log(sc) / Math.LN2,
             distance: (pos1, pos2) => Math.hypot(pos2.lng - pos1.lng, pos2.lat - pos1.lat),
-            transformation: new L.Transformation(0.02072, 117.15, -0.0205, 172.5),
+            transformation: new L.Transformation(0.02075, 118.65, -0.0205, 173.0),
             infinite: true,
         });
 
         this.map = L.map(container, {
             crs: this.GtaCRS,
-            minZoom: 2,
+            minZoom: 1,
             maxZoom: 5,
-            zoomSnap: 1,
-            zoomDelta: 1,
+            zoomSnap: 0.25,
+            zoomDelta: 0.5,
+            zoomAnimation: true,
+            fadeAnimation: true,
+            markerZoomAnimation: true,
             center: [-1000, 150],
             zoom: 3,
             zoomControl: false,
@@ -26,10 +29,23 @@ class MapPlusRenderer {
         });
 
         const ext = this.style === 'styleGrid' ? 'png' : 'jpg';
-        this.tileLayer = L.tileLayer(`https://raw.githubusercontent.com/Trusted-Studios/mapStyles/main/${this.style}/{z}/{x}/{y}.${ext}`, {
+
+        // Seamless tile layer subclass that forces 258x258 dimensions and -1px margin
+        const SeamlessTileLayer = L.TileLayer.extend({
+            createTile: function(coords, done) {
+                const tile = L.TileLayer.prototype.createTile.call(this, coords, done);
+                tile.style.width = '258px';
+                tile.style.height = '258px';
+                tile.style.margin = '-1px';
+                return tile;
+            }
+        });
+
+        this.tileLayer = new SeamlessTileLayer(`https://raw.githubusercontent.com/Trusted-Studios/mapStyles/main/${this.style}/{z}/{x}/{y}.${ext}`, {
             minZoom: 0,
             maxZoom: 5,
-            noWrap: true
+            noWrap: true,
+            keepBuffer: 6
         }).addTo(this.map);
 
         this.routeLine = null;
@@ -62,7 +78,7 @@ class MapPlusRenderer {
 
     setCenter(x, y, zoom = 3) {
         if (!this.map) return;
-        this.map.setView([y, x], Math.round(zoom));
+        this.map.setView([y, x], zoom);
         this.refreshLayout();
     }
 
@@ -97,12 +113,22 @@ class MapPlusRenderer {
 
         if (destination) {
             this.setDestination(destination.x, destination.y);
+        } else if (this.markers['destination']) {
+            this.map.removeLayer(this.markers['destination']);
+            delete this.markers['destination'];
         }
 
         if (!points || points.length === 0) {
             if (this.routeLine) {
                 this.map.removeLayer(this.routeLine);
                 this.routeLine = null;
+            }
+            // When no active route (e.g. arrived at destination), follow the player smoothly
+            if (player && typeof player.x === 'number') {
+                const currentCenter = this.map.getCenter();
+                if (Math.hypot(player.y - currentCenter.lat, player.x - currentCenter.lng) > 30.0) {
+                    this.map.panTo([player.y, player.x], { animate: true, duration: 0.5 });
+                }
             }
             return;
         }
@@ -123,7 +149,7 @@ class MapPlusRenderer {
             this.routeLine.setLatLngs(latLngs);
         }
 
-        // Dynamic auto-zoom and framing as the player drives closer or further away
+        // Buttery smooth dynamic auto-zoom and framing as you drive
         try {
             const bounds = L.latLngBounds(latLngs);
             if (player && typeof player.x === 'number') bounds.extend([player.y, player.x]);
@@ -133,21 +159,22 @@ class MapPlusRenderer {
                 const center = bounds.getCenter();
                 const span = Math.hypot(bounds.getNorth() - bounds.getSouth(), bounds.getEast() - bounds.getWest());
 
-                // Refit when moving noticeably (20m) or when distance span changes by 10%
+                // Refit smoothly when moving or when zoom scale changes
                 const shouldRefit = !this._lastFramedCenter 
-                    || Math.hypot(center.lat - this._lastFramedCenter.lat, center.lng - this._lastFramedCenter.lng) > 20.0
+                    || Math.hypot(center.lat - this._lastFramedCenter.lat, center.lng - this._lastFramedCenter.lng) > 25.0
                     || !this._lastFramedSpan
                     || Math.abs(span - this._lastFramedSpan) / this._lastFramedSpan > 0.10;
 
                 if (shouldRefit) {
                     this._lastFramedCenter = center;
                     this._lastFramedSpan = span;
-                    this.map.fitBounds(bounds, {
-                        paddingTopLeft: [55, 35],     // Header / distance clearance
-                        paddingBottomRight: [25, 75], // 75px bottom clearance above buttons
-                        minZoom: 2,
+                    this.map.flyToBounds(bounds, {
+                        paddingTopLeft: [75, 50],     // 75px clearance from left header, 50px from top
+                        paddingBottomRight: [35, 85], // 35px from right, 85px clearance above buttons
+                        minZoom: 1.5,
                         maxZoom: 4,
-                        animate: false
+                        duration: 0.6,
+                        easeLinearity: 0.3
                     });
                 }
             }

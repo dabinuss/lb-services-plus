@@ -13,30 +13,39 @@ local function getWaypointDestination()
     return nil
 end
 
-local function sampleGpsRoute()
+local function sampleGpsRoute(destination)
     local points = {}
     local slots = { 0, 1 }
     
     for _, slot in ipairs(slots) do
         local distance = 0.0
-        local maxDistance = 25000.0
+        local maxDistance = 30000.0
         local step = 8.0
         local lastPoint = nil
+        local consecutiveFails = 0
         
-        while distance <= maxDistance do
+        while distance <= maxDistance and consecutiveFails < 6 do
             local success, coords = GetPosAlongGpsTypeRoute(true, distance, slot)
             if (success == true or success == 1) and coords and (coords.x ~= 0.0 or coords.y ~= 0.0) then
+                consecutiveFails = 0
                 if not lastPoint or #(vector2(lastPoint.x, lastPoint.y) - vector2(coords.x, coords.y)) > 2.0 then
                     table.insert(points, { x = coords.x, y = coords.y })
                     lastPoint = coords
                 end
-                distance = distance + step
             else
-                break
+                consecutiveFails = consecutiveFails + 1
             end
+            distance = distance + step
         end
         
         if #points > 1 then
+            -- Only connect the last few meters to destination if path actually reached it
+            if destination and lastPoint then
+                local distToDest = #(vector2(lastPoint.x, lastPoint.y) - vector2(destination.x, destination.y))
+                if distToDest > 3.0 and distToDest < 60.0 then
+                    table.insert(points, { x = destination.x, y = destination.y })
+                end
+            end
             return points
         end
         points = {}
@@ -59,7 +68,7 @@ end
 
 CreateThread(function()
     while true do
-        Wait(350)
+        Wait(300)
         
         local playerPed = PlayerPedId()
         local playerCoords = GetEntityCoords(playerPed)
@@ -80,7 +89,7 @@ CreateThread(function()
             
             if not needsResample and #cachedRoute > 1 then
                 local closestIdx, minDist = findClosestRouteIndex(playerCoords, cachedRoute)
-                if minDist > 40.0 then
+                if minDist > 45.0 then
                     -- Player diverged from route, resample from GTA
                     needsResample = true
                 else
@@ -94,46 +103,29 @@ CreateThread(function()
             end
             
             if needsResample then
-                local freshPoints = sampleGpsRoute()
+                local freshPoints = sampleGpsRoute(destination)
                 if #freshPoints > 1 then
-                    if destination then
-                        local lastP = freshPoints[#freshPoints]
-                        if #(vector2(lastP.x, lastP.y) - vector2(destination.x, destination.y)) > 3.0 then
-                            table.insert(freshPoints, { x = destination.x, y = destination.y })
-                        end
-                    end
                     cachedRoute = freshPoints
                     cachedDest = destination
                     currentRoutePoints = freshPoints
                 end
             end
-            
-            SendNUIMessage({
-                action = "mapplus:routeUpdate",
-                points = currentRoutePoints,
-                destination = destination,
-                player = {
-                    x = playerCoords.x,
-                    y = playerCoords.y,
-                    heading = playerHeading
-                }
-            })
         else
-            if #currentRoutePoints > 0 or #cachedRoute > 0 then
-                currentRoutePoints = {}
-                cachedRoute = {}
-                cachedDest = nil
-                SendNUIMessage({
-                    action = "mapplus:routeUpdate",
-                    points = {},
-                    destination = nil,
-                    player = {
-                        x = playerCoords.x,
-                        y = playerCoords.y,
-                        heading = playerHeading
-                    }
-                })
-            end
+            currentRoutePoints = {}
+            cachedRoute = {}
+            cachedDest = nil
         end
+        
+        -- Always send live player updates even when navigation ends
+        SendNUIMessage({
+            action = "mapplus:routeUpdate",
+            points = currentRoutePoints,
+            destination = destination,
+            player = {
+                x = playerCoords.x,
+                y = playerCoords.y,
+                heading = playerHeading
+            }
+        })
     end
 end)

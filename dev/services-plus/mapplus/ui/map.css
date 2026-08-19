@@ -13,10 +13,20 @@
     background-color: #0d2133 !important;
 }
 
+.leaflet-tile-container {
+    image-rendering: -webkit-optimize-contrast;
+}
+
+/* Seamless tiles with 1px margin overlap to eliminate seams completely */
 .leaflet-tile {
+    width: 258px !important;
+    height: 258px !important;
+    margin: -1px !important;
     outline: 1px solid transparent;
     -webkit-backface-visibility: hidden;
     backface-visibility: hidden;
+    -webkit-transform-style: preserve-3d;
+    transform-style: preserve-3d;
 }
 
 /* Smooth route line transition */
