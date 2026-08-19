@@ -60,6 +60,10 @@ class MapPlusRenderer {
             touchZoom: false,
             keyboard: false,
             boxZoom: false,
+            // GTA V world bounds – prevents Leaflet from requesting tiles outside coverage
+            // South/West corner ≈ (-4000, -4400), North/East corner ≈ (8000, 8000) in GTA coords
+            maxBounds: [[-4400, -4000], [8000, 8000]],
+            maxBoundsViscosity: 0.0, // don't rubber-band – map is non-interactive anyway
         });
 
         // Custom pane for route layers – guarantees draw order: tiles → route outline → route → markers
@@ -265,10 +269,13 @@ class MapPlusRenderer {
                     this._fitBounds(bounds);
                 }
             } else {
-                // NAVIGATION MODE: re-fit only when remaining span changes significantly
-                const bounds = L.latLngBounds(latLngs);
+                // NAVIGATION MODE: re-fit only when horizon span changes significantly.
+                // Use the same forward-horizon as overview (first ~640m) so the map
+                // never zooms out to show a 5km route in a tiny notification panel.
+                const NAV_POINTS = Math.min(latLngs.length, 80); // 80 × 8m ≈ 640m
+                const navLatLngs = latLngs.slice(0, NAV_POINTS);
+                const bounds = L.latLngBounds(navLatLngs);
                 if (player && typeof player.x === 'number') bounds.extend([player.y, player.x]);
-                if (destination && typeof destination.x === 'number') bounds.extend([destination.y, destination.x]);
                 if (!bounds.isValid()) return;
 
                 const span = Math.hypot(bounds.getNorth() - bounds.getSouth(), bounds.getEast() - bounds.getWest());

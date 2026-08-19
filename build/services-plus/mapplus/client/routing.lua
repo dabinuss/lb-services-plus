@@ -13,8 +13,8 @@ local cachedRoute        = {}
 local cachedDest         = nil
 local lastClosestIndex   = 1
 local lastSentClosestIndex = 1   -- tracks when to push a trim update
-local staleCount         = 0
-local MAX_STALE          = 3
+local staleSince         = nil   -- GetGameTimer() timestamp of first failed resample; nil = healthy
+local STALE_GRACE_MS     = 2500  -- ms to show old route before clearing after failed resamples
 local routeVersion       = 0
 local TRIM_STEP          = 5     -- send trim update every 5 route points ≈ 40m at 8m/step
 
@@ -184,7 +184,7 @@ CreateThread(function()
                 cachedDest             = nil
                 lastClosestIndex       = 1
                 lastSentClosestIndex   = 1
-                staleCount             = 0
+                staleSince             = nil
                 routeVersion           = routeVersion + 1
                 SendNUIMessage({ action = "mapplus:routeUpdate", points = {}, destination = nil })
             end
@@ -218,7 +218,7 @@ CreateThread(function()
                 local freshPoints = sampleGpsRoute(playerCoords, destination)
                 if #freshPoints > 1 then
                     -- freshPoints is already validated complete by sampleGpsRoute
-                    staleCount           = 0
+                    staleSince           = nil
                     cachedRoute          = freshPoints
                     cachedDest           = destination
                     lastClosestIndex     = 1
@@ -226,9 +226,13 @@ CreateThread(function()
                     currentRoutePoints   = freshPoints
                     routeVersion         = routeVersion + 1
                 else
-                    staleCount = staleCount + 1
-                    if staleCount >= MAX_STALE then
-                        -- Give up on stale route; clear the display
+                    -- Start grace timer on first failure; GTA may be briefly re-routing
+                    if staleSince == nil then
+                        staleSince = GetGameTimer()
+                    end
+                    -- Only clear after grace period to avoid flicker during reroutes
+                    if (GetGameTimer() - staleSince) >= STALE_GRACE_MS then
+                        staleSince           = nil
                         currentRoutePoints   = {}
                         cachedRoute          = {}
                         lastSentClosestIndex = 1

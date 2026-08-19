@@ -31,10 +31,6 @@
     display: none !important;
 }
 
-/* Smooth route line stroke-width transitions */
-.leaflet-interactive {
-    transition: stroke-width 0.2s;
-}
 
 /* Player arrow marker – no pointer events */
 .mapplus-player-marker,
