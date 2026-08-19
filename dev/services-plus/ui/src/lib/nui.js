@@ -323,7 +323,7 @@ let fixtureSettings = {
   ],
 }
 
-// Mirrors what server/taxi_pricing.lua's getTaxiPricingSettings returns for
+// Mirrors what request-types/taxi/server.lua's getTaxiPricingSettings returns for
 // a company whose category has a taxi_pricing-enabled request type -
 // request type 2 (Taxi Pickup) above is the only one flagged for it.
 let fixtureTaxiPricing = [

@@ -3,9 +3,15 @@
     per-request-type special features (plan discussion following the
     PeekPlus dispatch-card rework). A company can turn on per-minute or
     per-100m billing for a request type an admin flagged with
-    `feature = 'taxi_pricing'`; the two hooks below plug into
-    Requests.Accept/Requests.Complete and are no-ops for every other
-    request, so requests.lua itself never has to know this feature exists.
+    `feature = 'taxi_pricing'`; the two hooks below register into the
+    generic Features registry (server/features.lua) and are no-ops for
+    every other request, so requests.lua itself never has to know this
+    feature exists.
+
+    Everything specific to the taxi request type - this server module, the
+    PeekPlus dispatch card (index.html/taxi.css/taxi.js) and the seed
+    definition it's registered under in shared/categories.lua - lives
+    together under request-types/taxi/.
 
     Storage is split the same way the rest of the config already is:
     - phone_services_plus_company_features holds the company's own
@@ -207,3 +213,8 @@ RegisterCallback("updateTaxiPricingSettings", function(source, reply, requestTyp
     if not company or not Framework.IsBoss(source, job.name, company.boss_grade) then return reply(false) end
     reply(TaxiPricing.UpdateCompanySettings(company, requestTypeId, settings))
 end)
+
+Features.Register(FEATURE, {
+    OnAccept = TaxiPricing.OnAccept,
+    OnComplete = TaxiPricing.OnComplete,
+})

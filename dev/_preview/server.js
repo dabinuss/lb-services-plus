@@ -1,6 +1,6 @@
 // Tiny dependency-free static file server, dev-tooling only. Serves this
 // repo's dev/ folder so the raw PeekPlus full-card templates under
-// dev/services-plus/services/request-types/ - which only ever run embedded
+// dev/services-plus/request-types/ - which only ever run embedded
 // in real LB Phone/FiveM NUI - can be opened directly in a normal browser
 // tab for visual testing, alongside dispatch-preview.html which feeds them
 // mock postMessage payloads instead of a live PeekPlus controller.

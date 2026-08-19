@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { fetchNui } from '../../lib/nui.js'
 import Switch from '../../components/Switch.jsx'
 import { showToast } from '../../lib/toast.js'
+import TaxiPricingSettings from './TaxiPricingSettings.jsx'
 
 const ROUTING_OPTIONS = [
   { key: 'all', label: 'All' },
@@ -9,38 +10,16 @@ const ROUTING_OPTIONS = [
   { key: 'hotline', label: 'Hotline only' },
 ]
 
-const BILLING_MODE_OPTIONS = [
-  { key: 'per_minute', label: 'Per minute' },
-  { key: 'per_100m', label: 'Per 100m' },
-]
-
 // Boss-only company settings (plan §33-34). Every change saves immediately -
 // there is no separate "save" step, same as toggles elsewhere in the app.
 export default function SettingsTab() {
   const [settings, setSettings] = useState(null)
-  // Separate from `settings` above and only populated when this company's
-  // category actually has a request type with the taxi_pricing feature on
-  // (see server/taxi_pricing.lua) - empty for every other business type, so
-  // the whole section below just doesn't render for them.
-  const [taxiPricing, setTaxiPricing] = useState([])
 
   useEffect(() => {
     fetchNui('getCompanySettings').then((r) => r && setSettings(r))
-    fetchNui('getTaxiPricingSettings').then((r) => r && setTaxiPricing(r))
   }, [])
 
   if (!settings) return <div className="tab-panel empty-state">Loading settings…</div>
-
-  // Same optimistic-with-revert pattern as save() below, scoped to one
-  // request type's row since each has its own independent billing config.
-  const saveTaxiPricing = async (requestTypeId, patch) => {
-    const previous = taxiPricing
-    setTaxiPricing((prev) => prev.map((t) => (t.requestTypeId === requestTypeId ? { ...t, ...patch } : t)))
-    if (!(await fetchNui('updateTaxiPricingSettings', { requestTypeId, settings: patch }))) {
-      setTaxiPricing(previous)
-      showToast('Could not save that change. Try again.', 'error')
-    }
-  }
 
   // Every toggle/chip here saves itself immediately - the control's own
   // visual state is the feedback for a normal save. A failed save used to
@@ -113,40 +92,7 @@ export default function SettingsTab() {
         <Switch checked={settings.requestsEnabled} onChange={(next) => save({ requestsEnabled: next })} />
       </div>
 
-      {taxiPricing.length > 0 && (
-        <>
-          <div className="section-title compact-title">Taxameter</div>
-          {taxiPricing.map((t) => (
-            <div key={t.requestTypeId} className="routing-row">
-              <div className="routing-label">{t.requestTypeName}</div>
-              <div className="category-row subtab-row routing-options">
-                {BILLING_MODE_OPTIONS.map((o) => (
-                  <button
-                    key={o.key}
-                    className={`category-chip${t.billingMode === o.key ? ' active' : ''}`}
-                    onClick={() => saveTaxiPricing(t.requestTypeId, { billingMode: o.key, rate: t.rate })}
-                  >
-                    {o.label}
-                  </button>
-                ))}
-              </div>
-              <input
-                className="search-input"
-                type="number"
-                min="0"
-                step="0.1"
-                value={t.rate}
-                onChange={(e) =>
-                  setTaxiPricing((prev) =>
-                    prev.map((p) => (p.requestTypeId === t.requestTypeId ? { ...p, rate: e.target.value } : p)),
-                  )
-                }
-                onBlur={(e) => saveTaxiPricing(t.requestTypeId, { billingMode: t.billingMode, rate: Number(e.target.value) })}
-              />
-            </div>
-          ))}
-        </>
-      )}
+      <TaxiPricingSettings />
 
       <div className="section-title compact-title">Phone numbers</div>
       <div className="number-list">

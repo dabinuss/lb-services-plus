@@ -379,7 +379,8 @@ end)
 
 -- Every "special feature" a request type can expose. Only this list gates
 -- what an admin can pick - what a given key actually *does* is entirely up
--- to its own feature module (server/taxi_pricing.lua for 'taxi_pricing').
+-- to its own feature module (request-types/taxi/server.lua for
+-- 'taxi_pricing').
 local VALID_FEATURES = { taxi_pricing = true }
 
 local function requestTypeParams(data)

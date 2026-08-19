@@ -213,8 +213,8 @@ CREATE TABLE IF NOT EXISTS `phone_services_plus_request_types` (
     `enabled` TINYINT(1) NOT NULL DEFAULT 1,
 
     -- Technical key of the "special feature" this type exposes (e.g.
-    -- 'taxi_pricing'), NULL for none. Only server/taxi_pricing.lua (and any
-    -- future feature module) knows what a given key means or reads
+    -- 'taxi_pricing'), NULL for none. Only request-types/taxi/server.lua
+    -- (and any future feature module) knows what a given key means or reads
     -- phone_services_plus_company_features for it - this column is just the
     -- admin-facing on/off switch per type, same role admin_*_allowed plays
     -- for companies.
@@ -263,7 +263,7 @@ CREATE TABLE IF NOT EXISTS `phone_services_plus_requests` (
     `passenger_count` INT DEFAULT NULL,
     `description` VARCHAR(255) DEFAULT NULL,
 
-    -- Feature bookkeeping (server/taxi_pricing.lua and friends), all NULL
+    -- Feature bookkeeping (request-types/taxi/server.lua and friends), all NULL
     -- for requests whose type has no feature. `accepted_at` exists
     -- separately from `updated_at` because that column gets overwritten on
     -- *both* the accept and the complete transition, so it can't answer

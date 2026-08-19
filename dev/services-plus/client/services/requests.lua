@@ -148,7 +148,7 @@ local function reportedPickup(payload)
 end
 
 -- Cosmetic-only estimate for the taxi dispatch card - see Config.Taxi in
--- shared/config.lua. No payment is charged anywhere from this value.
+-- request-types/taxi/register.lua. No payment is charged anywhere from this value.
 local function estimatedFare(distanceMeters)
     local fare = Config.Taxi.baseFare + (distanceMeters / 1000) * Config.Taxi.perKm
     return ("~$%d"):format(math.floor(fare + 0.5))

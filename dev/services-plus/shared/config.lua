@@ -68,10 +68,6 @@ Config.MaxPassengerCount = 20
 -- request is accepted, its active card is held until the request ends.
 Config.RequestNotificationPeekDuration = 15000
 
--- Cosmetic-only fare shown on the taxi dispatch card (services/request-types/
--- taxi). No payment is ever charged for it - it's a distance-based estimate
--- so the card isn't just blank where the mockup shows a price.
-Config.Taxi = {
-    baseFare = 5,   -- flat starting amount
-    perKm = 2,      -- added per kilometre of straight-line pickup distance
-}
+-- Config.Taxi (cosmetic fare estimate) lives in request-types/taxi/register.lua
+-- now, next to the rest of what that request type owns, rather than here
+-- among the resource-wide settings.

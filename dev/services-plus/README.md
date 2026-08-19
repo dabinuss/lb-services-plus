@@ -176,17 +176,38 @@ within five seconds completes the ride and notifies the customer.
 
 Notification templates are selected by the request type's technical
 identifier. A default request type can declare independent `templates.pending`
-and `templates.active` definitions directly in `shared/categories.lua`;
-database/admin-created types can use `Config.RequestTypeTemplates[identifier]`.
-Missing states deliberately fall back to PeekPlus' standard `action` template.
+and `templates.active` definitions directly where it's registered (either
+`shared/categories.lua` for a type with nothing type-specific to own, or its
+own `request-types/<identifier>/register.lua` - see below); database/admin-created
+types can use `Config.RequestTypeTemplates[identifier]`. Missing states
+deliberately fall back to PeekPlus' standard `action` template.
 
 The Taxi Pickup request type owns both its incoming and active taxometer cards
-at `services/request-types/taxi/` (HTML, CSS and JavaScript). Its request-type
-definition registers the same state-aware UI as two PeekPlus `fullCard`
-templates. PeekPlus contributes only the bounded phone-display slot, lifecycle,
-hotkeys, confirmation state and validated action bridge, so every request type
-can get a fully individual design without adding Services+-specific templates
-or CSS rules to PeekPlus.
+at `request-types/taxi/` (HTML, CSS and JavaScript), alongside its own
+server-side feature module (`request-types/taxi/server.lua`) and its own
+`register.lua`, which is what actually declares it as a request type - it
+appends to `Config.DefaultRequestTypes` (initialized empty by
+`shared/categories.lua`, which loads first) rather than being declared there
+directly. That definition registers the same state-aware UI as two PeekPlus
+`fullCard` templates. PeekPlus contributes only the bounded phone-display
+slot, lifecycle, hotkeys, confirmation state and validated action bridge, so
+every request type can get a fully individual design without adding
+Services+-specific templates or CSS rules to PeekPlus.
+
+Every request type that needs more than the built-in fields (its own
+dispatch-card design, its own server-side logic like Taxameter billing)
+lives entirely under `request-types/<identifier>/`, including its own
+registration - see `request-types/taxi/` for the fullest example. A type with
+nothing type-specific to own (no custom card, no feature module) stays
+declared directly in `shared/categories.lua` instead; there's no folder to
+make for it. `request-types/_shared/` holds only the dispatch card design
+system every full-card template reuses (`shared/categories.lua`'s own comment
+explains the height-ceiling contract), never anything specific to one type.
+A new request type's server-side feature (if
+any) registers itself into `server/features.lua`'s generic registry -
+`server/requests.lua` calls `Features.OnAccept`/`Features.OnComplete`
+unconditionally on every accept/complete and never names a feature module by
+hand, so adding one never means editing `requests.lua`.
 
 Test the complete peek path locally from the F8 console without creating a
 request:

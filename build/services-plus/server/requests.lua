@@ -593,11 +593,12 @@ function Requests.Accept(source, requestId)
             activeAssignments[source] = { identifier = identifier, requestId = requestId }
         end
 
-        -- Feature hook (server/taxi_pricing.lua) - a no-op unless this
-        -- request's type actually has one turned on. Must run after the
-        -- accept UPDATE above so its own accepted_at/pickup_distance write
-        -- targets a row that's genuinely 'active' under this employee.
-        TaxiPricing.OnAccept(requestId, source)
+        -- Feature hook (server/features.lua) - a no-op unless this
+        -- request's type has a feature module registered for it. Must run
+        -- after the accept UPDATE above so a feature's own bookkeeping
+        -- (e.g. accepted_at/pickup_distance) targets a row that's genuinely
+        -- 'active' under this employee.
+        Features.OnAccept(requestId, source)
 
         clearNotifications(requestId, source)
 
@@ -717,10 +718,11 @@ function Requests.Complete(requestId, actorSource)
 
     if MySQL.update.await(sql, params) == 0 then return false end
 
-    -- Feature hook (server/taxi_pricing.lua) - a no-op unless this
-    -- request's type actually has one turned on. Runs before the customer
-    -- notification below so a priced request can mention what it cost.
-    TaxiPricing.OnComplete(id)
+    -- Feature hook (server/features.lua) - a no-op unless this request's
+    -- type has a feature module registered for it. Runs before the
+    -- customer notification below so a priced request can mention what it
+    -- cost.
+    Features.OnComplete(id)
 
     if before.employeeSource then
         activeAssignments[before.employeeSource] = nil
