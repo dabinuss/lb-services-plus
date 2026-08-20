@@ -8,6 +8,7 @@ dev/web/dist/
 dist/
 !build/services-plus/ui/dist/
 !build/services-plus/ui/dist/**
+build/services-plus/services-plus.zip
 # PeekPlus' React source is development-only; build ships the compiled ui/dist.
 build/services-plus/peekplus/ui/notification-app/
 .npm/
