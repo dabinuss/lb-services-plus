@@ -35,8 +35,6 @@
     let timerAnchorCardId = null
     let timerAnchorKey = null
     let timerAnchorStartedAt = 0
-    let lastMapRoute = null   // last mapplus:routeUpdate – rehydrates iframe on remount
-    let lastMapPlayer = null  // last mapplus:playerUpdate – rehydrates iframe on remount
     const reportedCapabilities = new Set()
     const ICON_PATHS = {
         request: ['M5 5h14v14H5z', 'M8 9h8', 'M8 13h5'],
@@ -601,15 +599,9 @@
         frame.className = 'sp-template-frame'
         frame.src = definition.ui + '?v=' + Date.now()
         frame.sandbox = 'allow-scripts allow-same-origin allow-popups'
-        frame.onload = () => {
-            postTemplateFrame(frame, payload)
-            // Rehydrate MapPlus state – the iframe's MapPlusRenderer is fresh on every remount
-            if (lastMapRoute)  frame.contentWindow?.postMessage(lastMapRoute,  '*')
-            if (lastMapPlayer) frame.contentWindow?.postMessage(lastMapPlayer, '*')
-        }
+        frame.onload = () => postTemplateFrame(frame, payload)
         frame.dataset.cardId = String(payload.id)
         frame.dataset.template = String(payload.template)
-        frame.dataset.mapplus = (definition.mapplus === true || String(payload.template).includes('taxi')) ? 'true' : 'false'
         frame.dataset.fullCard = definition.fullCard === true ? 'true' : 'false'
         frame.style.height = `${Number(definition.height) || 160}px`
         element.appendChild(frame)
@@ -980,24 +972,6 @@
         }
         if (!data?.action) return
 
-        if (data.action === 'mapplus:routeUpdate' || data.action === 'mapplus:playerUpdate') {
-            // Cache for iframe re-hydration on remount
-            if (data.action === 'mapplus:routeUpdate') lastMapRoute = data
-            if (data.action === 'mapplus:playerUpdate') lastMapPlayer = data
-            // Broadcast to all active template frames across documents
-            const frames = [
-                ...(lbDocument ? Array.from(lbDocument.querySelectorAll('.sp-template-frame')) : []),
-                ...(rootDocument ? Array.from(rootDocument.querySelectorAll('.sp-template-frame')) : []),
-                ...Array.from(document.querySelectorAll('.sp-template-frame')),
-            ]
-            for (const frame of frames) {
-                try {
-                    frame.contentWindow?.postMessage(data, '*')
-                } catch (e) {}
-            }
-            return
-        }
-
         if (data.action === 'peekplus:render') {
             phoneIsOpen = data.phoneOpen === true
             callHasPriority = data.callActive === true
@@ -1006,8 +980,6 @@
                 clearTimerAnchor()
                 lastState = null
                 lastRenderKey = null
-                lastMapRoute = null
-                lastMapPlayer = null
                 releasePeek(true)
                 rootDocument?.getElementById(OVERLAY_ID)?.remove()
                 lbDocument?.getElementById(OVERLAY_ID)?.remove()
@@ -1026,8 +998,6 @@
             clearTimerAnchor()
             lastState = null
             lastRenderKey = null
-            lastMapRoute = null
-            lastMapPlayer = null
             releasePeek()
             rootDocument?.getElementById(OVERLAY_ID)?.remove()
             lbDocument?.getElementById(OVERLAY_ID)?.remove()

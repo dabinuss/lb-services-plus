@@ -1,272 +1,311 @@
 -- =============================================================================
--- MapPlus – GPS Route Sampler (v46)
--- High-precision 5m curve sampling, slot optimization, smart route completeness
+-- MapPlus - periodically refreshed GTA GPS route controller
+-- GTA remains the pathfinder; local trimming is display state only.
 -- =============================================================================
 
-local cachedRoute          = {}
-local cachedDest           = nil
-local lastClosestIndex     = 1
-local lastSentClosestIndex = 1   -- tracks when to push a trim update
-local lastGoodSlot         = 0   -- cached slot (0 or 1) to halve sampling calls
-local staleSince           = nil -- GetGameTimer() timestamp of first failed resample; nil = healthy
-local STALE_GRACE_MS       = 2500-- ms to show old route before clearing after failed resamples
-local routeVersion         = 0
-local TRIM_STEP            = 8   -- send trim update every 8 route points ≈ 40m at 5m/step
+local settings = Config.MapPlus or {}
 
-local function getWaypointDestination()
-    local waypointBlip = GetFirstBlipInfoId(8)
-    if DoesBlipExist(waypointBlip) then
-        local coords = GetBlipInfoIdCoord(waypointBlip)
-        if coords and (coords.x ~= 0.0 or coords.y ~= 0.0) then
-            return { x = coords.x, y = coords.y }
+local function positiveNumber(value, fallback)
+    value = tonumber(value)
+    return value and value > 0 and value or fallback
+end
+
+local SAMPLE_STEP = positiveNumber(settings.SampleStep, 5.0)
+local NATIVE_REFRESH_MS = positiveNumber(settings.NativeRefreshMs, 1200)
+local OFF_ROUTE_REFRESH_COOLDOWN_MS = math.min(NATIVE_REFRESH_MS, 600)
+local TRIM_STEP = math.max(1, math.floor(positiveNumber(settings.TrimStep, 4)))
+local BEHIND_POINTS = math.max(0, math.floor(tonumber(settings.BehindPoints) or 2))
+local OFF_ROUTE_DISTANCE = positiveNumber(settings.OffRouteDistance, 45.0)
+local STALE_GRACE_MS = positiveNumber(settings.StaleGraceMs, 2500)
+local REROUTE_DISTANCE = positiveNumber(settings.RerouteDistance, 25.0)
+local DEBUG = settings.Debug == true
+
+local nativeRoute = {}
+local displayRoute = {}
+local activeGeneration = -1
+local lastClosestIndex = 1
+local lastSentStartIndex = 1
+local lastNativeRefreshAt = 0
+local staleSince = nil
+local routeVisible = false
+
+local function distanceBetween(a, b)
+    return #(vector2(a.x, a.y) - vector2(b.x, b.y))
+end
+
+local function isRouteComplete(points, destination, gtaRouteLength, lastSuccessfulDistance)
+    if #points < 2 then return false end
+    if gtaRouteLength > 0 and lastSuccessfulDistance > 0 then
+        return lastSuccessfulDistance >= gtaRouteLength - 25.0
+    end
+    return destination and distanceBetween(points[#points], destination) < 100.0
+end
+
+local function sampleGpsRoute(playerCoords, navigation)
+    local startedAt = GetGameTimer()
+    local gtaRouteLength = 0.0
+    local ok, routeLength = pcall(GetGpsBlipRouteLength)
+    if ok and type(routeLength) == "number" and routeLength > 0 then gtaRouteLength = routeLength end
+
+    local directDistance = distanceBetween(playerCoords, navigation.destination)
+    local maxDistance = gtaRouteLength > 0
+        and gtaRouteLength + 100.0
+        or math.min(math.max(directDistance * 2.5, 2000.0), 30000.0)
+    local maxConsecutiveFailures = 15
+    local points = {}
+    local distance = 0.0
+    local lastPoint = nil
+    local lastSuccessfulDistance = 0.0
+    local consecutiveFailures = 0
+
+    while distance <= maxDistance and consecutiveFailures < maxConsecutiveFailures do
+        local success, coords = GetPosAlongGpsTypeRoute(true, distance, navigation.slot)
+        if (success == true or success == 1)
+            and coords
+            and (coords.x ~= 0.0 or coords.y ~= 0.0)
+        then
+            consecutiveFailures = 0
+            lastSuccessfulDistance = distance
+            if not lastPoint or distanceBetween(lastPoint, coords) > 1.5 then
+                points[#points + 1] = { x = coords.x, y = coords.y }
+                lastPoint = coords
+            end
+        else
+            consecutiveFailures = consecutiveFailures + 1
         end
+        distance = distance + SAMPLE_STEP
+    end
+
+    local sampledPointCount = #points
+    local firstDistance = sampledPointCount > 0 and distanceBetween(playerCoords, points[1]) or -1
+    local lastDistance = sampledPointCount > 0
+        and distanceBetween(points[sampledPointCount], navigation.destination)
+        or -1
+    local complete = isRouteComplete(points, navigation.destination, gtaRouteLength, lastSuccessfulDistance)
+    if not complete then
+        points = {}
+    end
+
+    return points, {
+        durationMs = GetGameTimer() - startedAt,
+        routeLength = gtaRouteLength,
+        sampledPointCount = sampledPointCount,
+        complete = complete,
+        firstDistance = firstDistance,
+        lastDistance = lastDistance,
+    }
+end
+
+local function findClosestRouteIndex(playerPos, points, lastIndex)
+    local windowStart = math.max(1, lastIndex)
+    local windowEnd = math.min(#points, lastIndex + 120)
+    local closestIndex = lastIndex
+    local minimumDistance = math.huge
+
+    for index = windowStart, windowEnd do
+        local distance = distanceBetween(playerPos, points[index])
+        if distance < minimumDistance then
+            minimumDistance = distance
+            closestIndex = index
+        end
+    end
+
+    return closestIndex, minimumDistance
+end
+
+local function copyRouteFrom(points, startIndex)
+    local result = {}
+    for index = math.max(1, startIndex), #points do result[#result + 1] = points[index] end
+    return result
+end
+
+local function pointAtDistance(points, targetDistance)
+    if #points == 0 then return nil end
+    local travelled = 0.0
+    for index = 2, #points do
+        local segmentLength = distanceBetween(points[index - 1], points[index])
+        if segmentLength > 0.0 and travelled + segmentLength >= targetDistance then
+            local ratio = (targetDistance - travelled) / segmentLength
+            return {
+                x = points[index - 1].x + (points[index].x - points[index - 1].x) * ratio,
+                y = points[index - 1].y + (points[index].y - points[index - 1].y) * ratio,
+            }
+        end
+        travelled = travelled + segmentLength
     end
     return nil
 end
 
--- Smart route completion validation:
--- If GTA reported a GPS route length, we verify we sampled almost to the end (within 25m of total length).
--- If not, fallback to checking distance from the last node to destination (< 100m).
-local function isRouteComplete(points, destination, gtaRouteLength, lastSuccessfulDist)
-    if not points or #points < 2 then return false end
-    if gtaRouteLength > 0 and lastSuccessfulDist > 0 then
-        return lastSuccessfulDist >= (gtaRouteLength - 25.0)
-    end
-    if destination then
-        local last = points[#points]
-        local dist = #(vector2(last.x, last.y) - vector2(destination.x, destination.y))
-        return dist < 100.0
-    end
-    return true
+local function distanceToSegment(point, startPoint, endPoint)
+    local dx = endPoint.x - startPoint.x
+    local dy = endPoint.y - startPoint.y
+    local lengthSquared = dx * dx + dy * dy
+    if lengthSquared <= 0.0001 then return distanceBetween(point, startPoint) end
+    local projection = ((point.x - startPoint.x) * dx + (point.y - startPoint.y) * dy) / lengthSquared
+    projection = math.max(0.0, math.min(1.0, projection))
+    return distanceBetween(point, {
+        x = startPoint.x + projection * dx,
+        y = startPoint.y + projection * dy,
+    })
 end
 
--- Score how well a set of GPS points aligns with player start and destination end.
-local function scoreSlotPoints(points, playerCoords, destination)
-    if #points < 2 then return 999999.0 end
-    local first = points[1]
-    local last  = points[#points]
-    local dFirst = #(vector2(first.x, first.y) - vector2(playerCoords.x, playerCoords.y))
-    local dLast  = destination
-        and #(vector2(last.x, last.y) - vector2(destination.x, destination.y))
-        or 0.0
-    return dFirst + dLast
+local function distanceToRoute(point, points, maximumRouteDistance)
+    local minimumDistance = math.huge
+    local travelled = 0.0
+    for index = 2, #points do
+        local segmentLength = distanceBetween(points[index - 1], points[index])
+        minimumDistance = math.min(minimumDistance, distanceToSegment(point, points[index - 1], points[index]))
+        travelled = travelled + segmentLength
+        if maximumRouteDistance and travelled >= maximumRouteDistance then break end
+    end
+    return minimumDistance
 end
 
-local function sampleGpsRoute(playerCoords, destination)
-    -- Use GTA's actual GPS route length when available (most accurate)
-    local gtaRouteLength = 0.0
-    local ok, rLen = pcall(GetGpsBlipRouteLength)
-    if ok and type(rLen) == 'number' and rLen > 0 then
-        gtaRouteLength = rLen
-    end
+local function classifyRefresh(previousRoute, freshRoute)
+    if #previousRoute < 2 then return "reroute" end
 
-    local directDist = destination
-        and #(vector2(playerCoords.x, playerCoords.y) - vector2(destination.x, destination.y))
-        or 2000.0
-
-    local maxDistance
-    if gtaRouteLength > 0 then
-        -- Add 100m buffer for safe sampling past the destination blip
-        maxDistance = gtaRouteLength + 100.0
-    else
-        -- Fallback: 2.5× air-line distance, capped 2km–30km
-        maxDistance = math.min(math.max(directDist * 2.5, 2000.0), 30000.0)
-    end
-
-    local step                  = 5.0  -- 5.0m step for razor-sharp curve tracing without clipping
-    local MAX_CONSECUTIVE_FAILS = 15   -- tolerate bridges, junctions and tunnels
-
-    local bestPoints = {}
-    local bestScore  = 999999.0
-    local anyValid   = false
-
-    -- Try last good slot first to halve sampling cost when route is stable
-    local slotsToTry = { lastGoodSlot, (lastGoodSlot == 0) and 1 or 0 }
-
-    for _, slot in ipairs(slotsToTry) do
-        local points               = {}
-        local distance             = 0.0
-        local lastPoint            = nil
-        local lastSuccessfulDist   = 0.0
-        local consecutiveFails     = 0
-
-        while distance <= maxDistance and consecutiveFails < MAX_CONSECUTIVE_FAILS do
-            local success, coords = GetPosAlongGpsTypeRoute(true, distance, slot)
-            if (success == true or success == 1)
-                and coords
-                and (coords.x ~= 0.0 or coords.y ~= 0.0)
-            then
-                consecutiveFails = 0
-                lastSuccessfulDist = distance
-                if not lastPoint
-                    or #(vector2(lastPoint.x, lastPoint.y) - vector2(coords.x, coords.y)) > 1.5
-                then
-                    table.insert(points, { x = coords.x, y = coords.y })
-                    lastPoint = coords
-                end
-            else
-                consecutiveFails = consecutiveFails + 1
-            end
-            distance = distance + step
-        end
-
-        -- Snap last point to destination only when very close (≤15m) to avoid diagonal cuts
-        if destination and lastPoint then
-            local distToDest = #(vector2(lastPoint.x, lastPoint.y) - vector2(destination.x, destination.y))
-            if distToDest > 1.0 and distToDest <= 15.0 then
-                table.insert(points, { x = destination.x, y = destination.y })
-            end
-        end
-
-        -- Only consider this slot if the route actually reaches the destination
-        if isRouteComplete(points, destination, gtaRouteLength, lastSuccessfulDist) then
-            anyValid = true
-            local score = scoreSlotPoints(points, playerCoords, destination)
-            if score < bestScore then
-                bestScore    = score
-                bestPoints   = points
-                lastGoodSlot = slot
-            end
-            -- If the primary slot was complete and starts right at the player (< 25m), finish immediately
-            local firstPt = points[1]
-            local startDist = #(vector2(firstPt.x, firstPt.y) - vector2(playerCoords.x, playerCoords.y))
-            if startDist < 25.0 then
-                break
+    local compared = 0
+    local outsideCorridor = 0
+    for _, checkpoint in ipairs({ 50.0, 100.0, 200.0, 400.0 }) do
+        local point = pointAtDistance(freshRoute, checkpoint)
+        if point then
+            compared = compared + 1
+            if distanceToRoute(point, previousRoute, 550.0) > REROUTE_DISTANCE then
+                outsideCorridor = outsideCorridor + 1
             end
         end
     end
 
-    if not anyValid then
-        return {}
-    end
-    return bestPoints
+    return compared >= 2 and outsideCorridor >= 2 and "reroute" or "trim"
 end
 
--- Monotone window search.
--- If minDist > 45m the caller triggers a resample (no global index jumps).
-local function findClosestRouteIndex(playerPos, points, lastIdx)
-    local windowStart = math.max(1, lastIdx - 10)
-    local windowEnd   = math.min(#points, lastIdx + 120) -- 120 * 5m = 600m forward window
+local function sendRouteUpdate(points, destination, reason, metrics)
+    local message = {
+        action = "mapplus:routeUpdate",
+        points = points,
+        destination = destination,
+        reason = reason,
+    }
+    SendNUIMessage(message)
 
-    local closestIdx = lastIdx
-    local minDist    = 999999.0
-
-    for i = windowStart, windowEnd do
-        local d = #(vector2(playerPos.x, playerPos.y) - vector2(points[i].x, points[i].y))
-        if d < minDist then
-            minDist    = d
-            closestIdx = i
-        end
+    if DEBUG then
+        local payloadSize = json and #json.encode(message) or -1
+        print(("[MapPlus] reason=%s points=%d route=%.0fm sample=%dms payload=%dB first=%.1fm last=%.1fm")
+            :format(reason, #points, metrics and metrics.routeLength or 0,
+                metrics and metrics.durationMs or 0, payloadSize,
+                metrics and metrics.firstDistance or -1,
+                metrics and metrics.lastDistance or -1))
     end
-
-    return closestIdx, minDist
 end
 
-local function destChanged(destination)
-    if destination == nil and cachedDest == nil then return false end
-    if destination == nil or cachedDest == nil then return true end
-    return #(vector2(destination.x, destination.y) - vector2(cachedDest.x, cachedDest.y)) > 5.0
+local function clearRoute(destination)
+    nativeRoute = {}
+    displayRoute = {}
+    lastClosestIndex = 1
+    lastSentStartIndex = 1
+    routeVisible = false
+    sendRouteUpdate({}, destination, "clear")
 end
 
 CreateThread(function()
-    local lastRouteVersion   = -1
-    local currentRoutePoints = {}
-    local routeUpdateReason  = "new"
-
     while true do
         Wait(300)
+        MapPlusNavigation.ValidateWaypoint()
+        local navigation = MapPlusNavigation.GetSnapshot()
 
-        local playerPed     = PlayerPedId()
-        local playerCoords  = GetEntityCoords(playerPed)
-        local playerHeading = GetEntityHeading(playerPed)
-        local destination   = getWaypointDestination()
-        local isNavActive   = IsWaypointActive() or destination ~= nil
-
-        -- ── Player update: only stream NUI traffic when navigation is active ──
-        if isNavActive then
-            SendNUIMessage({
-                action = "mapplus:playerUpdate",
-                player = { x = playerCoords.x, y = playerCoords.y, heading = playerHeading },
-            })
-        end
-
-        -- ── Route logic ─────────────────────────────────────────────────────
-        if not isNavActive then
-            if #cachedRoute > 0 then
-                cachedRoute            = {}
-                cachedDest             = nil
-                lastClosestIndex       = 1
-                lastSentClosestIndex   = 1
-                staleSince             = nil
-                routeVersion           = routeVersion + 1
-                routeUpdateReason      = "clear"
-                SendNUIMessage({ action = "mapplus:routeUpdate", points = {}, destination = nil, reason = "clear" })
+        if not navigation.active then
+            if routeVisible or activeGeneration ~= navigation.generation then
+                clearRoute(nil)
+                activeGeneration = navigation.generation
             end
         else
-            local isInitialRoute = (#cachedRoute == 0)
-            local needsResample  = isInitialRoute or destChanged(destination)
+            local playerPed = PlayerPedId()
+            local playerCoords = GetEntityCoords(playerPed)
+            SendNUIMessage({
+                action = "mapplus:playerUpdate",
+                player = {
+                    x = playerCoords.x,
+                    y = playerCoords.y,
+                    heading = GetEntityHeading(playerPed),
+                },
+            })
 
-            if not needsResample and #cachedRoute > 1 then
-                local closestIdx, minDist = findClosestRouteIndex(playerCoords, cachedRoute, lastClosestIndex)
-                lastClosestIndex = closestIdx
+            local isNewSession = activeGeneration ~= navigation.generation
+            if isNewSession then
+                nativeRoute = {}
+                displayRoute = {}
+                activeGeneration = navigation.generation
+                lastClosestIndex = 1
+                lastSentStartIndex = 1
+                lastNativeRefreshAt = 0
+                staleSince = nil
+            end
 
-                if minDist > 45.0 then
-                    -- Too far from known route window → reroute cleanly
-                    needsResample = true
-                else
-                    -- Build trimmed remaining route (no player position prepended)
-                    local remaining = {}
-                    for i = closestIdx, #cachedRoute do
-                        remaining[#remaining + 1] = cachedRoute[i]
-                    end
-                    currentRoutePoints = remaining
+            local offRoute = false
+            local pendingTrim = false
+            if #nativeRoute > 1 then
+                local closestIndex, minimumDistance = findClosestRouteIndex(
+                    playerCoords,
+                    nativeRoute,
+                    lastClosestIndex
+                )
+                lastClosestIndex = closestIndex
+                offRoute = minimumDistance > OFF_ROUTE_DISTANCE
 
-                    -- Send trim update every ~40m of forward progress (8 points * 5m)
-                    if closestIdx - lastSentClosestIndex >= TRIM_STEP then
-                        lastSentClosestIndex = closestIdx
-                        routeVersion         = routeVersion + 1
-                        routeUpdateReason    = "trim"
+                if not offRoute then
+                    local displayStartIndex = math.max(1, closestIndex - BEHIND_POINTS)
+                    displayRoute = copyRouteFrom(nativeRoute, displayStartIndex)
+                    if displayStartIndex - lastSentStartIndex >= TRIM_STEP then
+                        lastSentStartIndex = displayStartIndex
+                        pendingTrim = true
                     end
                 end
             end
 
-            if needsResample then
-                local freshPoints = sampleGpsRoute(playerCoords, destination)
-                if #freshPoints > 1 then
-                    staleSince           = nil
-                    cachedRoute          = freshPoints
-                    cachedDest           = destination
-                    lastClosestIndex     = 1
-                    lastSentClosestIndex = 1
-                    currentRoutePoints   = freshPoints
-                    routeVersion         = routeVersion + 1
-                    routeUpdateReason    = isInitialRoute and "new" or "reroute"
-                else
-                    -- Start grace timer on first failure; GTA may be briefly re-routing
-                    if staleSince == nil then
-                        staleSince = GetGameTimer()
-                    end
-                    -- Only clear after grace period to avoid flicker during reroutes
-                    if (GetGameTimer() - staleSince) >= STALE_GRACE_MS then
-                        staleSince           = nil
-                        currentRoutePoints   = {}
-                        cachedRoute          = {}
-                        lastSentClosestIndex = 1
-                        routeVersion         = routeVersion + 1
-                        routeUpdateReason    = "clear"
-                    end
-                end
+            local now = GetGameTimer()
+            local refreshDue = isNewSession
+                or now - lastNativeRefreshAt >= NATIVE_REFRESH_MS
+                or (offRoute and now - lastNativeRefreshAt >= OFF_ROUTE_REFRESH_COOLDOWN_MS)
+
+            if pendingTrim and not refreshDue then
+                routeVisible = true
+                sendRouteUpdate(displayRoute, navigation.destination, "trim")
             end
 
-            -- Only send route message when something actually changed
-            if routeVersion ~= lastRouteVersion then
-                lastRouteVersion = routeVersion
-                SendNUIMessage({
-                    action      = "mapplus:routeUpdate",
-                    points      = currentRoutePoints,
-                    destination = destination,
-                    reason      = routeUpdateReason,
-                })
+            if refreshDue then
+                lastNativeRefreshAt = now
+                local previousDisplayRoute = displayRoute
+                local freshRoute, metrics = sampleGpsRoute(playerCoords, navigation)
+                if #freshRoute > 1 then
+                    local reason
+                    if isNewSession then
+                        reason = "new"
+                    elseif #nativeRoute < 2 then
+                        reason = "reroute"
+                    else
+                        reason = classifyRefresh(previousDisplayRoute, freshRoute)
+                    end
+
+                    nativeRoute = freshRoute
+                    displayRoute = freshRoute
+                    lastClosestIndex = 1
+                    lastSentStartIndex = 1
+                    staleSince = nil
+                    routeVisible = true
+                    sendRouteUpdate(displayRoute, navigation.destination, reason, metrics)
+                else
+                    if DEBUG then
+                        print(("[MapPlus] native sample failed points=%d route=%.0fm sample=%dms complete=%s")
+                            :format(metrics.sampledPointCount, metrics.routeLength, metrics.durationMs,
+                                tostring(metrics.complete)))
+                    end
+                    staleSince = staleSince or now
+                    if isNewSession then
+                        clearRoute(navigation.destination)
+                    elseif routeVisible and now - staleSince >= STALE_GRACE_MS then
+                        clearRoute(navigation.destination)
+                    end
+                end
             end
         end
     end
