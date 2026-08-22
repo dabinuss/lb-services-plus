@@ -119,6 +119,7 @@ const DE = {
   'Missed': 'Verpasst',
   'open': 'Offen',
   'active': 'Aktiv',
+  'Employee on the way': 'Mitarbeiter ist unterwegs',
   'completed': 'Abgeschlossen',
   'cancelled': 'Abgebrochen',
   'available': 'Verfügbar',

@@ -11,7 +11,7 @@ import { useI18n } from '../../lib/i18n.jsx'
 const PAGE_SIZE = 25
 
 // Own requests (plan §39-41) - open ones can still be cancelled from here.
-export default function RequestsTab() {
+export default function RequestsTab({ update }) {
   const { t, formatRelativeTime } = useI18n()
   const [entries, setEntries] = useState(null)
   const [details, setDetails] = useState(null) // the entry currently shown in the details sheet
@@ -34,7 +34,15 @@ export default function RequestsTab() {
 
   useEffect(() => loadPage(0), [])
 
+  useEffect(() => {
+    if (!update?.id) return
+    const patch = (entry) => entry.id === update.id ? { ...entry, ...update } : entry
+    setEntries((current) => current?.map(patch))
+    setDetails((current) => current ? patch(current) : current)
+  }, [update])
+
   const loadMore = () => loadPage(Math.floor((entries?.length || 0) / PAGE_SIZE))
+  const statusLabel = (status) => t(status === 'active' ? 'Employee on the way' : status)
 
   const cancel = async (entry) => {
     if (cancelLock.current) return
@@ -67,7 +75,7 @@ export default function RequestsTab() {
             <div className="company-info">
               <div className="company-name">{entry.company_name || t(entry.type_name)}</div>
               <div className="last-message">
-                {t(entry.type_name)} · {t(entry.status)}
+                {t(entry.type_name)} · {statusLabel(entry.status)}
               </div>
             </div>
             <div className="activity-meta">
@@ -99,7 +107,7 @@ export default function RequestsTab() {
             </div>
             <div className="request-detail-row">
               <span className="hint">{t('Status')}</span>
-              <span>{t(details.status)}</span>
+              <span>{statusLabel(details.status)}</span>
             </div>
             {details.passenger_count != null && (
               <div className="request-detail-row">

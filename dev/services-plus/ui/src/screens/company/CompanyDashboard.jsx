@@ -23,16 +23,15 @@ const TABS = [
 // Everything past the fake-login (plan §19, §35-38, §20-24, §33-34).
 export default function CompanyDashboard({
   session, employee, company, onLogout, onOpenConversation, teamUpdate,
-  messageBadge = 0, requestBadge = 0, messageRevision, requestRevision, onReadMessages, onReadRequests,
+  messageBadge = 0, requestBadge = 0, messageRevision, requestRevision, onReadConversation, onReadRequests,
 }) {
   const { t } = useI18n()
   const [tab, setTab] = useState('home')
   const tabs = TABS.filter((t) => !t.bossOnly || session.employee.isBoss)
 
   useEffect(() => {
-    if (tab === 'messages') onReadMessages?.()
     if (tab === 'requests') onReadRequests?.()
-  }, [tab, onReadMessages, onReadRequests])
+  }, [tab, onReadRequests])
 
   // `company` (from the public companies list, incl. background) can be
   // missing if it's currently hidden from that list (e.g. unavailable and
@@ -85,7 +84,7 @@ export default function CompanyDashboard({
           />
         )}
         {tab === 'requests' && <RequestsTab key={`requests-${requestRevision || 0}`} />}
-        {tab === 'messages' && <MessagesTab key={`messages-${messageRevision || 0}`} onOpenConversation={onOpenConversation} />}
+        {tab === 'messages' && <MessagesTab key={`messages-${messageRevision || 0}`} onOpenConversation={onOpenConversation} onReadConversation={onReadConversation} />}
         {tab === 'calls' && <CallsTab />}
         {tab === 'settings' && session.employee.isBoss && <SettingsTab />}
       </div>

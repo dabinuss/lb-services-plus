@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import MessagesTab from './activity/MessagesTab.jsx'
 import RequestsTab from './activity/RequestsTab.jsx'
 import CallsTab from './activity/CallsTab.jsx'
@@ -13,19 +13,9 @@ const TABS = [
 
 // Personal history (plan §39-41), split into its three kinds instead of one
 // merged feed - deliberately still compact, not a CRM-style history.
-export default function ActivityScreen({ onOpen, messageBadge = 0, messageRevision, onReadMessages }) {
+export default function ActivityScreen({ onOpen, messageBadge = 0, messageRevision, requestUpdate, onReadConversation }) {
   const { t } = useI18n()
   const [tab, setTab] = useState('messages')
-
-  const selectTab = (key) => {
-    setTab(key)
-    if (key === 'messages') onReadMessages?.()
-  }
-
-  // Messages is the initial tab, so entering Activity counts as viewing it.
-  useEffect(() => {
-    if (tab === 'messages') onReadMessages?.()
-  }, [tab, onReadMessages])
 
   return (
     <div className="screen activity-screen">
@@ -33,7 +23,7 @@ export default function ActivityScreen({ onOpen, messageBadge = 0, messageRevisi
 
       <div className="category-row subtab-row">
         {TABS.map((item) => (
-          <button key={item.key} className={`category-chip${tab === item.key ? ' active' : ''}`} onClick={() => selectTab(item.key)}>
+          <button key={item.key} className={`category-chip${tab === item.key ? ' active' : ''}`} onClick={() => setTab(item.key)}>
             {t(item.label)}
             {item.key === 'messages' && <Badge count={messageBadge} className="tab-badge" />}
           </button>
@@ -41,8 +31,8 @@ export default function ActivityScreen({ onOpen, messageBadge = 0, messageRevisi
       </div>
 
       <div className="dashboard-body">
-        {tab === 'messages' && <MessagesTab key={`messages-${messageRevision || 0}`} onOpen={onOpen} />}
-        {tab === 'requests' && <RequestsTab />}
+        {tab === 'messages' && <MessagesTab key={`messages-${messageRevision || 0}`} onOpen={onOpen} onReadConversation={onReadConversation} />}
+        {tab === 'requests' && <RequestsTab update={requestUpdate} />}
         {tab === 'calls' && <CallsTab />}
       </div>
     </div>

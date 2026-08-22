@@ -21,6 +21,7 @@ Requests = {}
 local typesByCategory = {} -- categoryId -> ordered list
 local typesById = {}
 local typesByIdentifier = {}
+local pushRequestUpdate
 
 local function overlayLabels(phoneNumber)
     return {
@@ -249,6 +250,7 @@ local function cancelExpiredDisconnectedRequests(identifier)
 
         local publicRequests = Requests.GetMany(cancelledIds)
         for i = 1, #publicRequests do
+            if pushRequestUpdate then pushRequestUpdate(publicRequests[i]) end
             TriggerEvent("services-plus:requestCancelled", publicRequests[i])
         end
     end)
@@ -412,8 +414,29 @@ end
 
 local function emitLifecycle(eventName, requestId)
     local request = Requests.Get(requestId)
-    if request then TriggerEvent("services-plus:" .. eventName, request) end
+    if request then
+        if eventName ~= "requestCreated" and pushRequestUpdate then pushRequestUpdate(request) end
+        TriggerEvent("services-plus:" .. eventName, request)
+    end
     return request
+end
+
+pushRequestUpdate = function(request)
+    if not request or not request.requesterNumber then return end
+
+    local ok, requesterSource = pcall(function()
+        return exports["lb-phone"]:GetSourceFromNumber(request.requesterNumber)
+    end)
+    if not ok or not requesterSource then return end
+
+    TriggerClientEvent("services-plus:client:requestUpdated", requesterSource, {
+        id = request.id,
+        status = request.status,
+        company_id = request.company and request.company.id or nil,
+        company_name = request.company and request.company.name or nil,
+        company_icon = request.company and request.company.icon or nil,
+        updated_at = request.updatedAt,
+    })
 end
 
 local function chooseCompany(requestType, options)
@@ -1000,6 +1023,7 @@ CreateThread(function()
             for i = 1, #requests do
                 if requests[i].status == "cancelled" then
                     clearNotifications(requests[i].id)
+                    if pushRequestUpdate then pushRequestUpdate(requests[i]) end
                     TriggerEvent("services-plus:requestExpired", requests[i])
                     TriggerEvent("services-plus:requestCancelled", requests[i])
                 end

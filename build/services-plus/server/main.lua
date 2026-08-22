@@ -125,8 +125,6 @@ end
 -- round trips as possible).
 -- ---------------------------------------------------------------------------
 local READ_SCOPES = {
-    activity_messages = true,
-    company_messages = true,
     company_requests = true,
 }
 
@@ -172,13 +170,16 @@ local function getUnreadCounts(source)
     local result = { activityMessages = 0, companyMessages = 0, companyRequests = 0 }
 
     if phoneNumber then
-        local marker = getReadMarker(phoneNumber, "activity_messages", 0)
         result.activityMessages = tonumber(MySQL.scalar.await([[
             SELECT COUNT(*)
             FROM phone_services_plus_messages m
             JOIN phone_services_plus_channels c ON c.id = m.channel_id
-            WHERE c.contact_number = ? AND m.sender_type = 'company' AND m.id > ?
-        ]], { phoneNumber, marker })) or 0
+            LEFT JOIN phone_services_plus_conversation_reads cr
+              ON cr.owner_key = ? AND cr.viewer_scope = 'customer' AND cr.channel_id = c.id
+            WHERE c.contact_number = ? AND c.archived_by_contact = 0
+              AND m.sender_type = 'company'
+              AND m.id > COALESCE(cr.last_read_id, 0)
+        ]], { phoneNumber, phoneNumber })) or 0
     end
 
     local job = Framework.GetJob(source)
@@ -186,27 +187,75 @@ local function getUnreadCounts(source)
     if not company then return result end
 
     local ownerKey = Framework.GetIdentifier(source)
-    local messageMarker = getReadMarker(ownerKey, "company_messages", company.id)
     result.companyMessages = tonumber(MySQL.scalar.await([[
         SELECT COUNT(*)
         FROM phone_services_plus_messages m
         JOIN phone_services_plus_channels c ON c.id = m.channel_id
         JOIN phone_services_plus_numbers n ON n.id = c.number_id
-        WHERE n.company_id = ? AND m.sender_type = 'customer' AND m.id > ?
-    ]], { company.id, messageMarker })) or 0
+        LEFT JOIN phone_services_plus_conversation_reads cr
+          ON cr.owner_key = ? AND cr.viewer_scope = 'employee' AND cr.channel_id = c.id
+        WHERE n.company_id = ? AND n.mailbox_enabled = 1
+          AND c.archived_by_company = 0 AND m.sender_type = 'customer'
+          AND m.id > COALESCE(cr.last_read_id, 0)
+    ]], { ownerKey, company.id })) or 0
 
     local requestMarker = getReadMarker(ownerKey, "company_requests", company.id)
     result.companyRequests = tonumber(MySQL.scalar.await([[
         SELECT COUNT(*)
         FROM phone_services_plus_requests r
         JOIN phone_services_plus_request_types t ON t.id = r.request_type_id
-        WHERE r.id > ? AND (
+        WHERE r.id > ? AND r.status = 'open' AND (
             r.company_id = ? OR
-            (r.company_id IS NULL AND t.category_id = ? AND r.status = 'open')
+            (r.company_id IS NULL AND t.category_id = ?)
         )
     ]], { requestMarker, company.id, company.category_id })) or 0
 
     return result
+end
+
+local function resolveConversationViewer(source, channelId)
+    channelId = tonumber(channelId)
+    if not channelId then return nil end
+
+    local channel = MySQL.single.await([[
+        SELECT c.id, c.contact_number, company.job AS company_job
+        FROM phone_services_plus_channels c
+        JOIN phone_services_plus_numbers n ON n.id = c.number_id
+        JOIN phone_services_plus_companies company ON company.id = n.company_id
+        WHERE c.id = ?
+    ]], { channelId })
+    if not channel then return nil end
+
+    local phoneNumber = Framework.GetPhoneNumber(source)
+    if phoneNumber and phoneNumber == channel.contact_number then
+        return phoneNumber, "customer", channel.id
+    end
+
+    local job = Framework.GetJob(source)
+    if job and job.name == channel.company_job then
+        return Framework.GetIdentifier(source), "employee", channel.id
+    end
+
+    return nil
+end
+
+local function markConversationRead(source, channelId)
+    local ownerKey, viewerScope, resolvedChannelId = resolveConversationViewer(source, channelId)
+    if not ownerKey then return false end
+
+    local latestId = tonumber(MySQL.scalar.await(
+        "SELECT COALESCE(MAX(id), 0) FROM phone_services_plus_messages WHERE channel_id = ?",
+        { resolvedChannelId }
+    )) or 0
+
+    MySQL.update.await([[
+        INSERT INTO phone_services_plus_conversation_reads
+            (owner_key, viewer_scope, channel_id, last_read_id)
+        VALUES (?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE last_read_id = GREATEST(last_read_id, VALUES(last_read_id))
+    ]], { ownerKey, viewerScope, resolvedChannelId, latestId })
+
+    return true
 end
 
 local function markRead(source, scope)
@@ -270,6 +319,14 @@ RegisterCallback("markRead", function(source, reply, scope)
     reply(markRead(source, scope))
 end)
 
+RegisterCallback("markConversationRead", function(source, reply, channelId)
+    reply(markConversationRead(source, channelId))
+end)
+
+RegisterCallback("getUnreadCounts", function(source, reply)
+    reply(getUnreadCounts(source))
+end)
+
 -- Replies with the resulting {onDuty, status}, not just true/false, so the
 -- client can decide whether to sync lb-phone's own native company-call
 -- toggle (plan review round 2 §3 - see client/main.lua).
@@ -322,13 +379,23 @@ RegisterCallback("getCompanyConversations", function(source, reply, page)
     if not company then return reply(false) end
 
     local rows = MySQL.query.await([[
-        SELECT c.id AS channel_id, c.contact_number, c.last_message, c.updated_at, n.label
+        SELECT c.id AS channel_id, c.contact_number, c.last_message, c.updated_at, n.label,
+               (
+                   SELECT COUNT(*) FROM phone_services_plus_messages m
+                   WHERE m.channel_id = c.id AND m.sender_type = 'customer'
+                     AND m.id > COALESCE(cr.last_read_id, 0)
+               ) AS unread_count
         FROM phone_services_plus_channels c
         JOIN phone_services_plus_numbers n ON n.id = c.number_id
+        LEFT JOIN phone_services_plus_conversation_reads cr
+          ON cr.owner_key = ? AND cr.viewer_scope = 'employee' AND cr.channel_id = c.id
         WHERE n.company_id = ? AND n.mailbox_enabled = 1 AND c.archived_by_company = 0
         ORDER BY c.updated_at DESC, c.id DESC
         LIMIT ?, ?
-    ]], { company.id, ClampPage(page) * Config.PageSize.messages, Config.PageSize.messages })
+    ]], {
+        Framework.GetIdentifier(source), company.id,
+        ClampPage(page) * Config.PageSize.messages, Config.PageSize.messages,
+    })
 
     reply(rows or {})
 end)
@@ -642,14 +709,24 @@ RegisterCallback("getActivity", function(source, reply, page)
 
     local rows = MySQL.query.await([[
         SELECT c.id AS channel_id, c.last_message, c.updated_at, n.company_id, n.label,
+               (
+                   SELECT COUNT(*) FROM phone_services_plus_messages m
+                   WHERE m.channel_id = c.id AND m.sender_type = 'company'
+                     AND m.id > COALESCE(cr.last_read_id, 0)
+               ) AS unread_count,
                company.name AS company_name, company.icon AS company_icon
         FROM phone_services_plus_channels c
         JOIN phone_services_plus_numbers n ON n.id = c.number_id
         LEFT JOIN phone_services_plus_companies company ON company.id = n.company_id
+        LEFT JOIN phone_services_plus_conversation_reads cr
+          ON cr.owner_key = ? AND cr.viewer_scope = 'customer' AND cr.channel_id = c.id
         WHERE c.contact_number = ? AND c.archived_by_contact = 0
         ORDER BY c.updated_at DESC, c.id DESC
         LIMIT ?, ?
-    ]], { contactNumber, ClampPage(page) * Config.PageSize.activity, Config.PageSize.activity })
+    ]], {
+        contactNumber, contactNumber,
+        ClampPage(page) * Config.PageSize.activity, Config.PageSize.activity,
+    })
 
     for i = 1, #(rows or {}) do
         rows[i].company = rows[i].company_name and {

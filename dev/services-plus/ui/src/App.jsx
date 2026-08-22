@@ -38,6 +38,8 @@ export default function App() {
   const [requestSheet, setRequestSheet] = useState(null) // { company }
   const [incomingMessage, setIncomingMessage] = useState(null)
   const [incomingRequest, setIncomingRequest] = useState(null)
+  const [requestUpdate, setRequestUpdate] = useState(null)
+  const [requestQueueRevision, setRequestQueueRevision] = useState(0)
   const [teamUpdate, setTeamUpdate] = useState(null)
   const [unread, setUnread] = useState({ activityMessages: 0, companyMessages: 0, companyRequests: 0 })
 
@@ -75,9 +77,15 @@ export default function App() {
     setUnread((current) => current[key] ? { ...current, [key]: 0 } : current)
     fetchNui('markRead', { scope }).catch(() => {})
   }, [])
-  const readActivityMessages = useCallback(() => markRead('activity_messages', 'activityMessages'), [markRead])
-  const readCompanyMessages = useCallback(() => markRead('company_messages', 'companyMessages'), [markRead])
   const readCompanyRequests = useCallback(() => markRead('company_requests', 'companyRequests'), [markRead])
+
+  const readConversation = useCallback((channelId, count, key) => {
+    const unreadCount = Number(count) || 0
+    if (unreadCount > 0) {
+      setUnread((current) => ({ ...current, [key]: Math.max(0, current[key] - unreadCount) }))
+    }
+    fetchNui('markConversationRead', { channelId }).catch(() => {})
+  }, [])
 
   const logoutCompany = useCallback(() => {
     setCompanySession(null)
@@ -102,6 +110,19 @@ export default function App() {
       setIncomingRequest(data.request)
       setUnread((current) => ({ ...current, companyRequests: current.companyRequests + 1 }))
     })
+  }, [])
+
+  useEffect(() => {
+    return onNuiEvent('requestQueueChanged', (data) => {
+      if (data.unread) {
+        setUnread((current) => ({ ...current, companyRequests: data.unread.companyRequests || 0 }))
+      }
+      setRequestQueueRevision((current) => current + 1)
+    })
+  }, [])
+
+  useEffect(() => {
+    return onNuiEvent('requestUpdated', (data) => setRequestUpdate(data.request))
   }, [])
 
   // Same idea, for a colleague's status/hotline change (plan review round 5
@@ -182,7 +203,8 @@ export default function App() {
           onOpen={setConversation}
           messageBadge={unread.activityMessages}
           messageRevision={incomingMessage?.message?.id}
-          onReadMessages={readActivityMessages}
+          requestUpdate={requestUpdate}
+          onReadConversation={(channelId, count) => readConversation(channelId, count, 'activityMessages')}
         />
       )}
       {tab === 'company' && bootstrap.employee && (
@@ -197,8 +219,8 @@ export default function App() {
           messageBadge={unread.companyMessages}
           requestBadge={unread.companyRequests}
           messageRevision={incomingMessage?.message?.id}
-          requestRevision={incomingRequest?.requestId}
-          onReadMessages={readCompanyMessages}
+          requestRevision={`${incomingRequest?.requestId || 0}-${requestQueueRevision}`}
+          onReadConversation={(channelId, count) => readConversation(channelId, count, 'companyMessages')}
           onReadRequests={readCompanyRequests}
         />
       )}

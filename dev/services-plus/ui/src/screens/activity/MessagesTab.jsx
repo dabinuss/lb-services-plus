@@ -3,6 +3,7 @@ import { fetchNui } from '../../lib/nui.js'
 import ConfirmButton from '../../components/ConfirmButton.jsx'
 import Icon from '../../components/Icon.jsx'
 import { useI18n } from '../../lib/i18n.jsx'
+import Badge from '../../components/Badge.jsx'
 
 // Mirrors Config.PageSize.activity in shared/config.lua - a page shorter
 // than this means there's nothing left to load (plan §68, plan review
@@ -10,7 +11,7 @@ import { useI18n } from '../../lib/i18n.jsx'
 const PAGE_SIZE = 25
 
 // Own conversations (plan §39-41).
-export default function MessagesTab({ onOpen }) {
+export default function MessagesTab({ onOpen, onReadConversation }) {
   const { t, formatRelativeTime } = useI18n()
   const [entries, setEntries] = useState(null)
   const [hasMore, setHasMore] = useState(false)
@@ -33,7 +34,16 @@ export default function MessagesTab({ onOpen }) {
   const loadMore = () => loadPage(Math.floor((entries?.length || 0) / PAGE_SIZE))
 
   const archive = async (entry) => {
-    if (await fetchNui('archiveConversation', { channelId: entry.channel_id })) loadPage(0)
+    if (await fetchNui('archiveConversation', { channelId: entry.channel_id })) {
+      onReadConversation?.(entry.channel_id, entry.unread_count)
+      loadPage(0)
+    }
+  }
+
+  const open = (entry) => {
+    onReadConversation?.(entry.channel_id, entry.unread_count)
+    setEntries((current) => current?.map((item) => item.channel_id === entry.channel_id ? { ...item, unread_count: 0 } : item))
+    onOpen({ channelId: entry.channel_id, title: entry.company?.name || t('Conversation'), icon: entry.company?.icon })
   }
 
   return (
@@ -47,8 +57,8 @@ export default function MessagesTab({ onOpen }) {
         {entries?.map((entry) => (
           <div
             key={entry.channel_id}
-            className="activity-row"
-            onClick={() => onOpen({ channelId: entry.channel_id, title: entry.company?.name || t('Conversation'), icon: entry.company?.icon })}
+            className={`activity-row${Number(entry.unread_count) > 0 ? ' unread' : ''}`}
+            onClick={() => open(entry)}
           >
             <div className="company-icon small">
               {entry.company?.icon ? <img src={entry.company.icon} alt="" /> : <span>{entry.company?.name?.[0] || '?'}</span>}
@@ -59,6 +69,7 @@ export default function MessagesTab({ onOpen }) {
             </div>
             <div className="activity-meta">
               <span className="activity-time">{formatRelativeTime(entry.updated_at)}</span>
+              <Badge count={entry.unread_count} className="conversation-badge" />
               <div onClick={(e) => e.stopPropagation()}>
                 <ConfirmButton className="icon-button subtle" ariaLabel="remove conversation" onConfirm={() => archive(entry)}>
                   <Icon name="x" size={13} />

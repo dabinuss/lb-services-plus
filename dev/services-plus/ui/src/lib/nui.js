@@ -61,7 +61,7 @@ const requestTypeIdentifier = (name) => name.trim().toLowerCase().replace(/[^a-z
 const fixtures = {
   bootstrap: {
     locale: 'en',
-    unread: { activityMessages: 2, companyMessages: 1, companyRequests: 3 },
+    unread: { activityMessages: 3, companyMessages: 4, companyRequests: 3 },
     companySession: null,
     categories: [
       { id: 1, key: 'police', name: 'Police', icon: 'police', sort_order: 10 },
@@ -216,24 +216,28 @@ let fixtureMessages = Array.from({ length: 32 }, (_, i) => {
 let fixtureActivity = [
   {
     channel_id: 1,
+    unread_count: 2,
     last_message: 'Thanks for your patience!',
     updated_at: new Date(Date.now() - 60000).toISOString(),
     company: { id: 3, name: 'Downtown Cab Co.', icon: 'https://cdn-icons-png.flaticon.com/128/10281/10281554.png' },
   },
   {
     channel_id: 2,
+    unread_count: 0,
     last_message: 'Backup unit dispatched to your location.',
     updated_at: new Date(Date.now() - 3 * 3600000).toISOString(),
     company: { id: 1, name: 'Los Santos Police Department', icon: 'https://cdn-icons-png.flaticon.com/512/7211/7211100.png' },
   },
   {
     channel_id: 3,
+    unread_count: 1,
     last_message: 'Ambulance is en route, ETA 4 minutes.',
     updated_at: new Date(Date.now() - 26 * 3600000).toISOString(),
     company: { id: 2, name: 'Pillbox Medical', icon: 'https://cdn-icons-png.flaticon.com/128/1032/1032989.png' },
   },
   {
     channel_id: 4,
+    unread_count: 0,
     last_message: 'Your driver is 2 minutes away.',
     updated_at: new Date(Date.now() - 2 * 86400000).toISOString(),
     company: { id: 4, name: 'Coastal Taxi Co.', icon: 'https://cdn-icons-png.flaticon.com/128/3079/3079165.png' },
@@ -338,9 +342,9 @@ let fixtureTaxiPricing = [
 // different contact numbers so the list (and its own pagination) has
 // something to show beyond one row.
 let fixtureCompanyConversations = [
-  { channel_id: 1, contact_number: '5550100', last_message: 'Thanks for your patience!', label: 'Main Hotline' },
-  { channel_id: 5, contact_number: '5551122', last_message: 'Can you fix a flat tire?', label: 'Workshop' },
-  { channel_id: 6, contact_number: '5553344', last_message: 'What are your hours?', label: 'Main Hotline' },
+  { channel_id: 1, contact_number: '5550100', last_message: 'Thanks for your patience!', label: 'Main Hotline', unread_count: 0 },
+  { channel_id: 5, contact_number: '5551122', last_message: 'Can you fix a flat tire?', label: 'Workshop', unread_count: 3 },
+  { channel_id: 6, contact_number: '5553344', last_message: 'What are your hours?', label: 'Main Hotline', unread_count: 1 },
 ]
 
 // --------------------------------------------------------- admin fixtures
@@ -445,6 +449,10 @@ async function fetchNuiFixture(action, data) {
       return fixtures.bootstrap
     case 'setLocale':
     case 'markRead':
+      return true
+    case 'markConversationRead':
+      fixtureActivity = fixtureActivity.map((entry) => entry.channel_id === data.channelId ? { ...entry, unread_count: 0 } : entry)
+      fixtureCompanyConversations = fixtureCompanyConversations.map((entry) => entry.channel_id === data.channelId ? { ...entry, unread_count: 0 } : entry)
       return true
     case 'companyLogin':
       return {

@@ -208,6 +208,21 @@ CREATE TABLE IF NOT EXISTS `phone_services_plus_read_state` (
     PRIMARY KEY (`owner_key`, `scope`, `company_id`)
 ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
+-- Per-conversation read markers. Unlike the aggregate area markers above,
+-- these allow every chat row to expose its own unread counter. Customers
+-- are keyed by phone number; employees by their stable framework identifier.
+CREATE TABLE IF NOT EXISTS `phone_services_plus_conversation_reads` (
+    `owner_key` VARCHAR(100) NOT NULL,
+    `viewer_scope` VARCHAR(16) NOT NULL,
+    `channel_id` INT UNSIGNED NOT NULL,
+    `last_read_id` BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (`owner_key`, `viewer_scope`, `channel_id`),
+    KEY `channel_scope` (`channel_id`, `viewer_scope`),
+    FOREIGN KEY (`channel_id`) REFERENCES `phone_services_plus_channels`(`id`) ON DELETE CASCADE
+) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
 -- ---------------------------------------------------------------------------
 -- Request system (plan §11-16, §36, phase 2). Request types are seeded per
 -- category the same way categories/companies are (see server/requests.lua);

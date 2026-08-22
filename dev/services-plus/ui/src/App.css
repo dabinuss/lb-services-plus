@@ -670,6 +670,14 @@
   padding: 1.2rem;
 }
 
+.activity-row.unread .company-name {
+  font-weight: 750;
+}
+
+.conversation-badge {
+  box-shadow: none;
+}
+
 .login-card {
   position: relative;
   display: flex;

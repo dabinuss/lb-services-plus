@@ -41,6 +41,7 @@ export default function ConversationScreen({ target, incoming, onClose }) {
       setViewerRole(result.viewerRole)
       setMessages([...result.messages].reverse())
       setHasOlder(result.messages.length === PAGE_SIZE)
+      fetchNui('markConversationRead', { channelId: result.channelId }).catch(() => {})
     })
   }, [target])
 
@@ -51,6 +52,7 @@ export default function ConversationScreen({ target, incoming, onClose }) {
   useEffect(() => {
     if (incoming && channelId && incoming.channelId === channelId) {
       setMessages((prev) => (prev?.some((m) => m.id === incoming.message.id) ? prev : [...(prev || []), incoming.message]))
+      fetchNui('markConversationRead', { channelId }).catch(() => {})
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [incoming])

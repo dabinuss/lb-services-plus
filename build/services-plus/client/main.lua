@@ -283,6 +283,42 @@ RegisterNUICallback("markRead", function(data, cb)
     cb(bridge("markRead", data.scope))
 end)
 
+RegisterNUICallback("markConversationRead", function(data, cb)
+    cb(bridge("markConversationRead", data.channelId))
+end)
+
+local function relayRequestQueueChanged(requestId, status)
+    local unread = bridge("getUnreadCounts")
+    exports["lb-phone"]:SendCustomAppMessage(Config.App.identifier, {
+        type = "requestQueueChanged",
+        requestId = tonumber(requestId),
+        status = status,
+        unread = unread,
+    })
+end
+
+-- These events are already consumed by the PeekPlus request overlay. A
+-- second listener keeps the app's queue and badge synchronized even when a
+-- colleague acts from that overlay while Services+ is open elsewhere.
+RegisterNetEvent("services-plus:client:requestClaimed", function(requestId)
+    relayRequestQueueChanged(requestId, "active")
+end)
+
+RegisterNetEvent("services-plus:client:requestAccepted", function(payload)
+    relayRequestQueueChanged(payload and payload.requestId, "active")
+end)
+
+RegisterNetEvent("services-plus:client:requestEnded", function(requestId)
+    relayRequestQueueChanged(requestId)
+end)
+
+RegisterNetEvent("services-plus:client:requestUpdated", function(payload)
+    exports["lb-phone"]:SendCustomAppMessage(Config.App.identifier, {
+        type = "requestUpdated",
+        request = payload,
+    })
+end)
+
 -- The PeekPlus request card is handled by client/services/requests.lua.
 -- Relay the same arrival to the app as a small realtime delta so the
 -- Company/Requests badges and an already-open request list stay current.
