@@ -182,6 +182,32 @@ CREATE TABLE IF NOT EXISTS `phone_services_plus_settings` (
 INSERT IGNORE INTO `phone_services_plus_settings` (`key`, `value`)
 VALUES ('active_request_disconnect_grace_minutes', '5');
 
+-- Per-phone language used by server-generated LB Phone notifications.
+-- Keeping this separate from Config.Locale lets two players use different
+-- languages on the same server.
+CREATE TABLE IF NOT EXISTS `phone_services_plus_preferences` (
+    `phone_number` VARCHAR(15) NOT NULL,
+    `locale` VARCHAR(5) NOT NULL DEFAULT 'en',
+    `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (`phone_number`)
+) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- Persistent high-water marks for realtime badges. `owner_key` is the
+-- customer's current phone number for Activity, and the framework player
+-- identifier for employee-side Company badges. company_id is deliberately
+-- not a foreign key: 0 denotes personal Activity and employee read history
+-- should survive a company being soft-deleted.
+CREATE TABLE IF NOT EXISTS `phone_services_plus_read_state` (
+    `owner_key` VARCHAR(100) NOT NULL,
+    `scope` VARCHAR(32) NOT NULL,
+    `company_id` INT UNSIGNED NOT NULL DEFAULT 0,
+    `last_read_id` BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (`owner_key`, `scope`, `company_id`)
+) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
 -- ---------------------------------------------------------------------------
 -- Request system (plan §11-16, §36, phase 2). Request types are seeded per
 -- category the same way categories/companies are (see server/requests.lua);

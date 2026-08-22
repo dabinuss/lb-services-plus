@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { fetchNui } from '../../lib/nui.js'
 import Sheet from '../../components/Sheet.jsx'
 import ConfirmButton from '../../components/ConfirmButton.jsx'
@@ -17,6 +17,8 @@ export default function RequestsTab() {
   const [details, setDetails] = useState(null) // the entry currently shown in the details sheet
   const [hasMore, setHasMore] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
+  const [cancellingId, setCancellingId] = useState(null)
+  const cancelLock = useRef(false)
 
   const loadPage = (page) => {
     if (page > 0) setLoadingMore(true)
@@ -35,9 +37,17 @@ export default function RequestsTab() {
   const loadMore = () => loadPage(Math.floor((entries?.length || 0) / PAGE_SIZE))
 
   const cancel = async (entry) => {
-    if (await fetchNui('cancelRequest', { requestId: entry.id })) {
-      setDetails(null)
-      loadPage(0)
+    if (cancelLock.current) return
+    cancelLock.current = true
+    setCancellingId(entry.id)
+    try {
+      if (await fetchNui('cancelRequest', { requestId: entry.id })) {
+        setDetails(null)
+        loadPage(0)
+      }
+    } finally {
+      cancelLock.current = false
+      setCancellingId(null)
     }
   }
 
@@ -64,7 +74,7 @@ export default function RequestsTab() {
               <span className="activity-time">{formatRelativeTime(entry.created_at)}</span>
               {entry.status === 'open' && (
                 <div onClick={(e) => e.stopPropagation()}>
-                  <ConfirmButton className="icon-button subtle" ariaLabel="cancel request" onConfirm={() => cancel(entry)}>
+                  <ConfirmButton className="icon-button subtle" ariaLabel="cancel request" disabled={cancellingId !== null} onConfirm={() => cancel(entry)}>
                     <Icon name="x" size={13} />
                   </ConfirmButton>
                 </div>
@@ -110,7 +120,7 @@ export default function RequestsTab() {
           </div>
 
           {details.status === 'open' && (
-            <ConfirmButton className="sheet-option" onConfirm={() => cancel(details)}>
+            <ConfirmButton className="sheet-option" disabled={cancellingId !== null} onConfirm={() => cancel(details)}>
               {t('Cancel request')}
             </ConfirmButton>
           )}

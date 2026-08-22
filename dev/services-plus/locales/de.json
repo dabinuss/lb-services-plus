@@ -1,3 +1,25 @@
 {
-    "notifications.newMessage": "Neue Nachricht"
+    "notifications.newMessage": "Neue Nachricht",
+    "notifications.requestCancelledUnavailable": "Deine Anfrage wurde abgebrochen, weil der Mitarbeiter nicht mehr verfügbar ist.",
+    "notifications.requestCompleted": "Deine Anfrage wurde abgeschlossen. Vielen Dank.",
+    "notifications.requestCompletedFare": "Deine Anfrage wurde abgeschlossen. Gesamtbetrag: ${amount}. Vielen Dank.",
+    "requests.newRequest": "Neue Anfrage",
+    "requests.activeRequest": "Aktive Anfrage",
+    "requests.passengerCount": "Personenanzahl",
+    "requests.markedLocation": "Markierter Standort",
+    "requests.reportedLocation": "Gemeldeter Standort",
+    "requests.distance": "Entfernung",
+    "requests.estimatedFare": "Geschätzter Fahrpreis",
+    "requests.decline": "Ablehnen",
+    "requests.accept": "Annehmen",
+    "requests.cancel": "Abbrechen",
+    "requests.confirm": "Bestätigen?",
+    "requests.completeRequest": "Anfrage abschließen",
+    "requests.confirmCompletion": "Abschluss bestätigen?",
+    "requestTypes.vehicle_towing": "Fahrzeug abschleppen",
+    "requestTypes.roadside_assistance": "Pannenhilfe",
+    "requestTypes.breaking_news": "Aktuelle Meldung",
+    "requestTypes.taxi": "Taxi-Abholung",
+    "requestTypes.medical_emergency": "Medizinischer Notfall",
+    "requestTypes.police_emergency": "Polizeilicher Notfall"
 }

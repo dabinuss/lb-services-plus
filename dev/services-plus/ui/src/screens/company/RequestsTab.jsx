@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { fetchNui } from '../../lib/nui.js'
 import Sheet from '../../components/Sheet.jsx'
 import ConfirmButton from '../../components/ConfirmButton.jsx'
@@ -19,6 +19,8 @@ export default function RequestsTab() {
   const [details, setDetails] = useState(null)
   const [hasMore, setHasMore] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
+  const [pendingAction, setPendingAction] = useState(null)
+  const actionLock = useRef(false)
 
   const loadPage = (page) => {
     if (page > 0) setLoadingMore(true)
@@ -46,24 +48,48 @@ export default function RequestsTab() {
   }
 
   const accept = async (request) => {
-    const result = await fetchNui('acceptRequest', { requestId: request.id })
-    if (!result) return
-    if (result.x != null && result.y != null) fetchNui('setWaypoint', { x: result.x, y: result.y })
-    setDetails(null)
-    loadPage(0)
+    if (actionLock.current) return
+    actionLock.current = true
+    setPendingAction(`accept:${request.id}`)
+    try {
+      const result = await fetchNui('acceptRequest', { requestId: request.id })
+      if (!result) return
+      if (result.x != null && result.y != null) fetchNui('setWaypoint', { x: result.x, y: result.y })
+      setDetails(null)
+      loadPage(0)
+    } finally {
+      actionLock.current = false
+      setPendingAction(null)
+    }
   }
 
   const complete = async (request) => {
-    if (await fetchNui('completeRequest', { requestId: request.id })) {
-      setDetails(null)
-      loadPage(0)
+    if (actionLock.current) return
+    actionLock.current = true
+    setPendingAction(`complete:${request.id}`)
+    try {
+      if (await fetchNui('completeRequest', { requestId: request.id })) {
+        setDetails(null)
+        loadPage(0)
+      }
+    } finally {
+      actionLock.current = false
+      setPendingAction(null)
     }
   }
 
   const cancel = async (request) => {
-    if (await fetchNui('cancelRequest', { requestId: request.id })) {
-      setDetails(null)
-      loadPage(0)
+    if (actionLock.current) return
+    actionLock.current = true
+    setPendingAction(`cancel:${request.id}`)
+    try {
+      if (await fetchNui('cancelRequest', { requestId: request.id })) {
+        setDetails(null)
+        loadPage(0)
+      }
+    } finally {
+      actionLock.current = false
+      setPendingAction(null)
     }
   }
 
@@ -87,16 +113,16 @@ export default function RequestsTab() {
             </div>
 
             {r.status === 'open' && (
-              <button className="request-action accept" onClick={(e) => { e.stopPropagation(); accept(r) }}>
+              <button className="request-action accept" disabled={pendingAction !== null} aria-busy={pendingAction === `accept:${r.id}`} onClick={(e) => { e.stopPropagation(); accept(r) }}>
                 {t('Accept')}
               </button>
             )}
             {r.status === 'active' && r.is_mine && (
               <div className="request-actions" onClick={(e) => e.stopPropagation()}>
-                <button className="request-action complete" onClick={() => complete(r)}>
+                <button className="request-action complete" disabled={pendingAction !== null} aria-busy={pendingAction === `complete:${r.id}`} onClick={() => complete(r)}>
                   {t('Complete')}
                 </button>
-                <ConfirmButton className="request-action cancel" onConfirm={() => cancel(r)}>
+                <ConfirmButton className="request-action cancel" disabled={pendingAction !== null} onConfirm={() => cancel(r)}>
                   {t('Cancel')}
                 </ConfirmButton>
               </div>
@@ -159,18 +185,18 @@ export default function RequestsTab() {
             </button>
           )}
           {details.status === 'open' && (
-            <button className="sheet-option" onClick={() => accept(details)}>
+            <button className="sheet-option" disabled={pendingAction !== null} aria-busy={pendingAction === `accept:${details.id}`} onClick={() => accept(details)}>
               <Icon name="check" size={16} className="sheet-option-icon" />
               <span className="sheet-option-label">{t('Accept request')}</span>
             </button>
           )}
           {details.status === 'active' && details.is_mine && (
             <>
-              <button className="sheet-option" onClick={() => complete(details)}>
+              <button className="sheet-option" disabled={pendingAction !== null} aria-busy={pendingAction === `complete:${details.id}`} onClick={() => complete(details)}>
                 <Icon name="check" size={16} className="sheet-option-icon" />
                 <span className="sheet-option-label">{t('Complete request')}</span>
               </button>
-              <ConfirmButton className="sheet-option" onConfirm={() => cancel(details)}>
+              <ConfirmButton className="sheet-option" disabled={pendingAction !== null} onConfirm={() => cancel(details)}>
                 <Icon name="x" size={16} className="sheet-option-icon" />
                 <span className="sheet-option-label">{t('Cancel request')}</span>
               </ConfirmButton>

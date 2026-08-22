@@ -10,9 +10,10 @@ import { useI18n } from '../lib/i18n.jsx'
 // sure" gestures.
 const DEFAULT_TIMEOUT = 4000
 
-export default function ConfirmButton({ onConfirm, className = 'request-action cancel', children, timeout = DEFAULT_TIMEOUT, ariaLabel }) {
+export default function ConfirmButton({ onConfirm, className = 'request-action cancel', children, timeout = DEFAULT_TIMEOUT, ariaLabel, disabled = false }) {
   const { t } = useI18n()
   const [confirming, setConfirming] = useState(false)
+  const [executing, setExecuting] = useState(false)
   const resetTimer = useRef(null)
 
   useEffect(() => () => clearTimeout(resetTimer.current), [])
@@ -32,10 +33,18 @@ export default function ConfirmButton({ onConfirm, className = 'request-action c
     return (
       <button
         className={className}
+        disabled={disabled || executing}
+        aria-busy={executing}
         aria-label={ariaLabel ? t('Confirm {action}', { action: t(ariaLabel) }) : undefined}
-        onClick={() => {
+        onClick={async () => {
+          if (executing) return
           disarm()
-          onConfirm()
+          setExecuting(true)
+          try {
+            await onConfirm()
+          } finally {
+            setExecuting(false)
+          }
         }}
         onBlur={disarm}
       >
@@ -45,7 +54,7 @@ export default function ConfirmButton({ onConfirm, className = 'request-action c
   }
 
   return (
-    <button className={className} aria-label={ariaLabel} onClick={arm}>
+    <button className={className} aria-label={ariaLabel} onClick={arm} disabled={disabled || executing}>
       {children ?? t('Delete')}
     </button>
   )

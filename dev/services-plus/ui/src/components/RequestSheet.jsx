@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { fetchNui } from '../lib/nui.js'
 import Sheet from './Sheet.jsx'
 import { useI18n } from '../lib/i18n.jsx'
@@ -12,6 +12,7 @@ export default function RequestSheet({ company, onClose }) {
   const [passengerCount, setPassengerCount] = useState('')
   const [description, setDescription] = useState('')
   const [state, setState] = useState('form') // form | sending | sent | queued | failed
+  const submittingRef = useRef(false)
   const passengerMode = type?.passenger_mode || (type?.passenger_count === 1 ? 'required' : 'disabled')
   const noteMode = type?.note_mode || (type?.description_enabled === 1 ? 'optional' : 'disabled')
   const countLabel = type?.count_label || t('Passenger count')
@@ -25,17 +26,25 @@ export default function RequestSheet({ company, onClose }) {
   }, [company])
 
   const submit = async () => {
+    if (submittingRef.current) return
     if (passengerMode === 'required' && !passengerCount) return
     if (noteMode === 'required' && !description.trim()) return
+    submittingRef.current = true
     setState('sending')
-    const result = await fetchNui('createRequest', {
-      companyId: company.id,
-      requestTypeId: type.id,
-      passengerCount: passengerCount ? Number(passengerCount) : undefined,
-      description: description || undefined,
-    })
+    let result = false
+    try {
+      result = await fetchNui('createRequest', {
+        companyId: company.id,
+        requestTypeId: type.id,
+        passengerCount: passengerCount ? Number(passengerCount) : undefined,
+        description: description || undefined,
+      })
+    } catch {
+      result = false
+    }
 
     if (!result) {
+      submittingRef.current = false
       setState('failed')
       return
     }
@@ -96,6 +105,7 @@ export default function RequestSheet({ company, onClose }) {
             className="login-button"
             disabled={(passengerMode === 'required' && !passengerCount) || (noteMode === 'required' && !description.trim())}
             onClick={submit}
+            aria-busy={state === 'sending'}
           >
             {t('Send request')}
           </button>

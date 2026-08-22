@@ -428,6 +428,7 @@ local function employeeSnapshot(source)
 
     return {
         memberId = source,
+        playerName = Framework.GetPlayerName(source),
         companyId = company.id,
         job = job.name,
         jobLabel = job.label,

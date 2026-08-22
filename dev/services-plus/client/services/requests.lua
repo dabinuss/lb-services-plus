@@ -84,6 +84,10 @@ local function requestId(payload)
     return payload and tonumber(payload.requestId)
 end
 
+local function label(payload, key, fallback)
+    return payload.labels and payload.labels[key] or fallback
+end
+
 local activeDetails
 
 local function distanceFromPlayer(payload)
@@ -116,7 +120,7 @@ local function pendingCard(payload)
         template = requestTemplate(payload, "pending"),
         icon = requestIcon(payload),
         iconUrl = payload.companyIcon,
-        title = tostring(payload.typeName or "New request"),
+        title = tostring(payload.typeName or label(payload, "newRequest", "New request")),
         subtitle = tostring(payload.companyName or Config.App.name),
         description = tostring(payload.description or ""),
         details = activeDetails(payload, distanceFromPlayer(payload)),
@@ -125,8 +129,8 @@ local function pendingCard(payload)
         sound = true,
         priority = 0,
         actions = {
-            { id = "decline", label = "Backspace · Decline", key = "BACK", color = "danger" },
-            { id = "accept", label = "Enter · Accept", key = "RETURN", color = "success" },
+            { id = "decline", label = ("Backspace · %s"):format(label(payload, "decline", "Decline")), key = "BACK", color = "danger" },
+            { id = "accept", label = ("Enter · %s"):format(label(payload, "accept", "Accept")), key = "RETURN", color = "success" },
         },
     }
 end
@@ -135,13 +139,13 @@ local function reportedPickup(payload)
     if type(payload.reportedPickup) == "string" and payload.reportedPickup ~= "" then
         return payload.reportedPickup
     end
-    if type(payload.x) ~= "number" or type(payload.y) ~= "number" then return "Marked location" end
+    if type(payload.x) ~= "number" or type(payload.y) ~= "number" then return label(payload, "markedLocation", "Marked location") end
 
     local streetHash, crossingHash = GetStreetNameAtCoord(payload.x, payload.y, 0.0)
     local street = streetHash and streetHash ~= 0 and GetStreetNameFromHashKey(streetHash) or ""
     local crossing = crossingHash and crossingHash ~= 0 and GetStreetNameFromHashKey(crossingHash) or ""
 
-    if street == "" then street = "Marked location" end
+    if street == "" then street = label(payload, "markedLocation", "Marked location") end
     if crossing ~= "" and crossing ~= street then street = ("%s / %s"):format(street, crossing) end
     payload.reportedPickup = street
     return street
@@ -158,20 +162,20 @@ activeDetails = function(payload, distance)
     local details = {}
     if payload.passengerCount ~= nil then
         details[#details + 1] = {
-            label = tostring(payload.countLabel or "Passenger count"),
+            label = tostring(payload.countLabel or label(payload, "passengerCount", "Passenger count")),
             value = tostring(payload.passengerCount),
             icon = "people",
         }
     end
-    details[#details + 1] = { label = "Reported location", value = reportedPickup(payload), icon = "location" }
+    details[#details + 1] = { label = label(payload, "reportedLocation", "Reported location"), value = reportedPickup(payload), icon = "location" }
     if type(distance) == "number" then
         details[#details + 1] = {
-            label = "Distance",
+            label = label(payload, "distance", "Distance"),
             value = ("%.1f mi"):format(distance / 1609.34),
             icon = "distance",
         }
         if payload.category == "taxi" then
-            details[#details + 1] = { label = "Estimated fare", value = estimatedFare(distance), icon = "price" }
+            details[#details + 1] = { label = label(payload, "estimatedFare", "Estimated fare"), value = estimatedFare(distance), icon = "price" }
         end
     end
     return details
@@ -185,8 +189,8 @@ local function activeCard(payload)
         template = requestTemplate(payload, "active"),
         icon = requestIcon(payload),
         iconUrl = payload.companyIcon,
-        templateData = { statusLabel = "Active request" },
-        title = tostring(payload.typeName or "Active request"),
+        templateData = { statusLabel = label(payload, "activeRequest", "Active request") },
+        title = tostring(payload.typeName or label(payload, "activeRequest", "Active request")),
         subtitle = tostring(payload.companyName or Config.App.name),
         description = type(payload.description) == "string" and payload.description ~= ""
             and payload.description or nil,
@@ -198,17 +202,17 @@ local function activeCard(payload)
         actions = {
             {
                 id = "cancel",
-                label = "Cancel",
+                label = label(payload, "cancel", "Cancel"),
                 key = "BACK",
                 color = "danger",
-                confirm = { label = "Confirm?", timeout = 5000 },
+                confirm = { label = label(payload, "confirm", "Confirm?"), timeout = 5000 },
             },
             {
                 id = "complete",
-                label = "Enter · Complete request",
+                label = ("Enter · %s"):format(label(payload, "completeRequest", "Complete request")),
                 key = "RETURN",
                 color = "success",
-                confirm = { label = "Confirm completion?", timeout = 5000 },
+                confirm = { label = label(payload, "confirmCompletion", "Confirm completion?"), timeout = 5000 },
             },
         },
     }

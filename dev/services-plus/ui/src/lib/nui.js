@@ -60,6 +60,9 @@ const requestTypeIdentifier = (name) => name.trim().toLowerCase().replace(/[^a-z
 
 const fixtures = {
   bootstrap: {
+    locale: 'en',
+    unread: { activityMessages: 2, companyMessages: 1, companyRequests: 3 },
+    companySession: null,
     categories: [
       { id: 1, key: 'police', name: 'Police', icon: 'police', sort_order: 10 },
       { id: 2, key: 'medical', name: 'Medical', icon: 'medical', sort_order: 20 },
@@ -140,8 +143,9 @@ const fixtures = {
     // Logged in at the Mechanic company (Downtown Cab Co., id 3) - referenced
     // by companyLogin/getTeam/getCompanyConversations/etc. below too, keep
     // any future id changes here in sync with those.
-    employee: {
-      memberId: 1,
+      employee: {
+        memberId: 1,
+        playerName: 'Dabi',
       companyId: 3,
       job: 'mechanic',
       jobLabel: 'Mechanic',
@@ -439,11 +443,16 @@ async function fetchNuiFixture(action, data) {
   switch (action) {
     case 'bootstrap':
       return fixtures.bootstrap
+    case 'setLocale':
+    case 'markRead':
+      return true
     case 'companyLogin':
       return {
         company: { id: 3, name: 'Downtown Cab Co.', job: 'mechanic', icon: fixtures.bootstrap.companies[2].icon },
         employee: { memberId: 1, name: 'Dabi', grade: 4, gradeLabel: 'Boss', isBoss: true, onDuty: true },
       }
+    case 'companyLogout':
+      return true
     case 'toggleDuty':
     case 'setStatus':
       return true

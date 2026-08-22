@@ -193,6 +193,10 @@ RegisterNUICallback("companyLogin", function(data, cb)
     cb(bridge("companyLogin", data.companyId))
 end)
 
+RegisterNUICallback("companyLogout", function(_, cb)
+    cb(bridge("companyLogout"))
+end)
+
 RegisterNUICallback("toggleDuty", function(data, cb)
     local result = bridge("toggleDuty", data.onDuty)
     syncNativeCompanyCalls(result)
@@ -269,6 +273,14 @@ end)
 
 RegisterNUICallback("updateNumberSettings", function(data, cb)
     cb(bridge("updateNumberSettings", data.numberId, data.settings))
+end)
+
+RegisterNUICallback("setLocale", function(data, cb)
+    cb(bridge("setLocale", data.locale))
+end)
+
+RegisterNUICallback("markRead", function(data, cb)
+    cb(bridge("markRead", data.scope))
 end)
 
 -- The PeekPlus request card is handled by client/services/requests.lua.

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 import Frame from './components/Frame.jsx'
 import Sheet from './components/Sheet.jsx'
@@ -24,7 +24,7 @@ const TABS = [
 ]
 
 export default function App() {
-  const { t } = useI18n()
+  const { t, setLanguage } = useI18n()
   const [theme, setTheme] = useState('light')
   const [tab, setTab] = useState('services')
   const [bootstrap, setBootstrap] = useState(null)
@@ -59,7 +59,29 @@ export default function App() {
   }, [theme])
 
   useEffect(() => {
-    fetchNui('bootstrap').then(setBootstrap)
+    fetchNui('bootstrap').then((result) => {
+      if (!result) return
+      setBootstrap(result)
+      setCompanySession(result.companySession || null)
+      if (result.locale) setLanguage(result.locale)
+      if (result.unread) setUnread(result.unread)
+    })
+    // Bootstrap is an app-open snapshot. Language changes are persisted by
+    // LanguageProvider itself and must not trigger a second bootstrap.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const markRead = useCallback((scope, key) => {
+    setUnread((current) => current[key] ? { ...current, [key]: 0 } : current)
+    fetchNui('markRead', { scope }).catch(() => {})
+  }, [])
+  const readActivityMessages = useCallback(() => markRead('activity_messages', 'activityMessages'), [markRead])
+  const readCompanyMessages = useCallback(() => markRead('company_messages', 'companyMessages'), [markRead])
+  const readCompanyRequests = useCallback(() => markRead('company_requests', 'companyRequests'), [markRead])
+
+  const logoutCompany = useCallback(() => {
+    setCompanySession(null)
+    fetchNui('companyLogout').catch(() => {})
   }, [])
 
   // Realtime delta for an already-open conversation (plan review §15) -
@@ -160,7 +182,7 @@ export default function App() {
           onOpen={setConversation}
           messageBadge={unread.activityMessages}
           messageRevision={incomingMessage?.message?.id}
-          onReadMessages={() => setUnread((current) => current.activityMessages ? { ...current, activityMessages: 0 } : current)}
+          onReadMessages={readActivityMessages}
         />
       )}
       {tab === 'company' && bootstrap.employee && (
@@ -169,15 +191,15 @@ export default function App() {
           companies={bootstrap.companies}
           session={companySession}
           onLogin={setCompanySession}
-          onLogout={() => setCompanySession(null)}
+          onLogout={logoutCompany}
           onOpenConversation={setConversation}
           teamUpdate={teamUpdate}
           messageBadge={unread.companyMessages}
           requestBadge={unread.companyRequests}
           messageRevision={incomingMessage?.message?.id}
           requestRevision={incomingRequest?.requestId}
-          onReadMessages={() => setUnread((current) => current.companyMessages ? { ...current, companyMessages: 0 } : current)}
-          onReadRequests={() => setUnread((current) => current.companyRequests ? { ...current, companyRequests: 0 } : current)}
+          onReadMessages={readCompanyMessages}
+          onReadRequests={readCompanyRequests}
         />
       )}
       {tab === 'admin' && bootstrap.admin && <AdminScreen />}

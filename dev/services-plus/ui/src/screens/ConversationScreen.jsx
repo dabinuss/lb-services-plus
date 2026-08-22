@@ -16,6 +16,7 @@ export default function ConversationScreen({ target, incoming, onClose }) {
   const [channelId, setChannelId] = useState(target.channelId ?? null)
   const [messages, setMessages] = useState(null)
   const [text, setText] = useState('')
+  const [sending, setSending] = useState(false)
   const [hasOlder, setHasOlder] = useState(false)
   const [loadingOlder, setLoadingOlder] = useState(false)
   // 'customer' or 'employee' - which sender_type this viewer's own messages
@@ -108,11 +109,18 @@ export default function ConversationScreen({ target, incoming, onClose }) {
 
   const send = async () => {
     const content = text.trim()
-    if (!content || !channelId) return
+    if (!content || !channelId || sending) return
 
-    setText('')
-    const message = await fetchNui('sendMessage', { channelId, content })
-    if (message) setMessages((prev) => [...(prev || []), message])
+    setSending(true)
+    try {
+      const message = await fetchNui('sendMessage', { channelId, content })
+      if (message) {
+        setText('')
+        setMessages((prev) => [...(prev || []), message])
+      }
+    } finally {
+      setSending(false)
+    }
   }
 
   return (
@@ -142,10 +150,11 @@ export default function ConversationScreen({ target, incoming, onClose }) {
         <input
           placeholder={t('Message')}
           value={text}
+          disabled={sending}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && send()}
         />
-        <button className="send-button" onClick={send} disabled={!text.trim()} aria-label={t('Send')}>
+        <button className="send-button" onClick={send} disabled={sending || !text.trim()} aria-label={t('Send')} aria-busy={sending}>
           <Icon name="send" size={16} />
         </button>
       </div>

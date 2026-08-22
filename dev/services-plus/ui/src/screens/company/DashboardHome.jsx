@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { fetchNui, createCall } from '../../lib/nui.js'
 import Switch from '../../components/Switch.jsx'
 import Icon from '../../components/Icon.jsx'
@@ -23,6 +23,12 @@ export default function DashboardHome({ initialOnDuty, initialStatus, employeeMe
   const [notice, setNotice] = useState('')
   const [team, setTeam] = useState(null)
   const [teamSearch, setTeamSearch] = useState('')
+  const [statusSaving, setStatusSaving] = useState(false)
+  const statusLock = useRef(false)
+  const [dutySaving, setDutySaving] = useState(false)
+  const dutyLock = useRef(false)
+  const [hotlineSaving, setHotlineSaving] = useState(null)
+  const hotlineLock = useRef(false)
 
   useEffect(() => {
     fetchNui('getHotlines').then((result) => result && setHotlines(result))
@@ -66,7 +72,17 @@ export default function DashboardHome({ initialOnDuty, initialStatus, employeeMe
   // out (explicit logout, going off-duty, switching to a different phone
   // number).
   const toggleDuty = async (next) => {
-    if (!(await fetchNui('toggleDuty', { onDuty: next }))) return
+    if (dutyLock.current) return
+    dutyLock.current = true
+    setDutySaving(true)
+    let result = false
+    try {
+      result = await fetchNui('toggleDuty', { onDuty: next })
+    } finally {
+      dutyLock.current = false
+      setDutySaving(false)
+    }
+    if (!result) return
 
     if (next) {
       setOnDuty(true)
@@ -87,21 +103,37 @@ export default function DashboardHome({ initialOnDuty, initialStatus, employeeMe
   // colleagues' changes per review guidance - just keep this player's own
   // row in sync locally, the same data already in hand either way.
   const changeStatus = async (next) => {
-    if (await fetchNui('setStatus', { status: next })) {
-      setStatus(next)
-      setTeam((prev) => prev?.map((m) => (m.memberId === employeeMemberId ? { ...m, status: next } : m)))
+    if (statusLock.current || next === status) return
+    statusLock.current = true
+    setStatusSaving(true)
+    try {
+      if (await fetchNui('setStatus', { status: next })) {
+        setStatus(next)
+        setTeam((prev) => prev?.map((m) => (m.memberId === employeeMemberId ? { ...m, status: next } : m)))
+      }
+    } finally {
+      statusLock.current = false
+      setStatusSaving(false)
     }
   }
 
   const toggleHotline = async (line) => {
-    const result = await fetchNui('toggleHotline', { numberId: line.numberId, active: !line.active })
-    if (result?.ok) {
-      setHotlines(result.hotlines)
-      setNotice('')
-      const activeLabels = result.hotlines.filter((h) => h.active).map((h) => h.label)
-      setTeam((prev) => prev?.map((m) => (m.memberId === employeeMemberId ? { ...m, hotlines: activeLabels } : m)))
-    } else if (result?.reason === 'sole_employee') {
-      setNotice(t("Main hotline stays on while you're the only one on duty."))
+    if (hotlineLock.current) return
+    hotlineLock.current = true
+    setHotlineSaving(line.numberId)
+    try {
+      const result = await fetchNui('toggleHotline', { numberId: line.numberId, active: !line.active })
+      if (result?.ok) {
+        setHotlines(result.hotlines)
+        setNotice('')
+        const activeLabels = result.hotlines.filter((h) => h.active).map((h) => h.label)
+        setTeam((prev) => prev?.map((m) => (m.memberId === employeeMemberId ? { ...m, hotlines: activeLabels } : m)))
+      } else if (result?.reason === 'sole_employee') {
+        setNotice(t("Main hotline stays on while you're the only one on duty."))
+      }
+    } finally {
+      hotlineLock.current = false
+      setHotlineSaving(null)
     }
   }
 
@@ -121,7 +153,7 @@ export default function DashboardHome({ initialOnDuty, initialStatus, employeeMe
               {employeeGrade && ` · ${employeeGrade}`}
             </div>
           </div>
-          <Switch checked={onDuty} onChange={toggleDuty} small={false} />
+          <Switch checked={onDuty} onChange={toggleDuty} disabled={dutySaving} small={false} />
         </div>
 
         {onDuty && (
@@ -131,6 +163,8 @@ export default function DashboardHome({ initialOnDuty, initialStatus, employeeMe
                 key={s.key}
                 className={`status-pill ${s.key}${status === s.key ? ' active' : ''}`}
                 onClick={() => changeStatus(s.key)}
+                disabled={statusSaving}
+                aria-busy={statusSaving && status !== s.key}
               >
                 <Icon name="dot" size={10} className={`status-pill-icon ${s.key}`} />
                 {t(s.label)}
@@ -154,7 +188,7 @@ export default function DashboardHome({ initialOnDuty, initialStatus, employeeMe
                   </span>
                   <span className="hotline-number">{line.number}</span>
                 </div>
-                <Switch checked={line.active} disabled={line.locked} onChange={() => toggleHotline(line)} />
+                <Switch checked={line.active} disabled={line.locked || hotlineSaving !== null} onChange={() => toggleHotline(line)} />
               </div>
             ))}
           </div>

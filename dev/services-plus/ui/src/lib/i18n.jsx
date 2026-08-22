@@ -1,5 +1,6 @@
 /* oxlint-disable react/only-export-components -- provider and hook intentionally share one context module */
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
+import { fetchNui } from './nui.js'
 
 const STORAGE_KEY = 'services-plus-language'
 
@@ -46,6 +47,10 @@ const DE = {
   'Request · {company}': 'Anfrage · {company}',
   'Sign in to {company}': 'Bei {company} anmelden',
   'Signing in…': 'Anmeldung läuft…',
+  'Employee portal': 'Mitarbeiterportal',
+  'Secure online session': 'Sichere Online-Sitzung',
+  'Verifying session…': 'Sitzung wird geprüft…',
+  'Session stays active on this phone': 'Die Sitzung bleibt auf diesem Handy aktiv',
   'Login': 'Anmelden',
   'Logout': 'Abmelden',
   'On duty': 'Im Dienst',
@@ -285,6 +290,7 @@ export function LanguageProvider({ children }) {
       if (next !== 'de' && next !== 'en') return
       window.localStorage?.setItem(STORAGE_KEY, next)
       setLanguageState(next)
+      fetchNui('setLocale', { locale: next }).catch(() => {})
     }
 
     const t = (key, variables = {}) => {

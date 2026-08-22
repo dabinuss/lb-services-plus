@@ -22,6 +22,35 @@ local typesByCategory = {} -- categoryId -> ordered list
 local typesById = {}
 local typesByIdentifier = {}
 
+local function overlayLabels(phoneNumber)
+    return {
+        newRequest = LForNumber(phoneNumber, "requests.newRequest"),
+        activeRequest = LForNumber(phoneNumber, "requests.activeRequest"),
+        passengerCount = LForNumber(phoneNumber, "requests.passengerCount"),
+        markedLocation = LForNumber(phoneNumber, "requests.markedLocation"),
+        reportedLocation = LForNumber(phoneNumber, "requests.reportedLocation"),
+        distance = LForNumber(phoneNumber, "requests.distance"),
+        estimatedFare = LForNumber(phoneNumber, "requests.estimatedFare"),
+        decline = LForNumber(phoneNumber, "requests.decline"),
+        accept = LForNumber(phoneNumber, "requests.accept"),
+        cancel = LForNumber(phoneNumber, "requests.cancel"),
+        confirm = LForNumber(phoneNumber, "requests.confirm"),
+        completeRequest = LForNumber(phoneNumber, "requests.completeRequest"),
+        confirmCompletion = LForNumber(phoneNumber, "requests.confirmCompletion"),
+    }
+end
+
+local function localizedRequestType(phoneNumber, identifier, fallbackName)
+    local key = "requestTypes." .. tostring(identifier or "")
+    local translated = LForNumber(phoneNumber, key)
+    return translated ~= key and translated or fallbackName
+end
+
+local function localizedCountLabel(phoneNumber, value)
+    if value and value ~= "Passenger count" then return value end
+    return LForNumber(phoneNumber, "requests.passengerCount")
+end
+
 local function seedIfEmpty()
     local count = MySQL.scalar.await("SELECT COUNT(*) FROM phone_services_plus_request_types")
     if count > 0 or #Config.DefaultRequestTypes == 0 then return end
@@ -212,7 +241,7 @@ local function cancelExpiredDisconnectedRequests(identifier)
                     exports["lb-phone"]:SendNotification(row.requester_number, {
                         app = Config.App.identifier,
                         title = Config.App.name,
-                        content = "Your request was cancelled because the employee became unavailable.",
+                        content = LForNumber(row.requester_number, "notifications.requestCancelledUnavailable"),
                     })
                 end)
             end
@@ -271,7 +300,13 @@ local function distribute(company, requestType, request)
     end
 
     for i = 1, #eligible do
-        TriggerClientEvent("services-plus:client:requestNotification", eligible[i], payload)
+        local staffNumber = Framework.GetPhoneNumber(eligible[i])
+        local recipientPayload = {}
+        for key, value in pairs(payload) do recipientPayload[key] = value end
+        recipientPayload.labels = overlayLabels(staffNumber)
+        recipientPayload.typeName = localizedRequestType(staffNumber, requestType.icon, requestType.name)
+        recipientPayload.countLabel = localizedCountLabel(staffNumber, requestType.count_label)
+        TriggerClientEvent("services-plus:client:requestNotification", eligible[i], recipientPayload)
         table.insert(entry.sources, eligible[i])
     end
 
@@ -603,19 +638,21 @@ function Requests.Accept(source, requestId)
         clearNotifications(requestId, source)
 
         local category = Companies.GetCategory(requestType.category_id)
+        local staffNumber = Framework.GetPhoneNumber(source)
         local activePayload = {
             requestId = requestId,
             requestType = requestType.icon,
-            typeName = requestType.name,
+            typeName = localizedRequestType(staffNumber, requestType.icon, requestType.name),
             typeIcon = requestType.icon,
             category = category and category.key or nil,
             companyName = company.name,
             companyIcon = company.icon,
             passengerCount = request.passenger_count,
-            countLabel = requestType.count_label or "Passenger count",
+            countLabel = localizedCountLabel(staffNumber, requestType.count_label),
             description = request.description,
             x = request.pos_x,
             y = request.pos_y,
+            labels = overlayLabels(staffNumber),
         }
 
         -- The RPC reply only reaches whichever surface (overlay or the
@@ -675,21 +712,23 @@ function Requests.GetActive(source)
     return nil
 end
 
-local function toOverlayPayload(request)
+local function toOverlayPayload(request, source)
     if not request then return nil end
+    local staffNumber = Framework.GetPhoneNumber(source)
     return {
         requestId = request.id,
         requestType = request.type,
-        typeName = request.typeName,
+        typeName = localizedRequestType(staffNumber, request.type, request.typeName),
         typeIcon = request.type,
         category = request.category,
         companyName = request.company and request.company.name or nil,
         companyIcon = request.company and request.company.icon or nil,
         passengerCount = request.passengerCount,
-        countLabel = request.countLabel or "Passenger count",
+        countLabel = localizedCountLabel(staffNumber, request.countLabel),
         description = request.description,
         x = request.position.x,
         y = request.position.y,
+        labels = overlayLabels(staffNumber),
     }
 end
 
@@ -728,14 +767,16 @@ function Requests.Complete(requestId, actorSource)
     end
 
     if before.requesterNumber then
-        local content = "Your request has been completed. Thank you."
+        local content = LForNumber(before.requesterNumber, "notifications.requestCompleted")
         local rawFeatureData = MySQL.scalar.await(
             "SELECT feature_data FROM phone_services_plus_requests WHERE id = ?", { id }
         )
         if type(rawFeatureData) == "string" then
             local ok, decoded = pcall(json.decode, rawFeatureData)
             if ok and type(decoded) == "table" and type(decoded.amount) == "number" then
-                content = ("Your request has been completed. Total: $%.2f. Thank you."):format(decoded.amount)
+                content = LForNumber(before.requesterNumber, "notifications.requestCompletedFare", {
+                    amount = ("%.2f"):format(decoded.amount),
+                })
             end
         end
 
@@ -787,7 +828,7 @@ end
 -- resource restart loses `active` from memory even though the request is
 -- still 'active' in the database, so the overlay asks for it back on load.
 RegisterCallback("getActiveRequest", function(source, reply)
-    reply(toOverlayPayload(Requests.GetActive(source)))
+    reply(toOverlayPayload(Requests.GetActive(source), source))
 end)
 
 RegisterCallback("completeRequest", function(source, reply, requestId)

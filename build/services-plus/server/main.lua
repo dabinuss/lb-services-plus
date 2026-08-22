@@ -124,17 +124,132 @@ end
 -- Bootstrap: one combined payload for opening the app (plan §63-64: as few
 -- round trips as possible).
 -- ---------------------------------------------------------------------------
+local READ_SCOPES = {
+    activity_messages = true,
+    company_messages = true,
+    company_requests = true,
+}
+
+-- Cosmetic company login state lives for the player's current online
+-- session. Every privileged callback still performs its own job/boss check;
+-- this only decides whether the login presentation needs to be shown again.
+local companySessions = {}
+
+local function buildCompanySession(source, company, job)
+    return {
+        company = { id = company.id, name = company.name, job = company.job, icon = company.icon },
+        employee = {
+            memberId = source,
+            name = Framework.GetPlayerName(source),
+            grade = job.grade,
+            gradeLabel = job.gradeLabel,
+            isBoss = Framework.IsBoss(source, job.name, company.boss_grade),
+            onDuty = Framework.GetOnDuty(source),
+        },
+    }
+end
+
+local function getCompanySession(source, company, job, phoneNumber)
+    local stored = companySessions[source]
+    if not stored or not company or not job then return nil end
+    if stored.companyId ~= company.id or stored.phoneNumber ~= phoneNumber then
+        companySessions[source] = nil
+        return nil
+    end
+    return buildCompanySession(source, company, job)
+end
+
+local function getReadMarker(ownerKey, scope, companyId)
+    return tonumber(MySQL.scalar.await([[
+        SELECT last_read_id
+        FROM phone_services_plus_read_state
+        WHERE owner_key = ? AND scope = ? AND company_id = ?
+    ]], { ownerKey, scope, companyId or 0 })) or 0
+end
+
+local function getUnreadCounts(source)
+    local phoneNumber = Framework.GetPhoneNumber(source)
+    local result = { activityMessages = 0, companyMessages = 0, companyRequests = 0 }
+
+    if phoneNumber then
+        local marker = getReadMarker(phoneNumber, "activity_messages", 0)
+        result.activityMessages = tonumber(MySQL.scalar.await([[
+            SELECT COUNT(*)
+            FROM phone_services_plus_messages m
+            JOIN phone_services_plus_channels c ON c.id = m.channel_id
+            WHERE c.contact_number = ? AND m.sender_type = 'company' AND m.id > ?
+        ]], { phoneNumber, marker })) or 0
+    end
+
+    local job = Framework.GetJob(source)
+    local company = job and Companies.GetByJob(job.name)
+    if not company then return result end
+
+    local ownerKey = Framework.GetIdentifier(source)
+    local messageMarker = getReadMarker(ownerKey, "company_messages", company.id)
+    result.companyMessages = tonumber(MySQL.scalar.await([[
+        SELECT COUNT(*)
+        FROM phone_services_plus_messages m
+        JOIN phone_services_plus_channels c ON c.id = m.channel_id
+        JOIN phone_services_plus_numbers n ON n.id = c.number_id
+        WHERE n.company_id = ? AND m.sender_type = 'customer' AND m.id > ?
+    ]], { company.id, messageMarker })) or 0
+
+    local requestMarker = getReadMarker(ownerKey, "company_requests", company.id)
+    result.companyRequests = tonumber(MySQL.scalar.await([[
+        SELECT COUNT(*)
+        FROM phone_services_plus_requests r
+        JOIN phone_services_plus_request_types t ON t.id = r.request_type_id
+        WHERE r.id > ? AND (
+            r.company_id = ? OR
+            (r.company_id IS NULL AND t.category_id = ? AND r.status = 'open')
+        )
+    ]], { requestMarker, company.id, company.category_id })) or 0
+
+    return result
+end
+
+local function markRead(source, scope)
+    if not READ_SCOPES[scope] then return false end
+
+    local ownerKey, companyId = Framework.GetPhoneNumber(source), 0
+    if scope ~= "activity_messages" then
+        local job = Framework.GetJob(source)
+        local company = job and Companies.GetByJob(job.name)
+        if not company then return false end
+        ownerKey, companyId = Framework.GetIdentifier(source), company.id
+    end
+    if not ownerKey then return false end
+
+    local tableName = scope == "company_requests"
+        and "phone_services_plus_requests" or "phone_services_plus_messages"
+    local latestId = tonumber(MySQL.scalar.await("SELECT COALESCE(MAX(id), 0) FROM " .. tableName)) or 0
+
+    MySQL.update.await([[
+        INSERT INTO phone_services_plus_read_state (owner_key, scope, company_id, last_read_id)
+        VALUES (?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE last_read_id = GREATEST(last_read_id, VALUES(last_read_id))
+    ]], { ownerKey, scope, companyId, latestId })
+
+    return true
+end
+
 RegisterCallback("bootstrap", function(source, reply)
     local job = Framework.GetJob(source)
     local company = job and Companies.GetByJob(job.name)
+    local phoneNumber = Framework.GetPhoneNumber(source)
 
     reply({
         categories = Companies.GetCategories(),
         companies = Companies.GetPublicList(),
-        myNumber = Framework.GetPhoneNumber(source),
+        myNumber = phoneNumber,
+        locale = GetServicesLocale(phoneNumber),
+        unread = getUnreadCounts(source),
+        companySession = getCompanySession(source, company, job, phoneNumber),
         admin = Admin.IsAdmin(source),
         employee = company and {
             memberId = source,
+            playerName = Framework.GetPlayerName(source),
             companyId = company.id,
             job = job.name,
             jobLabel = job.label,
@@ -145,6 +260,14 @@ RegisterCallback("bootstrap", function(source, reply)
             status = Employees.GetStatus(source),
         } or nil,
     })
+end)
+
+RegisterCallback("setLocale", function(source, reply, locale)
+    reply(SetServicesLocale(Framework.GetPhoneNumber(source), locale))
+end)
+
+RegisterCallback("markRead", function(source, reply, scope)
+    reply(markRead(source, scope))
 end)
 
 -- Replies with the resulting {onDuty, status}, not just true/false, so the
@@ -324,17 +447,28 @@ RegisterCallback("companyLogin", function(source, reply, companyId)
         return reply(false)
     end
 
-    reply({
-        company = { id = company.id, name = company.name, job = company.job, icon = company.icon },
-        employee = {
-            memberId = source,
-            name = Framework.GetPlayerName(source),
-            grade = job.grade,
-            gradeLabel = job.gradeLabel,
-            isBoss = Framework.IsBoss(source, job.name, company.boss_grade),
-            onDuty = Framework.GetOnDuty(source),
-        },
-    })
+    companySessions[source] = {
+        companyId = company.id,
+        phoneNumber = Framework.GetPhoneNumber(source),
+    }
+    reply(buildCompanySession(source, company, job))
+end)
+
+RegisterCallback("companyLogout", function(source, reply)
+    companySessions[source] = nil
+    reply(true)
+end)
+
+AddEventHandler("services-plus:internal:dutyChanged", function(source)
+    if not Framework.GetOnDuty(source) then companySessions[source] = nil end
+end)
+
+AddEventHandler("services-plus:internal:jobChanged", function(source)
+    companySessions[source] = nil
+end)
+
+AddEventHandler("services-plus:internal:playerDropped", function(source)
+    companySessions[source] = nil
 end)
 
 -- Same {onDuty, status} reply shape as setStatus, same reason.

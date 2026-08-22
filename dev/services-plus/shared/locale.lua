@@ -15,13 +15,14 @@ local function loadFile(lang)
     return decoded
 end
 
-local current = loadFile(Config.Locale) or {}
-local fallbackTable = Config.Locale ~= fallback and loadFile(fallback) or current
-
+---@param lang string
 ---@param key string dot.notation path, e.g. "app.title"
 ---@param vars? table<string, string|number> values to interpolate as {var}
-function L(key, vars)
-    local value = current[key] or fallbackTable[key] or key
+function LFor(lang, key, vars)
+    lang = type(lang) == "string" and lang:lower() or fallback
+    local selected = loadFile(lang)
+    local fallbackTable = lang ~= fallback and loadFile(fallback) or selected
+    local value = selected[key] or fallbackTable[key] or key
 
     if vars then
         value = value:gsub("{(%w+)}", function(token)
@@ -31,4 +32,10 @@ function L(key, vars)
     end
 
     return value
+end
+
+---@param key string
+---@param vars? table<string, string|number>
+function L(key, vars)
+    return LFor(Config.Locale, key, vars)
 end
