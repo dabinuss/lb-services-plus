@@ -3,6 +3,7 @@ import CompaniesTab from './admin/CompaniesTab.jsx'
 import CategoriesTab from './admin/CategoriesTab.jsx'
 import RequestTypesTab from './admin/RequestTypesTab.jsx'
 import ServiceSettingsTab from './admin/ServiceSettingsTab.jsx'
+import { useI18n } from '../lib/i18n.jsx'
 
 const TABS = [
   { key: 'companies', label: 'Companies' },
@@ -13,16 +14,17 @@ const TABS = [
 
 // Services+ admin area (plan §50-58) - independent of company boss rights.
 export default function AdminScreen() {
+  const { t } = useI18n()
   const [tab, setTab] = useState('companies')
 
   return (
     <div className="screen admin-screen">
-      <div className="screen-header">Admin</div>
+      <div className="screen-header">{t('Admin')}</div>
 
       <div className="category-row subtab-row admin-tabs">
-        {TABS.map((t) => (
-          <button key={t.key} className={`category-chip${tab === t.key ? ' active' : ''}`} onClick={() => setTab(t.key)}>
-            {t.label}
+        {TABS.map((item) => (
+          <button key={item.key} className={`category-chip${tab === item.key ? ' active' : ''}`} onClick={() => setTab(item.key)}>
+            {t(item.label)}
           </button>
         ))}
       </div>

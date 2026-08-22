@@ -3,6 +3,7 @@ import { fetchNui } from '../../lib/nui.js'
 import Switch from '../../components/Switch.jsx'
 import { showToast } from '../../lib/toast.js'
 import TaxiPricingSettings from './TaxiPricingSettings.jsx'
+import { useI18n } from '../../lib/i18n.jsx'
 
 const ROUTING_OPTIONS = [
   { key: 'all', label: 'All' },
@@ -13,13 +14,14 @@ const ROUTING_OPTIONS = [
 // Boss-only company settings (plan §33-34). Every change saves immediately -
 // there is no separate "save" step, same as toggles elsewhere in the app.
 export default function SettingsTab() {
+  const { t } = useI18n()
   const [settings, setSettings] = useState(null)
 
   useEffect(() => {
     fetchNui('getCompanySettings').then((r) => r && setSettings(r))
   }, [])
 
-  if (!settings) return <div className="tab-panel empty-state">Loading settings…</div>
+  if (!settings) return <div className="tab-panel empty-state">{t('Loading settings…')}</div>
 
   // Every toggle/chip here saves itself immediately - the control's own
   // visual state is the feedback for a normal save. A failed save used to
@@ -31,7 +33,7 @@ export default function SettingsTab() {
     setSettings(next)
     if (!(await fetchNui('updateCompanySettings', { settings: next }))) {
       setSettings(previous)
-      showToast('Could not save that change. Try again.', 'error')
+      showToast(t('Could not save that change. Try again.'), 'error')
     }
   }
 
@@ -39,7 +41,7 @@ export default function SettingsTab() {
     const nextNumbers = settings.numbers.map((n) => (n.id === numberId ? { ...n, ...patch } : n))
     setSettings({ ...settings, numbers: nextNumbers })
     const ok = await fetchNui('updateNumberSettings', { numberId, settings: patch })
-    if (!ok) showToast('Could not save that change. Try again.', 'error')
+    if (!ok) showToast(t('Could not save that change. Try again.'), 'error')
 
     // The server can derive a different outcome than the patch alone would
     // suggest (Calls always stays on for the main number regardless of what
@@ -51,9 +53,9 @@ export default function SettingsTab() {
 
   return (
     <div className="tab-panel settings-tab">
-      <div className="section-title compact-title">Routing</div>
+      <div className="section-title compact-title">{t('Routing')}</div>
       <div className="routing-row">
-        <div className="routing-label">Call routing</div>
+        <div className="routing-label">{t('Call routing')}</div>
         <div className="category-row subtab-row routing-options">
           {ROUTING_OPTIONS.map((o) => (
             <button
@@ -61,14 +63,14 @@ export default function SettingsTab() {
               className={`category-chip${settings.callRouting === o.key ? ' active' : ''}`}
               onClick={() => save({ callRouting: o.key })}
             >
-              {o.label}
+              {t(o.label)}
             </button>
           ))}
         </div>
       </div>
 
       <div className="routing-row">
-        <div className="routing-label">Request routing</div>
+        <div className="routing-label">{t('Request routing')}</div>
         <div className="category-row subtab-row routing-options">
           {ROUTING_OPTIONS.map((o) => (
             <button
@@ -76,7 +78,7 @@ export default function SettingsTab() {
               className={`category-chip${settings.requestRouting === o.key ? ' active' : ''}`}
               onClick={() => save({ requestRouting: o.key })}
             >
-              {o.label}
+              {t(o.label)}
             </button>
           ))}
         </div>
@@ -88,18 +90,18 @@ export default function SettingsTab() {
           line. This is the only place a boss can turn the whole feature
           off. */}
       <div className="hotline-row">
-        <span>Requests enabled</span>
+        <span>{t('Requests enabled')}</span>
         <Switch checked={settings.requestsEnabled} onChange={(next) => save({ requestsEnabled: next })} />
       </div>
 
       <TaxiPricingSettings />
 
-      <div className="section-title compact-title">Phone numbers</div>
+      <div className="section-title compact-title">{t('Phone numbers')}</div>
       <div className="number-list">
         {settings.numbers.map((n) => (
           <div key={n.id} className="number-row">
             <div className="dashboard-label">
-              {n.label} {n.isMain && <span className="hint">(main)</span>}
+              {n.label} {n.isMain && <span className="hint">({t('main')})</span>}
             </div>
             <div className="number-toggles">
               {/* Calls stays forced on for Main - a company must always be
@@ -111,7 +113,7 @@ export default function SettingsTab() {
                   a boss only ever needs "can customers message this number
                   or not", so this sets both together. */}
               <div className="hotline-row">
-                <span>Calls</span>
+                <span>{t('Calls')}</span>
                 <Switch
                   checked={n.callsEnabled}
                   disabled={n.isMain}
@@ -119,7 +121,7 @@ export default function SettingsTab() {
                 />
               </div>
               <div className="hotline-row">
-                <span>Messages</span>
+                <span>{t('Messages')}</span>
                 <Switch
                   checked={n.messagesEnabled}
                   onChange={(next) => saveNumber(n.id, { callsEnabled: n.callsEnabled, messagesEnabled: next, mailboxEnabled: next })}

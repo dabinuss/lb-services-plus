@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
 import { fetchNui } from '../lib/nui.js'
 import Sheet from './Sheet.jsx'
+import { useI18n } from '../lib/i18n.jsx'
 
 // Create a request (plan §11-14): only asks for what the chosen request type
 // actually needs. Location is automatic - never a field here (plan §14).
 export default function RequestSheet({ company, onClose }) {
+  const { t } = useI18n()
   const [types, setTypes] = useState(null)
   const [type, setType] = useState(null)
   const [passengerCount, setPassengerCount] = useState('')
@@ -12,7 +14,7 @@ export default function RequestSheet({ company, onClose }) {
   const [state, setState] = useState('form') // form | sending | sent | queued | failed
   const passengerMode = type?.passenger_mode || (type?.passenger_count === 1 ? 'required' : 'disabled')
   const noteMode = type?.note_mode || (type?.description_enabled === 1 ? 'optional' : 'disabled')
-  const countLabel = type?.count_label || 'Passenger count'
+  const countLabel = type?.count_label || t('Passenger count')
 
   useEffect(() => {
     fetchNui('getRequestTypes', { categoryId: company.categoryId }).then((result) => {
@@ -49,15 +51,15 @@ export default function RequestSheet({ company, onClose }) {
   }
 
   return (
-    <Sheet title={`Request · ${company.name}`} onClose={onClose}>
-      {types === null && <div className="empty-state">Loading request options…</div>}
+    <Sheet title={t('Request · {company}', { company: company.name })} onClose={onClose}>
+      {types === null && <div className="empty-state">{t('Loading request options…')}</div>}
 
       {types !== null && !type && (
         <>
-          {types.length === 0 && <div className="empty-state">No request types available.</div>}
-          {types.map((t) => (
-            <button key={t.id} className="sheet-option" onClick={() => setType(t)}>
-              {t.name}
+          {types.length === 0 && <div className="empty-state">{t('No request types available.')}</div>}
+          {types.map((item) => (
+            <button key={item.id} className="sheet-option" onClick={() => setType(item)}>
+              {t(item.name)}
             </button>
           ))}
         </>
@@ -65,15 +67,15 @@ export default function RequestSheet({ company, onClose }) {
 
       {type && state === 'form' && (
         <div className="request-form">
-          <div className="request-form-title">{type.name}</div>
-          {type.description && <div className="request-form-description">{type.description}</div>}
+          <div className="request-form-title">{t(type.name)}</div>
+          {type.description && <div className="request-form-description">{t(type.description)}</div>}
 
           {passengerMode !== 'disabled' && (
             <input
               className="search-input"
               type="number"
               min="1"
-              placeholder={`${countLabel}${passengerMode === 'optional' ? ' (optional)' : ' (required)'}`}
+              placeholder={`${countLabel} (${t(passengerMode === 'optional' ? 'optional' : 'required')})`}
               value={passengerCount}
               onChange={(e) => setPassengerCount(e.target.value)}
               required={passengerMode === 'required'}
@@ -83,7 +85,7 @@ export default function RequestSheet({ company, onClose }) {
           {noteMode !== 'disabled' && (
             <input
               className="search-input"
-              placeholder={`Additional note${noteMode === 'required' ? ' (required)' : ' (optional)'}`}
+              placeholder={`${t('Additional note')} (${t(noteMode === 'required' ? 'required' : 'optional')})`}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               required={noteMode === 'required'}
@@ -95,15 +97,15 @@ export default function RequestSheet({ company, onClose }) {
             disabled={(passengerMode === 'required' && !passengerCount) || (noteMode === 'required' && !description.trim())}
             onClick={submit}
           >
-            Send request
+            {t('Send request')}
           </button>
         </div>
       )}
 
-      {state === 'sending' && <div className="empty-state">Sending…</div>}
-      {state === 'sent' && <div className="empty-state">Request sent!</div>}
-      {state === 'queued' && <div className="empty-state">Nobody available right now - request queued, check Activity later.</div>}
-      {state === 'failed' && <div className="empty-state">Could not send this request.</div>}
+      {state === 'sending' && <div className="empty-state">{t('Sending…')}</div>}
+      {state === 'sent' && <div className="empty-state">{t('Request sent!')}</div>}
+      {state === 'queued' && <div className="empty-state">{t('Nobody available right now - request queued, check Activity later.')}</div>}
+      {state === 'failed' && <div className="empty-state">{t('Could not send this request.')}</div>}
     </Sheet>
   )
 }

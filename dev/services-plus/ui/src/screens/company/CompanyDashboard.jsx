@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import DashboardHome from './DashboardHome.jsx'
 import RequestsTab from './RequestsTab.jsx'
@@ -6,6 +6,8 @@ import MessagesTab from './MessagesTab.jsx'
 import CallsTab from './CallsTab.jsx'
 import SettingsTab from './SettingsTab.jsx'
 import Icon from '../../components/Icon.jsx'
+import { useI18n } from '../../lib/i18n.jsx'
+import Badge from '../../components/Badge.jsx'
 
 // "Team" used to be its own tab here, but a 6-way segmented control no
 // longer fits the phone screen width and got clipped - it now lives under
@@ -19,9 +21,18 @@ const TABS = [
 ]
 
 // Everything past the fake-login (plan §19, §35-38, §20-24, §33-34).
-export default function CompanyDashboard({ session, employee, company, onLogout, onOpenConversation, teamUpdate }) {
+export default function CompanyDashboard({
+  session, employee, company, onLogout, onOpenConversation, teamUpdate,
+  messageBadge = 0, requestBadge = 0, messageRevision, requestRevision, onReadMessages, onReadRequests,
+}) {
+  const { t } = useI18n()
   const [tab, setTab] = useState('home')
   const tabs = TABS.filter((t) => !t.bossOnly || session.employee.isBoss)
+
+  useEffect(() => {
+    if (tab === 'messages') onReadMessages?.()
+    if (tab === 'requests') onReadRequests?.()
+  }, [tab, onReadMessages, onReadRequests])
 
   // `company` (from the public companies list, incl. background) can be
   // missing if it's currently hidden from that list (e.g. unavailable and
@@ -41,19 +52,21 @@ export default function CompanyDashboard({ session, employee, company, onLogout,
           <div className="dashboard-company">{session.company.name}</div>
         </div>
 
-        <button className="icon-button logout" onClick={onLogout} aria-label="Logout">
+        <button className="icon-button logout" onClick={onLogout} aria-label={t('Logout')}>
           <Icon name="logout" size={16} />
         </button>
       </div>
 
       <div className="category-row subtab-row">
-        {tabs.map((t) => (
+        {tabs.map((item) => (
           <button
-            key={t.key}
-            className={`category-chip${tab === t.key ? ' active' : ''}`}
-            onClick={() => setTab(t.key)}
+            key={item.key}
+            className={`category-chip${tab === item.key ? ' active' : ''}`}
+            onClick={() => setTab(item.key)}
           >
-            {t.label}
+            {t(item.label)}
+            {item.key === 'messages' && <Badge count={messageBadge} className="tab-badge" />}
+            {item.key === 'requests' && <Badge count={requestBadge} className="tab-badge" />}
           </button>
         ))}
       </div>
@@ -71,8 +84,8 @@ export default function CompanyDashboard({ session, employee, company, onLogout,
             teamUpdate={teamUpdate}
           />
         )}
-        {tab === 'requests' && <RequestsTab />}
-        {tab === 'messages' && <MessagesTab onOpenConversation={onOpenConversation} />}
+        {tab === 'requests' && <RequestsTab key={`requests-${requestRevision || 0}`} />}
+        {tab === 'messages' && <MessagesTab key={`messages-${messageRevision || 0}`} onOpenConversation={onOpenConversation} />}
         {tab === 'calls' && <CallsTab />}
         {tab === 'settings' && session.employee.isBoss && <SettingsTab />}
       </div>

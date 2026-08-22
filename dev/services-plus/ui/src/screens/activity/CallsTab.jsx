@@ -1,14 +1,7 @@
 import { useEffect, useState } from 'react'
 import { fetchNui, createCall } from '../../lib/nui.js'
 import Icon from '../../components/Icon.jsx'
-
-function timeAgo(iso) {
-  const seconds = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
-  if (seconds < 60) return 'now'
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`
-  return `${Math.floor(seconds / 86400)}d`
-}
+import { useI18n } from '../../lib/i18n.jsx'
 
 const STATE_LABEL = { ringing: 'Calling…', answered: 'Call', missed: 'Missed call' }
 
@@ -19,6 +12,7 @@ const PAGE_SIZE = 25
 // Own call history (plan §38-41) - read-only, logged passively from
 // lb-phone's own call events (see server/calls.lua).
 export default function CallsTab() {
+  const { t, formatRelativeTime } = useI18n()
   const [entries, setEntries] = useState(null)
   const [hasMore, setHasMore] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -51,9 +45,9 @@ export default function CallsTab() {
 
   return (
     <div className="tab-panel">
-      {entries === null && <div className="empty-state">Loading your calls…</div>}
+      {entries === null && <div className="empty-state">{t('Loading your calls…')}</div>}
       {entries !== null && entries.length === 0 && (
-        <div className="empty-state">No calls yet. Call a company from Services to see it here.</div>
+        <div className="empty-state">{t('No calls yet. Call a company from Services to see it here.')}</div>
       )}
 
       <div className="activity-list">
@@ -64,17 +58,17 @@ export default function CallsTab() {
             </div>
             <div className="company-info">
               <div className="company-name">{entry.company_name}</div>
-              <div className={`last-message call-state ${entry.state}`}>{STATE_LABEL[entry.state] || entry.state}</div>
+              <div className={`last-message call-state ${entry.state}`}>{t(STATE_LABEL[entry.state] || entry.state)}</div>
             </div>
             <div className="activity-meta">
-              <span className="activity-time">{timeAgo(entry.created_at)}</span>
+              <span className="activity-time">{formatRelativeTime(entry.created_at)}</span>
               <button
                 className="icon-button subtle"
                 onClick={(e) => {
                   e.stopPropagation()
                   callBack(entry)
                 }}
-                aria-label="Call back"
+                aria-label={t('Call back')}
               >
                 <Icon name="phone" size={13} />
               </button>
@@ -85,7 +79,7 @@ export default function CallsTab() {
 
       {hasMore && (
         <button className="sheet-option" onClick={loadMore} disabled={loadingMore}>
-          {loadingMore ? 'Loading…' : 'Load more'}
+          {t(loadingMore ? 'Loading…' : 'Load more')}
         </button>
       )}
     </div>

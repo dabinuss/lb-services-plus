@@ -5,6 +5,7 @@ import ConfirmButton from '../../components/ConfirmButton.jsx'
 import Switch from '../../components/Switch.jsx'
 import Icon from '../../components/Icon.jsx'
 import { showToast } from '../../lib/toast.js'
+import { useI18n } from '../../lib/i18n.jsx'
 
 const EMPTY_FORM = { job: '', name: '', categoryId: '', icon: '', background: '', bossGrade: 100, mainNumber: '', enabled: true }
 
@@ -29,6 +30,7 @@ function CeilingToggle({ label, allowed, onToggle }) {
 // dedicated chevron button for the expand side. Now there's exactly one:
 // Edit opens the Sheet, everything editable about that company lives in it.
 export default function CompaniesTab() {
+  const { t } = useI18n()
   const [companies, setCompanies] = useState(null)
   const [categories, setCategories] = useState([])
   const [editingId, setEditingId] = useState(null) // company id, 'new', or null (Sheet closed)
@@ -53,7 +55,7 @@ export default function CompaniesTab() {
   // opened - so toggling a ceiling or adding a number reflects immediately
   // without needing its own separate refresh/resync logic.
   const company = editingId && editingId !== 'new' ? companies?.find((c) => c.id === editingId) : null
-  const categoryName = (id) => categories.find((c) => c.id === id)?.name || 'Uncategorized'
+  const categoryName = (id) => categories.find((c) => c.id === id)?.name || t('Uncategorized')
 
   const openNew = () => {
     setSaveError('')
@@ -83,7 +85,7 @@ export default function CompaniesTab() {
     const icon = form.icon.trim()
     const background = form.background.trim()
     if (!isValidBrandingUrl(icon) || !isValidBrandingUrl(background)) {
-      setSaveError('Icon and background must be valid public HTTPS URLs (maximum 255 characters).')
+      setSaveError(t('Icon and background must be valid public HTTPS URLs (maximum 255 characters).'))
       return
     }
 
@@ -93,18 +95,18 @@ export default function CompaniesTab() {
       if (result) {
         closeSheet()
         load()
-        showToast('Company created.')
+        showToast(t('Company created.'))
       } else {
-        setSaveError('Could not create the company. Check the required fields, phone number and HTTPS URLs.')
+        setSaveError(t('Could not create the company. Check the required fields, phone number and HTTPS URLs.'))
       }
     } else {
       const ok = await fetchNui('admin:updateCompany', { id: editingId, ...payload })
       if (ok) {
         closeSheet()
         load()
-        showToast('Company saved.')
+        showToast(t('Company saved.'))
       } else {
-        setSaveError('Could not save the company. Check the required fields, phone number and HTTPS URLs.')
+        setSaveError(t('Could not save the company. Check the required fields, phone number and HTTPS URLs.'))
       }
     }
   }
@@ -133,9 +135,9 @@ export default function CompaniesTab() {
     if (!playerId) return
     if (await fetchNui('admin:assignBoss', { companyId: company.id, playerId: Number(playerId) })) {
       setPlayerId('')
-      showToast('Company leader updated.')
+      showToast(t('Company leader updated.'))
     } else {
-      showToast('Could not assign that player. Check the player ID.', 'error')
+      showToast(t('Could not assign that player. Check the player ID.'), 'error')
     }
   }
 
@@ -148,9 +150,9 @@ export default function CompaniesTab() {
     if (ok) {
       setNewNumber({ label: '', number: '' })
       load()
-      showToast('Number added.')
+      showToast(t('Number added.'))
     } else {
-      showToast('Could not add that number. It may already be in use.', 'error')
+      showToast(t('Could not add that number. It may already be in use.'), 'error')
     }
   }
 
@@ -171,19 +173,19 @@ export default function CompaniesTab() {
     if (ok) {
       setEditingNumber(null)
       load()
-      showToast('Number saved.')
+      showToast(t('Number saved.'))
     } else {
-      showToast('Could not save that number. It may already be in use.', 'error')
+      showToast(t('Could not save that number. It may already be in use.'), 'error')
     }
   }
 
   return (
     <div className="tab-panel">
       <button className="login-button" onClick={openNew}>
-        + New company
+        {t('+ New company')}
       </button>
 
-      {companies === null && <div className="empty-state">Loading companies…</div>}
+      {companies === null && <div className="empty-state">{t('Loading companies…')}</div>}
 
       <div className="admin-list">
         {companies?.map((c) => (
@@ -191,33 +193,33 @@ export default function CompaniesTab() {
             <div className="admin-row-info">
               <div className="admin-row-title">{c.name}</div>
               <div className="admin-row-meta">
-                {c.job} · {categoryName(c.category_id)} · {c.enabled ? 'enabled' : 'disabled'}
+                {c.job} · {categoryName(c.category_id)} · {t(c.enabled ? 'enabled' : 'disabled')}
               </div>
             </div>
             <div className="admin-row-actions">
               <button className="request-action complete" onClick={() => openEdit(c)}>
-                Edit
+                {t('Edit')}
               </button>
-              {c.enabled === 1 && <ConfirmButton onConfirm={() => disableCompany(c.id)}>Disable</ConfirmButton>}
+              {c.enabled === 1 && <ConfirmButton onConfirm={() => disableCompany(c.id)}>{t('Disable')}</ConfirmButton>}
             </div>
           </div>
         ))}
       </div>
 
       {editingId && form && (
-        <Sheet title={editingId === 'new' ? 'New company' : 'Edit company'} onClose={closeSheet}>
+        <Sheet title={t(editingId === 'new' ? 'New company' : 'Edit company')} onClose={closeSheet}>
           {saveError && <div className="notice">{saveError}</div>}
           {editingId === 'new' && (
             <input
               className="search-input"
-              placeholder="Framework job"
+              placeholder={t('Framework job')}
               value={form.job}
               onChange={(e) => setForm({ ...form, job: e.target.value })}
             />
           )}
           <input
             className="search-input"
-            placeholder="Name"
+            placeholder={t('Name')}
             value={form.name}
             onChange={(e) => setForm({ ...form, name: e.target.value })}
           />
@@ -226,7 +228,7 @@ export default function CompaniesTab() {
             value={form.categoryId}
             onChange={(e) => setForm({ ...form, categoryId: e.target.value ? Number(e.target.value) : '' })}
           >
-            <option value="">No category</option>
+            <option value="">{t('No category')}</option>
             {categories.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
@@ -240,7 +242,7 @@ export default function CompaniesTab() {
             inputMode="url"
             autoCapitalize="none"
             spellCheck={false}
-            placeholder="Icon URL (https://…)"
+            placeholder={t('Icon URL (https://…)')}
             value={form.icon}
             onChange={(e) => {
               setSaveError('')
@@ -254,7 +256,7 @@ export default function CompaniesTab() {
             inputMode="url"
             autoCapitalize="none"
             spellCheck={false}
-            placeholder="Background image URL (optional, https://…)"
+            placeholder={t('Background image URL (optional, https://…)')}
             value={form.background}
             onChange={(e) => {
               setSaveError('')
@@ -264,26 +266,26 @@ export default function CompaniesTab() {
           <input
             className="search-input"
             type="number"
-            placeholder="Boss grade (standalone only)"
+            placeholder={t('Boss grade (standalone only)')}
             value={form.bossGrade}
             onChange={(e) => setForm({ ...form, bossGrade: Number(e.target.value) })}
           />
           {editingId === 'new' && (
             <input
               className="search-input"
-              placeholder="Main phone number"
+              placeholder={t('Main phone number')}
               value={form.mainNumber}
               onChange={(e) => setForm({ ...form, mainNumber: e.target.value })}
             />
           )}
           {editingId !== 'new' && (
             <div className="hotline-row">
-              <span>Enabled</span>
+              <span>{t('Enabled')}</span>
               <Switch checked={form.enabled} onChange={(next) => setForm({ ...form, enabled: next })} />
             </div>
           )}
           <button className="login-button" onClick={save}>
-            Save
+            {t('Save')}
           </button>
 
           {/* Everything below needs a real company id, so it only shows up
@@ -293,48 +295,48 @@ export default function CompaniesTab() {
               always have. */}
           {company && (
             <div className="sheet-section">
-              <div className="section-title">Feature ceiling</div>
+              <div className="section-title">{t('Feature ceiling')}</div>
               <div className="ceiling-row">
-                <CeilingToggle label="Calls" allowed={company.admin_calls_allowed === 1} onToggle={() => setCeiling({ callsAllowed: company.admin_calls_allowed !== 1 })} />
-                <CeilingToggle label="Messages" allowed={company.admin_messages_allowed === 1} onToggle={() => setCeiling({ messagesAllowed: company.admin_messages_allowed !== 1 })} />
-                <CeilingToggle label="Requests" allowed={company.admin_requests_allowed === 1} onToggle={() => setCeiling({ requestsAllowed: company.admin_requests_allowed !== 1 })} />
+                <CeilingToggle label={t('Calls')} allowed={company.admin_calls_allowed === 1} onToggle={() => setCeiling({ callsAllowed: company.admin_calls_allowed !== 1 })} />
+                <CeilingToggle label={t('Messages')} allowed={company.admin_messages_allowed === 1} onToggle={() => setCeiling({ messagesAllowed: company.admin_messages_allowed !== 1 })} />
+                <CeilingToggle label={t('Requests')} allowed={company.admin_requests_allowed === 1} onToggle={() => setCeiling({ requestsAllowed: company.admin_requests_allowed !== 1 })} />
               </div>
 
-              <div className="section-title">Phone numbers</div>
+              <div className="section-title">{t('Phone numbers')}</div>
               {company.numbers.map((n) =>
                 editingNumber?.id === n.id ? (
                   <div key={n.id} className="admin-inline-form">
                     <input
                       className="search-input"
-                      placeholder="Label"
+                      placeholder={t('Label')}
                       value={editingNumber.label}
                       onChange={(e) => setEditingNumber({ ...editingNumber, label: e.target.value })}
                     />
                     <input
                       className="search-input"
-                      placeholder="Number"
+                      placeholder={t('Number')}
                       value={editingNumber.number}
                       onChange={(e) => setEditingNumber({ ...editingNumber, number: e.target.value })}
                     />
                     <button className="request-action accept" onClick={saveNumber}>
-                      Save
+                      {t('Save')}
                     </button>
-                    <button className="icon-button subtle" onClick={() => setEditingNumber(null)} aria-label="Cancel editing this number">
+                    <button className="icon-button subtle" onClick={() => setEditingNumber(null)} aria-label={t('Cancel editing this number')}>
                       <Icon name="x" size={13} />
                     </button>
                   </div>
                 ) : (
                   <div key={n.id} className="hotline-row">
                     <span>
-                      {n.label} <span className="hint">{n.number}</span> {n.is_main === 1 && <span className="hint">(main)</span>}
-                      {n.enabled !== 1 && <span className="hint"> (disabled)</span>}
+                      {n.label} <span className="hint">{n.number}</span> {n.is_main === 1 && <span className="hint">({t('main')})</span>}
+                      {n.enabled !== 1 && <span className="hint"> ({t('disabled')})</span>}
                     </span>
                     <div className="admin-row-actions">
                       <button
                         className="request-action complete"
                         onClick={() => setEditingNumber({ id: n.id, label: n.label, number: n.number })}
                       >
-                        Edit
+                        {t('Edit')}
                       </button>
                       {n.is_main !== 1 &&
                         (n.enabled === 1 ? (
@@ -343,7 +345,7 @@ export default function CompaniesTab() {
                           </ConfirmButton>
                         ) : (
                           <button className="request-action complete" onClick={() => enableNumber(n.id)}>
-                            Re-enable
+                            {t('Re-enable')}
                           </button>
                         ))}
                     </div>
@@ -351,29 +353,29 @@ export default function CompaniesTab() {
                 ),
               )}
               <div className="admin-inline-form">
-                <input className="search-input" placeholder="Label" value={newNumber.label} onChange={(e) => setNewNumber({ ...newNumber, label: e.target.value })} />
-                <input className="search-input" placeholder="Number" value={newNumber.number} onChange={(e) => setNewNumber({ ...newNumber, number: e.target.value })} />
+                <input className="search-input" placeholder={t('Label')} value={newNumber.label} onChange={(e) => setNewNumber({ ...newNumber, label: e.target.value })} />
+                <input className="search-input" placeholder={t('Number')} value={newNumber.number} onChange={(e) => setNewNumber({ ...newNumber, number: e.target.value })} />
                 <button className="request-action accept" onClick={addNumber}>
-                  Add
+                  {t('Add')}
                 </button>
               </div>
 
-              <div className="section-title">Company leader</div>
+              <div className="section-title">{t('Company leader')}</div>
               <div className="admin-inline-form">
-                <input className="search-input" placeholder="Player ID" value={playerId} onChange={(e) => setPlayerId(e.target.value)} />
+                <input className="search-input" placeholder={t('Player ID')} value={playerId} onChange={(e) => setPlayerId(e.target.value)} />
                 <button className="request-action accept" onClick={assignBoss}>
-                  Make leader
+                  {t('Make leader')}
                 </button>
               </div>
 
               {company.enabled === 1 && (
                 <>
-                  <div className="section-title">Danger zone</div>
+                  <div className="section-title">{t('Danger zone')}</div>
                   <div className="hotline-row">
-                    <span>Delete this company</span>
-                    <ConfirmButton onConfirm={() => disableCompany(company.id, true)}>Delete company</ConfirmButton>
+                    <span>{t('Delete this company')}</span>
+                    <ConfirmButton onConfirm={() => disableCompany(company.id, true)}>{t('Delete company')}</ConfirmButton>
                   </div>
-                  <div className="hint">The company is disabled; its call, message and request history is preserved.</div>
+                  <div className="hint">{t('The company is disabled; its call, message and request history is preserved.')}</div>
                 </>
               )}
             </div>

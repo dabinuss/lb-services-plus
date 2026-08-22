@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { fetchNui } from '../../lib/nui.js'
+import { useI18n } from '../../lib/i18n.jsx'
 
 export default function ServiceSettingsTab() {
+  const { t } = useI18n()
   const [graceMinutes, setGraceMinutes] = useState('5')
   const [loading, setLoading] = useState(true)
   const [notice, setNotice] = useState('')
@@ -16,22 +18,22 @@ export default function ServiceSettingsTab() {
   const save = async () => {
     const value = Number(graceMinutes)
     if (!Number.isInteger(value) || value < 1 || value > 60) {
-      setNotice('Enter a whole number between 1 and 60 minutes.')
+      setNotice(t('Enter a whole number between 1 and 60 minutes.'))
       return
     }
 
     const ok = await fetchNui('admin:updateServiceSettings', {
       activeRequestDisconnectGraceMinutes: value,
     })
-    setNotice(ok ? 'Settings saved.' : 'Could not save settings.')
+    setNotice(t(ok ? 'Settings saved.' : 'Could not save settings.'))
   }
 
   return (
     <div className="tab-panel">
       <div className="settings-section">
-        <div className="section-title">Active request disconnect grace period</div>
+        <div className="section-title">{t('Active request disconnect grace period')}</div>
         <div className="hint">
-          If an assigned employee does not reconnect within this time, their active request is cancelled automatically.
+          {t('If an assigned employee does not reconnect within this time, their active request is cancelled automatically.')}
         </div>
         <input
           className="search-input"
@@ -43,7 +45,7 @@ export default function ServiceSettingsTab() {
           disabled={loading}
           onChange={(event) => setGraceMinutes(event.target.value)}
         />
-        <button className="login-button" disabled={loading} onClick={save}>Save settings</button>
+        <button className="login-button" disabled={loading} onClick={save}>{t('Save settings')}</button>
         {notice && <div className="notice">{notice}</div>}
       </div>
     </div>

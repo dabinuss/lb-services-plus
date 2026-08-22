@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import Frame from '../../../ui/src/components/Frame.jsx'
 import { devMode, fetchNui, getSettings, onNuiEvent, onSettingsChange } from '../../../ui/src/lib/nui.js'
+import { useI18n } from '../../../ui/src/lib/i18n.jsx'
 import './NotificationApp.css'
 
 const DEV_HISTORY = [
@@ -21,35 +22,30 @@ const DEV_HISTORY = [
 
 const VARIANT_ICON = { neutral: '●', info: 'i', success: '✓', warning: '!', error: '×' }
 
-function timeLabel(ageSeconds) {
-  const seconds = Math.max(0, Number(ageSeconds || 0))
-  if (seconds < 60) return 'now'
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`
-  return `${Math.floor(seconds / 86400)}d`
-}
-
 function Progress({ progress }) {
+  const { t } = useI18n()
   if (!progress) return null
   const percent = Math.max(0, Math.min(100, (progress.value / progress.max) * 100))
   return (
     <div className="pn-progress">
-      <div className="pn-progress-label"><span>{progress.label || 'Progress'}</span><span>{Math.round(percent)}%</span></div>
+      <div className="pn-progress-label"><span>{progress.label || t('Progress')}</span><span>{Math.round(percent)}%</span></div>
       <div className="pn-progress-track"><span style={{ width: `${percent}%` }} /></div>
     </div>
   )
 }
 
 function Timer({ timer }) {
+  const { t } = useI18n()
   if (!timer) return null
   const value = timer.countdown ? Math.max(0, Number(timer.duration) - Number(timer.elapsed)) : Number(timer.elapsed)
   const total = Math.max(0, Math.floor(value / 1000))
   const minutes = Math.floor(total / 60)
   const seconds = total % 60
-  return <div className="pn-history-timer"><span>{timer.label || 'Timer'}</span><strong>{minutes}:{String(seconds).padStart(2, '0')}</strong></div>
+  return <div className="pn-history-timer"><span>{timer.label || t('Timer')}</span><strong>{minutes}:{String(seconds).padStart(2, '0')}</strong></div>
 }
 
 function HistoryCard({ entry, expanded, onOpen, onDelete }) {
+  const { t } = useI18n()
   const card = entry.card || {}
   const variant = card.variant || 'neutral'
   return (
@@ -57,11 +53,11 @@ function HistoryCard({ entry, expanded, onOpen, onDelete }) {
       <button className="pn-card-main" onClick={onOpen}>
         <span className="pn-variant-icon">{VARIANT_ICON[variant] || '●'}</span>
         <span className="pn-copy">
-          <span className="pn-title">{card.title || 'Notification'}</span>
+          <span className="pn-title">{card.title || t('Notification')}</span>
           {card.subtitle && <span className="pn-subtitle">{card.subtitle}</span>}
           {card.description && <span className={`pn-description${expanded ? ' expanded' : ''}`}>{card.description}</span>}
         </span>
-        <span className="pn-time">{timeLabel(entry.ageSeconds)}</span>
+        <span className="pn-time">{entry.ageSeconds < 60 ? t('now') : entry.ageSeconds < 3600 ? t('{count}m', { count: Math.floor(entry.ageSeconds / 60) }) : entry.ageSeconds < 86400 ? t('{count}h', { count: Math.floor(entry.ageSeconds / 3600) }) : t('{count}d', { count: Math.floor(entry.ageSeconds / 86400) })}</span>
       </button>
       {expanded && (
         <div className="pn-details">
@@ -71,7 +67,7 @@ function HistoryCard({ entry, expanded, onOpen, onDelete }) {
           <Progress progress={card.progress} />
           <Timer timer={card.timer} />
           <div className="pn-meta"><span>{entry.owner}</span><span>{entry.result}</span></div>
-          <button className="pn-delete" onClick={onDelete}>Delete</button>
+          <button className="pn-delete" onClick={onDelete}>{t('Delete')}</button>
         </div>
       )}
     </article>
@@ -79,6 +75,7 @@ function HistoryCard({ entry, expanded, onOpen, onDelete }) {
 }
 
 export default function NotificationApp() {
+  const { t } = useI18n()
   const [theme, setTheme] = useState('light')
   const [entries, setEntries] = useState([])
   const [filter, setFilter] = useState('all')
@@ -143,19 +140,19 @@ export default function NotificationApp() {
   const app = (
     <div className="notification-app" data-theme={theme}>
       <header className="pn-header">
-        <div><h1>Notifications</h1><p>{unread ? `${unread} unread` : 'All caught up'}</p></div>
-        {entries.length > 0 && <button onClick={clear}>Clear</button>}
+        <div><h1>{t('Notifications')}</h1><p>{unread ? t('{count} unread', { count: unread }) : t('All caught up')}</p></div>
+        {entries.length > 0 && <button onClick={clear}>{t('Clear')}</button>}
       </header>
       <div className="pn-toolbar">
         <div className="pn-filter">
-          <button className={filter === 'all' ? 'active' : ''} onClick={() => setFilter('all')}>All</button>
-          <button className={filter === 'unread' ? 'active' : ''} onClick={() => setFilter('unread')}>Unread</button>
+          <button className={filter === 'all' ? 'active' : ''} onClick={() => setFilter('all')}>{t('All')}</button>
+          <button className={filter === 'unread' ? 'active' : ''} onClick={() => setFilter('unread')}>{t('Unread')}</button>
         </div>
-        {unread > 0 && <button className="pn-read-all" onClick={markAllRead}>Read all</button>}
+        {unread > 0 && <button className="pn-read-all" onClick={markAllRead}>{t('Read all')}</button>}
       </div>
       <main className="pn-list">
         {visible.map((entry) => <HistoryCard key={entry.id} entry={entry} expanded={expanded === entry.id} onOpen={() => open(entry)} onDelete={() => remove(entry.id)} />)}
-        {visible.length === 0 && <div className="pn-empty"><span>✓</span><strong>No notifications</strong><p>New PeekPlus notifications will appear here.</p></div>}
+        {visible.length === 0 && <div className="pn-empty"><span>✓</span><strong>{t('No notifications')}</strong><p>{t('New PeekPlus notifications will appear here.')}</p></div>}
       </main>
     </div>
   )

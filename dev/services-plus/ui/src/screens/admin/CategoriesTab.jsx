@@ -5,11 +5,13 @@ import ConfirmButton from '../../components/ConfirmButton.jsx'
 import CategoryIcon from '../../components/CategoryIcon.jsx'
 import Switch from '../../components/Switch.jsx'
 import { showToast } from '../../lib/toast.js'
+import { useI18n } from '../../lib/i18n.jsx'
 
 const EMPTY = { key: '', name: '', icon: '', sort: 0, competitionAllowed: false }
 
 // Category CRUD (plan §54).
 export default function CategoriesTab() {
+  const { t } = useI18n()
   const [categories, setCategories] = useState(null)
   const [editing, setEditing] = useState(null) // { ...EMPTY, id? }
   const [notice, setNotice] = useState('')
@@ -26,9 +28,9 @@ export default function CategoriesTab() {
     if (await fetchNui(action, editing)) {
       setEditing(null)
       load()
-      showToast(wasNew ? 'Category created.' : 'Category saved.')
+      showToast(t(wasNew ? 'Category created.' : 'Category saved.'))
     } else {
-      showToast('Could not save this category.', 'error')
+      showToast(t('Could not save this category.'), 'error')
     }
   }
 
@@ -36,19 +38,19 @@ export default function CategoriesTab() {
     if (await fetchNui('admin:deleteCategory', { id })) {
       setNotice('')
       load()
-      showToast('Category deleted.')
+      showToast(t('Category deleted.'))
     } else {
-      setNotice('Category is still assigned to a company or request type and cannot be deleted.')
+      setNotice(t('Category is still assigned to a company or request type and cannot be deleted.'))
     }
   }
 
   return (
     <div className="tab-panel">
       <button className="login-button" onClick={() => setEditing({ ...EMPTY })}>
-        + New category
+        {t('+ New category')}
       </button>
 
-      {categories === null && <div className="empty-state">Loading categories…</div>}
+      {categories === null && <div className="empty-state">{t('Loading categories…')}</div>}
       {notice && <div className="notice">{notice}</div>}
 
       <div className="admin-list">
@@ -58,7 +60,7 @@ export default function CategoriesTab() {
             <div className="admin-row-info">
               <div className="admin-row-title">{cat.name}</div>
               <div className="admin-row-meta">
-                sort {cat.sort_order} · competition {cat.competition_allowed ? 'allowed' : 'off'}
+                {t('sort {sort} · competition {competition}', { sort: cat.sort_order, competition: t(cat.competition_allowed ? 'allowed' : 'off') })}
               </div>
             </div>
             <div className="admin-row-actions">
@@ -71,7 +73,7 @@ export default function CategoriesTab() {
                   })
                 }
               >
-                Edit
+                {t('Edit')}
               </button>
               <ConfirmButton onConfirm={() => remove(cat.id)} />
             </div>
@@ -80,42 +82,42 @@ export default function CategoriesTab() {
       </div>
 
       {editing && (
-        <Sheet title={editing.id ? 'Edit category' : 'New category'} onClose={() => setEditing(null)}>
+        <Sheet title={t(editing.id ? 'Edit category' : 'New category')} onClose={() => setEditing(null)}>
           <input
             className="search-input"
-            placeholder="Key (e.g. taxi)"
+            placeholder={t('Key (e.g. taxi)')}
             value={editing.key}
             disabled={!!editing.id}
             onChange={(e) => setEditing({ ...editing, key: e.target.value })}
           />
           <input
             className="search-input"
-            placeholder="Name"
+            placeholder={t('Name')}
             value={editing.name}
             onChange={(e) => setEditing({ ...editing, name: e.target.value })}
           />
           <input
             className="search-input"
-            placeholder="Icon (police, bank, law, medical, taxi, car-dealer, wrench, tow-truck, car-wash, restaurant, bar, barber, tattoo, music, news, shop, people, funeral)"
+            placeholder={t('Icon (police, bank, law, medical, taxi, car-dealer, wrench, tow-truck, car-wash, restaurant, bar, barber, tattoo, music, news, shop, people, funeral)')}
             value={editing.icon}
             onChange={(e) => setEditing({ ...editing, icon: e.target.value })}
           />
           <input
             className="search-input"
             type="number"
-            placeholder="Sort order"
+            placeholder={t('Sort order')}
             value={editing.sort}
             onChange={(e) => setEditing({ ...editing, sort: Number(e.target.value) })}
           />
           <div className="hotline-row">
-            <span>Allow competition requests</span>
+            <span>{t('Allow competition requests')}</span>
             <Switch
               checked={editing.competitionAllowed}
               onChange={(next) => setEditing({ ...editing, competitionAllowed: next })}
             />
           </div>
           <button className="login-button" onClick={save}>
-            Save
+            {t('Save')}
           </button>
         </Sheet>
       )}

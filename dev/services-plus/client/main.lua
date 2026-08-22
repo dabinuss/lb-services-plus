@@ -271,6 +271,16 @@ RegisterNUICallback("updateNumberSettings", function(data, cb)
     cb(bridge("updateNumberSettings", data.numberId, data.settings))
 end)
 
+-- The PeekPlus request card is handled by client/services/requests.lua.
+-- Relay the same arrival to the app as a small realtime delta so the
+-- Company/Requests badges and an already-open request list stay current.
+RegisterNetEvent("services-plus:client:requestNotification", function(payload)
+    exports["lb-phone"]:SendCustomAppMessage(Config.App.identifier, {
+        type = "newRequest",
+        request = payload,
+    })
+end)
+
 RegisterNUICallback("getTaxiPricingSettings", function(_, cb)
     cb(bridge("getTaxiPricingSettings"))
 end)

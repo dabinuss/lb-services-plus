@@ -5,12 +5,14 @@ import Sheet from './components/Sheet.jsx'
 import RequestSheet from './components/RequestSheet.jsx'
 import Icon from './components/Icon.jsx'
 import Toast from './components/Toast.jsx'
+import Badge from './components/Badge.jsx'
 import ServicesScreen from './screens/ServicesScreen.jsx'
 import ActivityScreen from './screens/ActivityScreen.jsx'
 import CompanyScreen from './screens/CompanyScreen.jsx'
 import AdminScreen from './screens/AdminScreen.jsx'
 import ConversationScreen from './screens/ConversationScreen.jsx'
 import { fetchNui, getSettings, onSettingsChange, onNuiEvent, createCall, devMode } from './lib/nui.js'
+import { useI18n } from './lib/i18n.jsx'
 
 import './App.css'
 
@@ -22,6 +24,7 @@ const TABS = [
 ]
 
 export default function App() {
+  const { t } = useI18n()
   const [theme, setTheme] = useState('light')
   const [tab, setTab] = useState('services')
   const [bootstrap, setBootstrap] = useState(null)
@@ -34,7 +37,9 @@ export default function App() {
   const [numberPicker, setNumberPicker] = useState(null) // { mode: 'call'|'message', company, numbers }
   const [requestSheet, setRequestSheet] = useState(null) // { company }
   const [incomingMessage, setIncomingMessage] = useState(null)
+  const [incomingRequest, setIncomingRequest] = useState(null)
   const [teamUpdate, setTeamUpdate] = useState(null)
+  const [unread, setUnread] = useState({ activityMessages: 0, companyMessages: 0, companyRequests: 0 })
 
   useEffect(() => {
     if (devMode) {
@@ -61,7 +66,20 @@ export default function App() {
   // the actual merge-into-open-conversation happens in ConversationScreen,
   // this just routes the push to whichever one (if any) is currently open.
   useEffect(() => {
-    return onNuiEvent('newMessage', (data) => setIncomingMessage(data))
+    return onNuiEvent('newMessage', (data) => {
+      setIncomingMessage(data)
+      if (conversation?.channelId === data.channelId) return
+
+      const key = data.message?.sender_type === 'company' ? 'activityMessages' : 'companyMessages'
+      setUnread((current) => ({ ...current, [key]: current[key] + 1 }))
+    })
+  }, [conversation?.channelId])
+
+  useEffect(() => {
+    return onNuiEvent('newRequest', (data) => {
+      setIncomingRequest(data.request)
+      setUnread((current) => ({ ...current, companyRequests: current.companyRequests + 1 }))
+    })
   }, [])
 
   // Same idea, for a colleague's status/hotline change (plan review round 5
@@ -125,7 +143,7 @@ export default function App() {
   }
 
   const content = !bootstrap ? (
-    <div className="empty-state">Loading Services+…</div>
+    <div className="empty-state">{t('Loading Services+…')}</div>
   ) : (
     <>
       {tab === 'services' && (
@@ -137,7 +155,14 @@ export default function App() {
           onRequest={(company) => setRequestSheet({ company })}
         />
       )}
-      {tab === 'activity' && <ActivityScreen onOpen={setConversation} />}
+      {tab === 'activity' && (
+        <ActivityScreen
+          onOpen={setConversation}
+          messageBadge={unread.activityMessages}
+          messageRevision={incomingMessage?.message?.id}
+          onReadMessages={() => setUnread((current) => current.activityMessages ? { ...current, activityMessages: 0 } : current)}
+        />
+      )}
       {tab === 'company' && bootstrap.employee && (
         <CompanyScreen
           employee={bootstrap.employee}
@@ -147,6 +172,12 @@ export default function App() {
           onLogout={() => setCompanySession(null)}
           onOpenConversation={setConversation}
           teamUpdate={teamUpdate}
+          messageBadge={unread.companyMessages}
+          requestBadge={unread.companyRequests}
+          messageRevision={incomingMessage?.message?.id}
+          requestRevision={incomingRequest?.requestId}
+          onReadMessages={() => setUnread((current) => current.companyMessages ? { ...current, companyMessages: 0 } : current)}
+          onReadRequests={() => setUnread((current) => current.companyRequests ? { ...current, companyRequests: 0 } : current)}
         />
       )}
       {tab === 'admin' && bootstrap.admin && <AdminScreen />}
@@ -159,10 +190,12 @@ export default function App() {
 
       {bootstrap && (
         <div className="nav-bar">
-          {visibleTabs.map((t) => (
-            <button key={t.key} className={`nav-item${tab === t.key ? ' active' : ''}`} onClick={() => setTab(t.key)}>
-              <Icon name={t.icon} size={22} className="nav-icon" />
-              <span className="nav-label">{t.label}</span>
+          {visibleTabs.map((item) => (
+            <button key={item.key} className={`nav-item${tab === item.key ? ' active' : ''}`} onClick={() => setTab(item.key)}>
+              <Icon name={item.icon} size={22} className="nav-icon" />
+              <span className="nav-label">{t(item.label)}</span>
+              {item.key === 'activity' && <Badge count={unread.activityMessages} className="nav-badge" />}
+              {item.key === 'company' && <Badge count={unread.companyMessages + unread.companyRequests} className="nav-badge" />}
             </button>
           ))}
         </div>
@@ -177,7 +210,7 @@ export default function App() {
       )}
 
       {numberPicker && (
-        <Sheet title={numberPicker.mode === 'call' ? 'Call' : 'Message'} onClose={() => setNumberPicker(null)}>
+        <Sheet title={t(numberPicker.mode === 'call' ? 'Call' : 'Message')} onClose={() => setNumberPicker(null)}>
           {numberPicker.numbers.map((n) => (
             <button
               key={n.id}
@@ -207,10 +240,10 @@ export default function App() {
       <button
         className="dev-theme-toggle"
         onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
-        title="Toggle light/dark (dev only)"
+        title={t('Toggle light/dark (dev only)')}
       >
         <Icon name={theme === 'dark' ? 'sun' : 'moon'} size={14} />
-        {theme === 'dark' ? 'Light' : 'Dark'}
+        {t(theme === 'dark' ? 'Light' : 'Dark')}
       </button>
       <Frame>{app}</Frame>
     </>

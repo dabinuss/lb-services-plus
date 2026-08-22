@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { fetchNui } from '../../lib/nui.js'
+import { useI18n } from '../../lib/i18n.jsx'
 
 // Mirrors Config.PageSize.messages in shared/config.lua - a page shorter
 // than this means there's nothing left to load (plan §68, plan review
@@ -9,6 +10,7 @@ const PAGE_SIZE = 25
 // Employee-side inbox (plan §37), grouped implicitly by number label since
 // each mailbox-enabled number gets its own conversations.
 export default function MessagesTab({ onOpenConversation }) {
+  const { t } = useI18n()
   const [conversations, setConversations] = useState(null)
   const [hasMore, setHasMore] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -31,9 +33,9 @@ export default function MessagesTab({ onOpenConversation }) {
 
   return (
     <div className="tab-panel">
-      {conversations === null && <div className="empty-state">Loading conversations…</div>}
+      {conversations === null && <div className="empty-state">{t('Loading conversations…')}</div>}
       {conversations !== null && conversations.length === 0 && (
-        <div className="empty-state">No conversations yet. Customer messages will show up here.</div>
+        <div className="empty-state">{t('No conversations yet. Customer messages will show up here.')}</div>
       )}
 
       <div className="activity-list">
@@ -56,7 +58,7 @@ export default function MessagesTab({ onOpenConversation }) {
 
       {hasMore && (
         <button className="sheet-option" onClick={loadMore} disabled={loadingMore}>
-          {loadingMore ? 'Loading…' : 'Load more'}
+          {t(loadingMore ? 'Loading…' : 'Load more')}
         </button>
       )}
     </div>

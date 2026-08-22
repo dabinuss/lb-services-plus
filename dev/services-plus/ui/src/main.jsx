@@ -5,6 +5,7 @@ import './colors.css'
 import './index.css'
 import App from './App.jsx'
 import NotificationApp from '../../peekplus/ui/notification-app/NotificationApp.jsx'
+import { LanguageProvider } from './lib/i18n.jsx'
 
 // window.invokeNative only exists inside the actual FiveM NUI browser, so
 // this is a reliable "am I running in a real phone" check (same trick the
@@ -21,7 +22,7 @@ const renderApp = () => {
 
   root.render(
     <StrictMode>
-      {notificationMode ? <NotificationApp /> : <App devMode={devMode} />}
+      <LanguageProvider>{notificationMode ? <NotificationApp /> : <App devMode={devMode} />}</LanguageProvider>
     </StrictMode>,
   )
 }

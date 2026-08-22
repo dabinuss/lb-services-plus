@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { fetchNui } from '../../lib/nui.js'
 import { showToast } from '../../lib/toast.js'
+import { useI18n } from '../../lib/i18n.jsx'
 
 const BILLING_MODE_OPTIONS = [
   { key: 'per_minute', label: 'Per minute' },
@@ -18,6 +19,7 @@ const BILLING_MODE_OPTIONS = [
 // taxi_pricing feature turned on by an admin - empty for every business
 // type except taxi companies.
 export default function TaxiPricingSettings() {
+  const { t } = useI18n()
   const [taxiPricing, setTaxiPricing] = useState([])
 
   useEffect(() => {
@@ -34,24 +36,24 @@ export default function TaxiPricingSettings() {
     setTaxiPricing((prev) => prev.map((t) => (t.requestTypeId === requestTypeId ? { ...t, ...patch } : t)))
     if (!(await fetchNui('updateTaxiPricingSettings', { requestTypeId, settings: patch }))) {
       setTaxiPricing(previous)
-      showToast('Could not save that change. Try again.', 'error')
+      showToast(t('Could not save that change. Try again.'), 'error')
     }
   }
 
   return (
     <>
-      <div className="section-title compact-title">Taxameter</div>
-      {taxiPricing.map((t) => (
-        <div key={t.requestTypeId} className="routing-row">
-          <div className="routing-label">{t.requestTypeName}</div>
+      <div className="section-title compact-title">{t('Taxameter')}</div>
+      {taxiPricing.map((pricing) => (
+        <div key={pricing.requestTypeId} className="routing-row">
+          <div className="routing-label">{t(pricing.requestTypeName)}</div>
           <div className="category-row subtab-row routing-options">
             {BILLING_MODE_OPTIONS.map((o) => (
               <button
                 key={o.key}
-                className={`category-chip${t.billingMode === o.key ? ' active' : ''}`}
-                onClick={() => saveTaxiPricing(t.requestTypeId, { billingMode: o.key, rate: t.rate })}
+                className={`category-chip${pricing.billingMode === o.key ? ' active' : ''}`}
+                onClick={() => saveTaxiPricing(pricing.requestTypeId, { billingMode: o.key, rate: pricing.rate })}
               >
-                {o.label}
+                {t(o.label)}
               </button>
             ))}
           </div>
@@ -60,13 +62,13 @@ export default function TaxiPricingSettings() {
             type="number"
             min="0"
             step="0.1"
-            value={t.rate}
+            value={pricing.rate}
             onChange={(e) =>
               setTaxiPricing((prev) =>
-                prev.map((p) => (p.requestTypeId === t.requestTypeId ? { ...p, rate: e.target.value } : p)),
+                prev.map((p) => (p.requestTypeId === pricing.requestTypeId ? { ...p, rate: e.target.value } : p)),
               )
             }
-            onBlur={(e) => saveTaxiPricing(t.requestTypeId, { billingMode: t.billingMode, rate: Number(e.target.value) })}
+            onBlur={(e) => saveTaxiPricing(pricing.requestTypeId, { billingMode: pricing.billingMode, rate: Number(e.target.value) })}
           />
         </div>
       ))}

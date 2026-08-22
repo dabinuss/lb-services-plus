@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { fetchNui, createCall } from '../../lib/nui.js'
 import Switch from '../../components/Switch.jsx'
 import Icon from '../../components/Icon.jsx'
+import { useI18n } from '../../lib/i18n.jsx'
 
 // A colored presence dot per option (same shared Icon set as the rest of
 // the app, colored via CSS below) plus its own label - never just a color
@@ -15,6 +16,7 @@ const STATUSES = [
 
 // Duty, status and hotlines (plan §19-23).
 export default function DashboardHome({ initialOnDuty, initialStatus, employeeMemberId, employeeName, employeeGrade, onLogout, teamUpdate }) {
+  const { t } = useI18n()
   const [onDuty, setOnDuty] = useState(initialOnDuty)
   const [status, setStatus] = useState(initialStatus)
   const [hotlines, setHotlines] = useState(null)
@@ -99,7 +101,7 @@ export default function DashboardHome({ initialOnDuty, initialStatus, employeeMe
       const activeLabels = result.hotlines.filter((h) => h.active).map((h) => h.label)
       setTeam((prev) => prev?.map((m) => (m.memberId === employeeMemberId ? { ...m, hotlines: activeLabels } : m)))
     } else if (result?.reason === 'sole_employee') {
-      setNotice("Main hotline stays on while you're the only one on duty.")
+      setNotice(t("Main hotline stays on while you're the only one on duty."))
     }
   }
 
@@ -113,7 +115,7 @@ export default function DashboardHome({ initialOnDuty, initialStatus, employeeMe
       <div className="duty-card">
         <div className="duty-card-top">
           <div>
-            <div className="dashboard-label">On duty</div>
+            <div className="dashboard-label">{t('On duty')}</div>
             <div className="dashboard-row-sub">
               {employeeName}
               {employeeGrade && ` · ${employeeGrade}`}
@@ -131,7 +133,7 @@ export default function DashboardHome({ initialOnDuty, initialStatus, employeeMe
                 onClick={() => changeStatus(s.key)}
               >
                 <Icon name="dot" size={10} className={`status-pill-icon ${s.key}`} />
-                {s.label}
+                {t(s.label)}
               </button>
             ))}
           </div>
@@ -140,15 +142,15 @@ export default function DashboardHome({ initialOnDuty, initialStatus, employeeMe
 
       {onDuty && (
         <>
-          <div className="section-title">Hotlines</div>
+          <div className="section-title">{t('Hotlines')}</div>
           <div className="hotline-list">
-            {hotlines === null && <div className="empty-state">Loading hotlines…</div>}
+            {hotlines === null && <div className="empty-state">{t('Loading hotlines…')}</div>}
             {hotlines?.map((line) => (
               <div key={line.numberId} className="hotline-row">
                 <div className="hotline-info">
                   <span className="hotline-label">
                     {line.label}
-                    {line.locked && <span className="hint"> (locked)</span>}
+                    {line.locked && <span className="hint"> ({t('locked')})</span>}
                   </span>
                   <span className="hotline-number">{line.number}</span>
                 </div>
@@ -158,18 +160,18 @@ export default function DashboardHome({ initialOnDuty, initialStatus, employeeMe
           </div>
           {notice && <div className="notice">{notice}</div>}
 
-          <div className="section-title">Team</div>
+          <div className="section-title">{t('Team')}</div>
           <input
             className="search-input"
-            placeholder="Search team…"
+            placeholder={t('Search team…')}
             value={teamSearch}
             onChange={(e) => setTeamSearch(e.target.value)}
           />
           <div className="team-list">
-            {team === null && <div className="empty-state">Loading team…</div>}
+            {team === null && <div className="empty-state">{t('Loading team…')}</div>}
             {team !== null && visibleTeam.length === 0 && (
               <div className="empty-state">
-                {teamSearch.trim() ? 'No colleague matches that search.' : 'No colleagues on duty right now.'}
+                {t(teamSearch.trim() ? 'No colleague matches that search.' : 'No colleagues on duty right now.')}
               </div>
             )}
             {visibleTeam?.map((member) => (
@@ -180,12 +182,12 @@ export default function DashboardHome({ initialOnDuty, initialStatus, employeeMe
                     <div className="team-grade">{member.gradeLabel}</div>
                   </div>
                   <div className="team-meta">
-                    <span className={`status-pill ${member.status} static`}>{member.status}</span>
+                    <span className={`status-pill ${member.status} static`}>{t(member.status)}</span>
                     <div className="team-hotlines">{member.hotlines.join(', ') || '—'}</div>
                   </div>
                 </div>
                 {member.phoneNumber && (
-                  <button className="icon-button call" onClick={() => createCall({ number: member.phoneNumber })} aria-label="Call">
+                  <button className="icon-button call" onClick={() => createCall({ number: member.phoneNumber })} aria-label={t('Call')}>
                     <Icon name="phone" size={15} />
                   </button>
                 )}

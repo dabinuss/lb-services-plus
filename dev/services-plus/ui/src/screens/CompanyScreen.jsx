@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { fetchNui } from '../lib/nui.js'
 import CompanyDashboard from './company/CompanyDashboard.jsx'
+import { useI18n } from '../lib/i18n.jsx'
 
 // Company area (plan §17-19): fake-login is purely cosmetic, the server
 // re-checks employment regardless. Everything past login is phase 2 -
@@ -8,7 +9,11 @@ import CompanyDashboard from './company/CompanyDashboard.jsx'
 // it needs to survive this component unmounting when the user switches to
 // another bottom-nav tab and back (stays logged in until logout, going
 // off-duty, or a real reload/phone switch - never just from leaving this tab).
-export default function CompanyScreen({ employee, companies, session, onLogin, onLogout, onOpenConversation, teamUpdate }) {
+export default function CompanyScreen({
+  employee, companies, session, onLogin, onLogout, onOpenConversation, teamUpdate,
+  messageBadge, requestBadge, messageRevision, requestRevision, onReadMessages, onReadRequests,
+}) {
+  const { t } = useI18n()
   const [loggingIn, setLoggingIn] = useState(false)
 
   const company = companies.find((c) => c.id === employee.companyId)
@@ -26,9 +31,9 @@ export default function CompanyScreen({ employee, companies, session, onLogin, o
       <div className="screen company-screen login-screen">
         <div className="login-card">
           {company?.icon && <img className="login-icon" src={company.icon} alt="" />}
-          <div className="login-title">Sign in to {company?.name || employee.jobLabel}</div>
+          <div className="login-title">{t('Sign in to {company}', { company: company?.name || employee.jobLabel })}</div>
           <button className="login-button" onClick={login} disabled={loggingIn}>
-            {loggingIn ? 'Signing in…' : 'Login'}
+            {t(loggingIn ? 'Signing in…' : 'Login')}
           </button>
         </div>
       </div>
@@ -43,6 +48,12 @@ export default function CompanyScreen({ employee, companies, session, onLogin, o
       onLogout={onLogout}
       onOpenConversation={onOpenConversation}
       teamUpdate={teamUpdate}
+      messageBadge={messageBadge}
+      requestBadge={requestBadge}
+      messageRevision={messageRevision}
+      requestRevision={requestRevision}
+      onReadMessages={onReadMessages}
+      onReadRequests={onReadRequests}
     />
   )
 }

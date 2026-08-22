@@ -2,8 +2,11 @@ import { useMemo, useState } from 'react'
 import CompanyCard from '../components/CompanyCard.jsx'
 import CategoryIcon from '../components/CategoryIcon.jsx'
 import Icon from '../components/Icon.jsx'
+import FlagIcon from '../components/FlagIcon.jsx'
+import { useI18n } from '../lib/i18n.jsx'
 
 export default function ServicesScreen({ companies, categories, onCall, onMessage, onRequest }) {
+  const { language, setLanguage, t } = useI18n()
   const [search, setSearch] = useState('')
   const [activeCategory, setActiveCategory] = useState(null)
 
@@ -27,11 +30,17 @@ export default function ServicesScreen({ companies, categories, onCall, onMessag
 
   return (
     <div className="screen services-screen">
-      <div className="screen-header">Services</div>
+      <div className="screen-header services-header">
+        <span>{t('Services')}</span>
+        <div className="language-switcher" role="group" aria-label={t('Select language')}>
+          <button className={language === 'en' ? 'active' : ''} onClick={() => setLanguage('en')} aria-label={t('English')} title={t('English')}><FlagIcon country="us" /></button>
+          <button className={language === 'de' ? 'active' : ''} onClick={() => setLanguage('de')} aria-label={t('German')} title={t('German')}><FlagIcon country="de" /></button>
+        </div>
+      </div>
 
       <input
         className="search-input"
-        placeholder="Search companies"
+        placeholder={t('Search companies')}
         value={search}
         onChange={(e) => setSearch(e.target.value)}
       />
@@ -45,8 +54,8 @@ export default function ServicesScreen({ companies, categories, onCall, onMessag
           <button
             className={`category-chip all-btn${activeCategory === null ? ' active' : ''}`}
             onClick={() => setActiveCategory(null)}
-            aria-label="All"
-            title="All"
+            aria-label={t('All')}
+            title={t('All')}
           >
             <Icon name="list" size={20} strokeWidth={2.5} />
           </button>
@@ -58,8 +67,8 @@ export default function ServicesScreen({ companies, categories, onCall, onMessag
               key={cat.id}
               className={`category-chip${activeCategory === cat.id ? ' active' : ''}`}
               onClick={() => setActiveCategory(activeCategory === cat.id ? null : cat.id)}
-              aria-label={cat.name}
-              title={cat.name}
+              aria-label={t(cat.name)}
+              title={t(cat.name)}
             >
               <CategoryIcon icon={cat.icon} size={19} strokeWidth={2.3} />
             </button>
@@ -71,8 +80,8 @@ export default function ServicesScreen({ companies, categories, onCall, onMessag
         {filtered.length === 0 && (
           <div className="empty-state">
             {companies.length === 0
-              ? 'No companies have been set up yet. Check back later.'
-              : 'No companies match your search. Try a different name or category.'}
+              ? t('No companies have been set up yet. Check back later.')
+              : t('No companies match your search. Try a different name or category.')}
           </div>
         )}
         {filtered.map((company) => (

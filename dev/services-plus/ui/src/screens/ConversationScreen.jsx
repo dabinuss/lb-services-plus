@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { fetchNui } from '../lib/nui.js'
 import Icon from '../components/Icon.jsx'
+import { useI18n } from '../lib/i18n.jsx'
 
 // Mirrors Config.PageSize.messages in shared/config.lua - a page shorter
 // than this means there's nothing older left to load (plan review round 4 §5).
@@ -11,6 +12,7 @@ const PAGE_SIZE = 25
 // already known). Behaviour intentionally mirrors native LB-Phone messaging
 // (plan §37).
 export default function ConversationScreen({ target, incoming, onClose }) {
+  const { t } = useI18n()
   const [channelId, setChannelId] = useState(target.channelId ?? null)
   const [messages, setMessages] = useState(null)
   const [text, setText] = useState('')
@@ -116,7 +118,7 @@ export default function ConversationScreen({ target, incoming, onClose }) {
   return (
     <div className="screen conversation-screen">
       <div className="conversation-header">
-        <button className="back-button" onClick={onClose} aria-label="Back">
+        <button className="back-button" onClick={onClose} aria-label={t('Back')}>
           <Icon name="chevronLeft" size={20} />
         </button>
         {target.icon && <img className="conversation-icon" src={target.icon} alt="" />}
@@ -124,8 +126,8 @@ export default function ConversationScreen({ target, incoming, onClose }) {
       </div>
 
       <div className="conversation-messages" ref={listRef} onScroll={onScroll}>
-        {messages === null && <div className="empty-state">Loading messages…</div>}
-        {loadingOlder && <div className="empty-state">Loading older messages…</div>}
+        {messages === null && <div className="empty-state">{t('Loading messages…')}</div>}
+        {loadingOlder && <div className="empty-state">{t('Loading older messages…')}</div>}
         {messages?.map((m) => {
           const mine = viewerRole === 'employee' ? m.sender_type === 'company' : m.sender_type === 'customer'
           return (
@@ -138,12 +140,12 @@ export default function ConversationScreen({ target, incoming, onClose }) {
 
       <div className="conversation-input">
         <input
-          placeholder="Message"
+          placeholder={t('Message')}
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && send()}
         />
-        <button className="send-button" onClick={send} disabled={!text.trim()} aria-label="Send">
+        <button className="send-button" onClick={send} disabled={!text.trim()} aria-label={t('Send')}>
           <Icon name="send" size={16} />
         </button>
       </div>

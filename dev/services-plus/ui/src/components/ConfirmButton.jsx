@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useI18n } from '../lib/i18n.jsx'
 
 // One confirm pattern for every critical/destructive action in the app -
 // admin deletes used to be the only place asking "press again to confirm";
@@ -9,7 +10,8 @@ import { useEffect, useRef, useState } from 'react'
 // sure" gestures.
 const DEFAULT_TIMEOUT = 4000
 
-export default function ConfirmButton({ onConfirm, className = 'request-action cancel', children = 'Delete', timeout = DEFAULT_TIMEOUT, ariaLabel }) {
+export default function ConfirmButton({ onConfirm, className = 'request-action cancel', children, timeout = DEFAULT_TIMEOUT, ariaLabel }) {
+  const { t } = useI18n()
   const [confirming, setConfirming] = useState(false)
   const resetTimer = useRef(null)
 
@@ -30,21 +32,21 @@ export default function ConfirmButton({ onConfirm, className = 'request-action c
     return (
       <button
         className={className}
-        aria-label={ariaLabel ? `Confirm ${ariaLabel}` : undefined}
+        aria-label={ariaLabel ? t('Confirm {action}', { action: t(ariaLabel) }) : undefined}
         onClick={() => {
           disarm()
           onConfirm()
         }}
         onBlur={disarm}
       >
-        Confirm?
+        {t('Confirm?')}
       </button>
     )
   }
 
   return (
     <button className={className} aria-label={ariaLabel} onClick={arm}>
-      {children}
+      {children ?? t('Delete')}
     </button>
   )
 }
