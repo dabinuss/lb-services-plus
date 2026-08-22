@@ -407,20 +407,26 @@ local function refreshJobAndDuty(source)
     end
 end
 
-AddEventHandler("esx:playerLoaded", function(playerId) refreshJobAndDuty(playerId) end)
+local function playerLoaded(source)
+    if type(source) ~= "number" then return end
+    refreshJobAndDuty(source)
+    TriggerEvent("services-plus:internal:playerLoaded", source)
+end
+
+AddEventHandler("esx:playerLoaded", function(playerId) playerLoaded(playerId) end)
 AddEventHandler("esx:setJob", function(source) refreshJobAndDuty(source) end)
 
 AddEventHandler("QBCore:Server:PlayerLoaded", function(player)
-    if player and player.PlayerData then refreshJobAndDuty(player.PlayerData.source) end
+    if player and player.PlayerData then playerLoaded(player.PlayerData.source) end
 end)
 -- Belt-and-suspenders for Qbox: current qbx_core fires the same
 -- "QBCore:Server:PlayerLoaded" above, but this also catches it on setups
 -- where that isn't the case (plan review round 3 §1) - inert otherwise.
 AddEventHandler("QBCore:Server:OnPlayerLoaded", function(player)
     if player and player.PlayerData then
-        refreshJobAndDuty(player.PlayerData.source)
+        playerLoaded(player.PlayerData.source)
     else
-        refreshJobAndDuty(source)
+        playerLoaded(source)
     end
 end)
 AddEventHandler("QBCore:Server:OnPlayerUpdated", function(source, key)

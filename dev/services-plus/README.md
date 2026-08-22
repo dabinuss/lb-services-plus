@@ -127,12 +127,10 @@ of smaller correctness/perf items):
    `CREATE TABLE IF NOT EXISTS` throughout, already reflects the current
    final schema. No manual SQL editing needed on a new database, plain MySQL
    included (plan review round 5 §9).
-   Already have a Services+ database from an earlier version instead? Import
-   [`sql/migrations.sql`](sql/migrations.sql) once (skip `install.sql`) -
-   it's the older `ADD COLUMN IF NOT EXISTS` upgrade path, needs MySQL
-   8.0.29+ / MariaDB 10.0.2+, and MariaDB specifically for its
-   `ADD INDEX IF NOT EXISTS` lines (plain MySQL: drop `IF NOT EXISTS` from
-   those specific lines and run it once - see that file's own header).
+   Already have a Services+ database from an earlier version instead? Skip
+   `install.sql` and apply the numbered files in [`sql/migrations/`](sql/migrations/README.md)
+   in ascending order. Migration 001 upgrades pre-1.0 databases and is safe
+   to re-run on both MySQL and MariaDB; no manual SQL edits are required.
 2. `cd ui && npm install && npm run build`.
 3. Make sure `resources/services-plus` on your dev server is a **junction**
    pointing at this `dev/services-plus` folder, not a copy - see the repo

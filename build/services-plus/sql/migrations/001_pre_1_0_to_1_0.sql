@@ -1,4 +1,5 @@
--- Services+ schema - UPGRADE MIGRATIONS ONLY. Do NOT run this against a
+-- Services+ migration 001: pre-1.0 installations -> 1.0 schema.
+-- UPGRADE MIGRATION ONLY. Do NOT run this against a
 -- brand new database - use sql/install.sql for a fresh install instead,
 -- whose CREATE TABLE statements already include everything below.
 --

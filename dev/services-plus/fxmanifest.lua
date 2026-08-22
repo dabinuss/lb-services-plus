@@ -53,6 +53,9 @@ server_scripts {
     'server/main.lua',
     'server/seed.lua',
     'server/api.lua',
+    -- Must stay last: this is the only place that seeds and loads the caches,
+    -- after every owning module and request-type feature has been registered.
+    'server/bootstrap.lua',
 }
 
 -- The custom app itself (ui/dist) is loaded by lb-phone as a plain iframe

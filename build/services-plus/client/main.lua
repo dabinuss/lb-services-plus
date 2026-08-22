@@ -271,6 +271,14 @@ RegisterNUICallback("updateNumberSettings", function(data, cb)
     cb(bridge("updateNumberSettings", data.numberId, data.settings))
 end)
 
+RegisterNUICallback("getTaxiPricingSettings", function(_, cb)
+    cb(bridge("getTaxiPricingSettings"))
+end)
+
+RegisterNUICallback("updateTaxiPricingSettings", function(data, cb)
+    cb(bridge("updateTaxiPricingSettings", data.requestTypeId, data.settings))
+end)
+
 -- --------------------------------------------------------------- requests
 
 RegisterNUICallback("getRequestTypes", function(data, cb)

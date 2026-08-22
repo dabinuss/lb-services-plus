@@ -6,8 +6,8 @@
 -- Every CREATE TABLE below already reflects the current, final schema (no
 -- ALTER TABLE needed after this file on a fresh install). If you're
 -- *upgrading* an existing Services+ database instead, do NOT re-run this
--- file - run `sql/migrations.sql` instead (see its own header for why the
--- two are kept separate, plan review round 5 §9).
+-- file - apply the numbered files in `sql/migrations/` instead (see that
+-- directory's README, plan review round 5 §9).
 
 CREATE TABLE IF NOT EXISTS `phone_services_plus_categories` (
     `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -293,5 +293,5 @@ CREATE TABLE IF NOT EXISTS `phone_services_plus_requests` (
 ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- Upgrading an existing Services+ install instead of setting one up fresh?
--- Run sql/migrations.sql once instead of (or after skipping) this file - see
--- its own header.
+-- Apply the numbered files in sql/migrations/ instead of this file - see
+-- that directory's README.

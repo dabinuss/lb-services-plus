@@ -1,4 +1,4 @@
--- Default categories used to seed the database on first start (see server/main.lua).
+-- Default categories used to seed the database on first start (see server/bootstrap.lua).
 -- Once seeded, categories live in the DB and are managed through the future
 -- admin area (plan §54) - this table is only a convenience bootstrap, not the
 -- source of truth at runtime.

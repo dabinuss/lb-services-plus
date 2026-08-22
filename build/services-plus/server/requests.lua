@@ -855,6 +855,27 @@ RegisterCallback("getMyRequests", function(source, reply, page)
     reply(rows or {})
 end)
 
+-- Reconnect recovery must not depend on the player opening the app. Framework
+-- adapters publish one normalized loaded event; once bootstrap is ready this
+-- rehydrates the assignment and clears its disconnect timestamp in time.
+AddEventHandler("services-plus:internal:playerLoaded", function(playerSource)
+    CreateThread(function()
+        while not ServicesPlus.ready and not ServicesPlus.initializationError
+            and GetPlayerName(playerSource) ~= nil do
+            Wait(100)
+        end
+
+        if not ServicesPlus.ready or GetPlayerName(playerSource) == nil then return end
+
+        local ok, err = pcall(Requests.GetActive, playerSource)
+        if not ok then
+            print(("^1[services-plus] request reconnect recovery failed for source %s: %s^7"):format(
+                tostring(playerSource), tostring(err)
+            ))
+        end
+    end)
+end)
+
 -- Belt-and-suspenders alongside the pcall/finally in acceptRequest above
 -- (plan review round 6 §1) - that's the guaranteed release path, this is
 -- just an extra safety net for a disconnect landing at some exotic moment
@@ -880,10 +901,10 @@ AddEventHandler("playerDropped", function()
     ]], { identifier })
 end)
 
-CreateThread(function()
+function Requests.Initialize()
     seedIfEmpty()
     Requests.Reload()
-end)
+end
 
 -- Safety net for requests nobody ever accepted or cancelled (player went
 -- offline, the request type doesn't get picked up, ...). Two independent,

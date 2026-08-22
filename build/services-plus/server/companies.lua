@@ -203,7 +203,7 @@ function Companies.GetPublicList()
     return list
 end
 
-CreateThread(function()
+function Companies.Initialize()
     seedIfEmpty()
     Companies.Reload()
-end)
+end

@@ -14,6 +14,11 @@
 
 local handlers = {}
 
+-- Set by server/bootstrap.lua after every cache and seed dependency has been
+-- initialized in a deterministic order. Keeping this state next to the RPC
+-- entry point means no NUI callback can observe half-populated caches.
+ServicesPlus = ServicesPlus or { ready = false, initializationError = nil }
+
 ---@param name string
 ---@param fn fun(source: number, reply: fun(...), ...)
 function RegisterCallback(name, fn)
@@ -36,6 +41,7 @@ local ACTION_LIMITS = {
     toggleHotline = { capacity = 5, refill = 0.5 },
     setStatus = { capacity = 5, refill = 0.5 },
     toggleDuty = { capacity = 5, refill = 0.2 },
+    updateTaxiPricingSettings = { capacity = 5, refill = 0.2 },
 }
 
 local globalBuckets = {} -- source -> { tokens, last }
@@ -99,6 +105,20 @@ RegisterNetEvent("services-plus:server:callback", function(name, requestId, ...)
     if not handler then return fail("unknown_callback") end
 
     if not checkRateLimit(src, name) then return fail("rate_limited") end
+
+    -- Hold an early RPC briefly instead of making consumers race the cache
+    -- bootstrap. The client callback has a 10-second timeout, so leave it a
+    -- two-second margin and return an explicit transient error if startup is
+    -- unusually slow.
+    local readyDeadline = GetGameTimer() + 8000
+    while not ServicesPlus.ready and not ServicesPlus.initializationError
+        and GetGameTimer() < readyDeadline and GetPlayerName(src) ~= nil do
+        Wait(50)
+    end
+
+    if not ServicesPlus.ready then
+        return fail(ServicesPlus.initializationError and "initialization_failed" or "not_ready")
+    end
 
     local function reply(...)
         TriggerClientEvent("services-plus:client:callbackResponse", src, requestId, true, ...)

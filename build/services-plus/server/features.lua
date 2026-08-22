@@ -34,17 +34,27 @@ function Features.Register(name, hooks)
     Features.registry[name] = hooks
 end
 
----@param requestId number
----@param employeeSource number
-function Features.OnAccept(requestId, employeeSource)
-    for _, hooks in pairs(Features.registry) do
-        if hooks.OnAccept then hooks.OnAccept(requestId, employeeSource) end
+local function runHook(hookName, ...)
+    for name, hooks in pairs(Features.registry) do
+        local hook = hooks[hookName]
+        if hook then
+            local ok, err = pcall(hook, ...)
+            if not ok then
+                print(("^1[services-plus] feature '%s' %s hook errored: %s^7"):format(
+                    tostring(name), hookName, tostring(err)
+                ))
+            end
+        end
     end
 end
 
 ---@param requestId number
+---@param employeeSource number
+function Features.OnAccept(requestId, employeeSource)
+    runHook("OnAccept", requestId, employeeSource)
+end
+
+---@param requestId number
 function Features.OnComplete(requestId)
-    for _, hooks in pairs(Features.registry) do
-        if hooks.OnComplete then hooks.OnComplete(requestId) end
-    end
+    runHook("OnComplete", requestId)
 end
