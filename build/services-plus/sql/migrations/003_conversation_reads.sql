@@ -23,7 +23,9 @@ SELECT rs.owner_key, 'customer', c.id, rs.last_read_id
 FROM `phone_services_plus_read_state` rs
 JOIN `phone_services_plus_channels` c ON c.contact_number = rs.owner_key
 WHERE rs.scope = 'activity_messages'
-ON DUPLICATE KEY UPDATE last_read_id = GREATEST(last_read_id, VALUES(last_read_id));
+ON DUPLICATE KEY UPDATE last_read_id = GREATEST(
+    `phone_services_plus_conversation_reads`.`last_read_id`, VALUES(last_read_id)
+);
 
 INSERT INTO `phone_services_plus_conversation_reads`
     (`owner_key`, `viewer_scope`, `channel_id`, `last_read_id`)
@@ -32,4 +34,6 @@ FROM `phone_services_plus_read_state` rs
 JOIN `phone_services_plus_numbers` n ON n.company_id = rs.company_id
 JOIN `phone_services_plus_channels` c ON c.number_id = n.id
 WHERE rs.scope = 'company_messages'
-ON DUPLICATE KEY UPDATE last_read_id = GREATEST(last_read_id, VALUES(last_read_id));
+ON DUPLICATE KEY UPDATE last_read_id = GREATEST(
+    `phone_services_plus_conversation_reads`.`last_read_id`, VALUES(last_read_id)
+);
