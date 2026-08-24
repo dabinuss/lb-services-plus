@@ -174,39 +174,71 @@ end)
 
 ---@param source number
 ---@param reply fun(...)
----@param page number?
-RegisterCallback("getCallHistory", function(source, reply, page)
+---@param rawCursor table?
+RegisterCallback("getCallHistory", function(source, reply, rawCursor)
     local company = Companies.GetForPlayer(source)
     if not company then return reply(false) end
 
-    local rows = MySQL.query.await([[
-        SELECT c.id, c.customer_number, c.state, c.created_at, n.label
+    local cursor = NormalizeListCursor(rawCursor)
+    local query = [[
+        SELECT c.id, c.customer_number, c.state, c.created_at,
+               UNIX_TIMESTAMP(c.created_at) AS cursor_time, n.label
         FROM phone_services_plus_calls c
         JOIN phone_services_plus_numbers n ON n.id = c.number_id
         WHERE c.company_id = ?
+    ]]
+    local parameters = { company.id }
+    if cursor then
+        query = query .. [[
+          AND (c.created_at < FROM_UNIXTIME(?) OR (c.created_at = FROM_UNIXTIME(?) AND c.id < ?))
+        ]]
+        parameters[#parameters + 1] = cursor.time
+        parameters[#parameters + 1] = cursor.time
+        parameters[#parameters + 1] = cursor.id
+    end
+    query = query .. [[
         ORDER BY c.created_at DESC, c.id DESC
-        LIMIT ?, ?
-    ]], { company.id, ClampPage(page) * Config.PageSize.calls, Config.PageSize.calls })
+        LIMIT ?
+    ]]
+    parameters[#parameters + 1] = Config.PageSize.calls
+
+    local rows = MySQL.query.await(query, parameters)
 
     reply(rows or {})
 end)
 
 ---@param source number
 ---@param reply fun(...)
----@param page number?
-RegisterCallback("getMyCalls", function(source, reply, page)
+---@param rawCursor table?
+RegisterCallback("getMyCalls", function(source, reply, rawCursor)
     local number = Framework.GetPhoneNumber(source)
     if not number then return reply({}) end
 
-    local rows = MySQL.query.await([[
-        SELECT c.id, c.state, c.created_at, c.company_id, c.number_id,
+    local cursor = NormalizeListCursor(rawCursor)
+    local query = [[
+        SELECT c.id, c.state, c.created_at, UNIX_TIMESTAMP(c.created_at) AS cursor_time,
+               c.company_id, c.number_id,
                co.name AS company_name, co.icon AS company_icon
         FROM phone_services_plus_calls c
         JOIN phone_services_plus_companies co ON co.id = c.company_id
         WHERE c.customer_number = ?
+    ]]
+    local parameters = { number }
+    if cursor then
+        query = query .. [[
+          AND (c.created_at < FROM_UNIXTIME(?) OR (c.created_at = FROM_UNIXTIME(?) AND c.id < ?))
+        ]]
+        parameters[#parameters + 1] = cursor.time
+        parameters[#parameters + 1] = cursor.time
+        parameters[#parameters + 1] = cursor.id
+    end
+    query = query .. [[
         ORDER BY c.created_at DESC, c.id DESC
-        LIMIT ?, ?
-    ]], { number, ClampPage(page) * Config.PageSize.calls, Config.PageSize.calls })
+        LIMIT ?
+    ]]
+    parameters[#parameters + 1] = Config.PageSize.calls
+
+    local rows = MySQL.query.await(query, parameters)
 
     reply(rows or {})
 end)

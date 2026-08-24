@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { fetchNui } from '../../lib/nui.js'
 import Sheet from '../../components/Sheet.jsx'
 import ConfirmButton from '../../components/ConfirmButton.jsx'
@@ -16,6 +16,8 @@ export default function CategoriesTab() {
   const [categories, setCategories] = useState(null)
   const [editing, setEditing] = useState(null) // { ...EMPTY, id? }
   const [notice, setNotice] = useState('')
+  const [saving, setSaving] = useState(false)
+  const savingLock = useRef(false)
 
   const load = () => fetchNui('admin:getCategories').then((r) => r && setCategories(r))
 
@@ -24,30 +26,48 @@ export default function CategoriesTab() {
   }, [])
 
   const save = async () => {
+    if (savingLock.current) return
+    savingLock.current = true
+    setSaving(true)
     const action = editing.id ? 'admin:updateCategory' : 'admin:createCategory'
     const wasNew = !editing.id
-    if (await fetchNui(action, editing)) {
-      setEditing(null)
-      load()
-      showToast(t(wasNew ? 'Category created.' : 'Category saved.'))
-    } else {
+    try {
+      if (await fetchNui(action, editing)) {
+        setEditing(null)
+        load()
+        showToast(t(wasNew ? 'Category created.' : 'Category saved.'))
+      } else showToast(t('Could not save this category.'), 'error')
+    } catch {
       showToast(t('Could not save this category.'), 'error')
+    } finally {
+      savingLock.current = false
+      setSaving(false)
     }
   }
 
   const remove = async (id) => {
-    if (await fetchNui('admin:deleteCategory', { id })) {
-      setNotice('')
-      load()
-      showToast(t('Category deleted.'))
-    } else {
+    if (savingLock.current) return
+    savingLock.current = true
+    setSaving(true)
+    try {
+      if (await fetchNui('admin:deleteCategory', { id })) {
+        setNotice('')
+        load()
+        showToast(t('Category deleted.'))
+        return
+      }
       setNotice(t('Category is still assigned to a company or request type and cannot be deleted.'))
+    } catch {
+      setNotice(t('Category is still assigned to a company or request type and cannot be deleted.'))
+    } finally {
+      savingLock.current = false
+      setSaving(false)
     }
   }
 
   return (
     <div className="tab-panel">
-      <button className="login-button" onClick={() => setEditing({ ...EMPTY })}>
+      <button className="login-button" disabled={saving} onClick={() => setEditing({ ...EMPTY })}>
         {t('+ New category')}
       </button>
 
@@ -67,6 +87,7 @@ export default function CategoriesTab() {
             <div className="admin-row-actions">
               <button
                 className="request-action complete"
+                disabled={saving}
                 onClick={() =>
                   setEditing({
                     id: cat.id, key: cat.key, name: cat.name, icon: cat.icon || '',
@@ -76,7 +97,7 @@ export default function CategoriesTab() {
               >
                 {t('Edit')}
               </button>
-              <ConfirmButton onConfirm={() => remove(cat.id)} />
+              <ConfirmButton disabled={saving} onConfirm={() => remove(cat.id)} />
             </div>
           </div>
         ))}
@@ -117,7 +138,7 @@ export default function CategoriesTab() {
               onChange={(next) => setEditing({ ...editing, competitionAllowed: next })}
             />
           </div>
-          <button className="login-button" onClick={save}>
+          <button className="login-button" disabled={saving} aria-busy={saving} onClick={save}>
             {t('Save')}
           </button>
         </Sheet>

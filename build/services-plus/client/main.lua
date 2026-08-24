@@ -235,7 +235,7 @@ RegisterNUICallback("getMessages", function(data, cb)
 end)
 
 RegisterNUICallback("getActivity", function(data, cb)
-    cb(bridge("getActivity", data.page))
+    cb(bridge("getActivity", data.cursor))
 end)
 
 RegisterNUICallback("archiveConversation", function(data, cb)
@@ -249,11 +249,11 @@ RegisterNUICallback("resolveCall", function(data, cb)
 end)
 
 RegisterNUICallback("getCallHistory", function(data, cb)
-    cb(bridge("getCallHistory", data.page))
+    cb(bridge("getCallHistory", data.cursor))
 end)
 
 RegisterNUICallback("getMyCalls", function(data, cb)
-    cb(bridge("getMyCalls", data.page))
+    cb(bridge("getMyCalls", data.cursor))
 end)
 
 -- ------------------------------------------------- employees / team / hotlines
@@ -277,7 +277,7 @@ RegisterNUICallback("getTeam", function(data, cb)
 end)
 
 RegisterNUICallback("getCompanyConversations", function(data, cb)
-    cb(bridge("getCompanyConversations", data.page))
+    cb(bridge("getCompanyConversations", data.cursor))
 end)
 
 -- ------------------------------------------------------- company settings
@@ -378,11 +378,11 @@ RegisterNUICallback("cancelRequest", function(data, cb)
 end)
 
 RegisterNUICallback("getCompanyRequests", function(data, cb)
-    cb(bridge("getCompanyRequests", data.page))
+    cb(bridge("getCompanyRequests", data.cursor))
 end)
 
 RegisterNUICallback("getMyRequests", function(data, cb)
-    cb(bridge("getMyRequests", data.page))
+    cb(bridge("getMyRequests", data.cursor))
 end)
 
 -- Purely client-side: drops a GTA waypoint on an accepted request's location

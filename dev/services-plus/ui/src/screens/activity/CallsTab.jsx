@@ -1,7 +1,10 @@
-import { useEffect, useState } from 'react'
 import { fetchNui, createCall } from '../../lib/nui.js'
 import Icon from '../../components/Icon.jsx'
 import { useI18n } from '../../lib/i18n.jsx'
+import { showToast } from '../../lib/toast.js'
+import { useCursorList } from '../../lib/useCursorList.js'
+import { useMinuteTick } from '../../lib/time.js'
+import ListError from '../../components/ListError.jsx'
 
 const STATE_LABEL = { ringing: 'Calling…', answered: 'Call', missed: 'Missed call' }
 
@@ -13,53 +16,43 @@ const PAGE_SIZE = 25
 // lb-phone's own call events (see server/calls.lua).
 export default function CallsTab() {
   const { t, formatRelativeTime } = useI18n()
-  const [entries, setEntries] = useState(null)
-  const [hasMore, setHasMore] = useState(false)
-  const [loadingMore, setLoadingMore] = useState(false)
-
-  const loadPage = (page) => {
-    if (page > 0) setLoadingMore(true)
-
-    fetchNui('getMyCalls', { page }).then((result) => {
-      setLoadingMore(false)
-      if (!result) return
-
-      setEntries((prev) => (page === 0 ? result : [...(prev || []), ...result]))
-      setHasMore(result.length === PAGE_SIZE)
-    })
-  }
-
-  useEffect(() => loadPage(0), [])
-
-  const loadMore = () => loadPage(Math.floor((entries?.length || 0) / PAGE_SIZE))
+  const { items: entries, hasMore, loadingMore, error, loadMore, reload } = useCursorList('getMyCalls', { pageSize: PAGE_SIZE })
+  useMinuteTick()
 
   // Re-resolves and places a fresh call the same way ServicesScreen's own
   // Call button does (plan §39-41 wants "call the company again" here) -
   // resolveCall re-validates calls_enabled/routing server-side, so a number
   // disabled since this call happened just quietly does nothing.
   const callBack = async (entry) => {
-    const target = await fetchNui('resolveCall', { companyId: entry.company_id, numberId: entry.number_id })
-    if (!target) return
-    createCall(target.company ? { company: target.company } : { number: target.number })
+    try {
+      const target = await fetchNui('resolveCall', { companyId: entry.company_id, numberId: entry.number_id })
+      if (!target) throw new Error('unavailable')
+      createCall(target.company ? { company: target.company } : { number: target.number })
+    } catch {
+      showToast(t('This company is currently unavailable by phone.'), 'error')
+    }
   }
 
   return (
     <div className="tab-panel">
       {entries === null && <div className="empty-state">{t('Loading your calls…')}</div>}
-      {entries !== null && entries.length === 0 && (
+      {error && <ListError onRetry={reload} />}
+      {!error && entries !== null && entries.length === 0 && (
         <div className="empty-state">{t('No calls yet. Call a company from Services to see it here.')}</div>
       )}
 
       <div className="activity-list">
         {entries?.map((entry) => (
-          <div key={entry.id} className="activity-row" onClick={() => callBack(entry)}>
-            <div className="company-icon small">
-              {entry.company_icon ? <img src={entry.company_icon} alt="" /> : <span>{entry.company_name?.[0] || '?'}</span>}
-            </div>
-            <div className="company-info">
-              <div className="company-name">{entry.company_name}</div>
-              <div className={`last-message call-state ${entry.state}`}>{t(STATE_LABEL[entry.state] || entry.state)}</div>
-            </div>
+          <div key={entry.id} className="activity-row">
+            <button className="activity-row-open" onClick={() => callBack(entry)}>
+              <div className="company-icon small">
+                {entry.company_icon ? <img src={entry.company_icon} alt="" /> : <span>{entry.company_name?.[0] || '?'}</span>}
+              </div>
+              <div className="company-info">
+                <div className="company-name">{entry.company_name}</div>
+                <div className={`last-message call-state ${entry.state}`}>{t(STATE_LABEL[entry.state] || entry.state)}</div>
+              </div>
+            </button>
             <div className="activity-meta">
               <span className="activity-time">{formatRelativeTime(entry.created_at)}</span>
               <button

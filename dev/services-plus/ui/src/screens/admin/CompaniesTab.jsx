@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { fetchNui, isValidBrandingUrl } from '../../lib/nui.js'
 import Sheet from '../../components/Sheet.jsx'
 import ConfirmButton from '../../components/ConfirmButton.jsx'
@@ -13,11 +13,11 @@ const EMPTY_FORM = { job: '', name: '', categoryId: '', icon: '', background: ''
 // One compact tile instead of a full-width row - three of these side by
 // side fit on one line instead of stacking three separate rows just for
 // three toggles.
-function CeilingToggle({ label, allowed, onToggle }) {
+function CeilingToggle({ label, allowed, onToggle, disabled }) {
   return (
     <div className="ceiling-item">
       <span>{label}</span>
-      <Switch checked={allowed} onChange={onToggle} />
+      <Switch checked={allowed} onChange={onToggle} disabled={disabled} />
     </div>
   )
 }
@@ -43,6 +43,22 @@ export default function CompaniesTab() {
   // relabeled/renumbered but never deleted.
   const [editingNumber, setEditingNumber] = useState(null)
   const [saveError, setSaveError] = useState('')
+  const [saving, setSaving] = useState(false)
+  const mutationLock = useRef(false)
+
+  const runMutation = async (operation) => {
+    if (mutationLock.current) return false
+    mutationLock.current = true
+    setSaving(true)
+    try {
+      return await operation()
+    } catch {
+      return false
+    } finally {
+      mutationLock.current = false
+      setSaving(false)
+    }
+  }
 
   const load = () => fetchNui('admin:getCompanies').then((r) => r && setCompanies(r))
 
@@ -92,7 +108,7 @@ export default function CompaniesTab() {
 
     const payload = { ...form, icon, background, categoryId: form.categoryId || null }
     if (editingId === 'new') {
-      const result = await fetchNui('admin:createCompany', payload)
+      const result = await runMutation(() => fetchNui('admin:createCompany', payload))
       if (result) {
         closeSheet()
         load()
@@ -101,7 +117,7 @@ export default function CompaniesTab() {
         setSaveError(t('Could not create the company. Check the required fields, phone number and HTTPS URLs.'))
       }
     } else {
-      const ok = await fetchNui('admin:updateCompany', { id: editingId, ...payload })
+      const ok = await runMutation(() => fetchNui('admin:updateCompany', { id: editingId, ...payload }))
       if (ok) {
         closeSheet()
         load()
@@ -115,26 +131,26 @@ export default function CompaniesTab() {
   // Soft-delete only server-side - this disables the company instead of
   // removing it, so its message/call history survives.
   const disableCompany = async (id, closeAfter = false) => {
-    if (await fetchNui('admin:deleteCompany', { id })) {
+    if (await runMutation(() => fetchNui('admin:deleteCompany', { id }))) {
       if (closeAfter) closeSheet()
       load()
     }
   }
 
   const setCeiling = async (patch) => {
-    await fetchNui('admin:setCompanyCeiling', {
+    const ok = await runMutation(() => fetchNui('admin:setCompanyCeiling', {
       id: company.id,
       callsAllowed: databaseBoolean(company.admin_calls_allowed),
       messagesAllowed: databaseBoolean(company.admin_messages_allowed),
       requestsAllowed: databaseBoolean(company.admin_requests_allowed),
       ...patch,
-    })
-    load()
+    }))
+    if (ok) load()
   }
 
   const assignBoss = async () => {
     if (!playerId) return
-    if (await fetchNui('admin:assignBoss', { companyId: company.id, playerId: Number(playerId) })) {
+    if (await runMutation(() => fetchNui('admin:assignBoss', { companyId: company.id, playerId: Number(playerId) }))) {
       setPlayerId('')
       showToast(t('Company leader updated.'))
     } else {
@@ -144,10 +160,10 @@ export default function CompaniesTab() {
 
   const addNumber = async () => {
     if (!newNumber.label || !newNumber.number) return
-    const ok = await fetchNui('admin:createNumber', {
+    const ok = await runMutation(() => fetchNui('admin:createNumber', {
       companyId: company.id, label: newNumber.label, number: newNumber.number,
       callsEnabled: true, messagesEnabled: true, mailboxEnabled: true,
-    })
+    }))
     if (ok) {
       setNewNumber({ label: '', number: '' })
       load()
@@ -159,18 +175,18 @@ export default function CompaniesTab() {
 
   // Soft-delete only server-side - keeps that number's chat/call history intact.
   const deleteNumber = async (id) => {
-    if (await fetchNui('admin:deleteNumber', { id })) load()
+    if (await runMutation(() => fetchNui('admin:deleteNumber', { id }))) load()
   }
 
   const enableNumber = async (id) => {
-    if (await fetchNui('admin:enableNumber', { id })) load()
+    if (await runMutation(() => fetchNui('admin:enableNumber', { id }))) load()
   }
 
   // Server re-checks uniqueness itself - this is just so a plain
   // typo/duplicate doesn't round-trip for nothing.
   const saveNumber = async () => {
     if (!editingNumber.label || !editingNumber.number) return
-    const ok = await fetchNui('admin:updateNumber', editingNumber)
+    const ok = await runMutation(() => fetchNui('admin:updateNumber', editingNumber))
     if (ok) {
       setEditingNumber(null)
       load()
@@ -182,7 +198,7 @@ export default function CompaniesTab() {
 
   return (
     <div className="tab-panel">
-      <button className="login-button" onClick={openNew}>
+      <button className="login-button" onClick={openNew} disabled={saving}>
         {t('+ New company')}
       </button>
 
@@ -198,10 +214,10 @@ export default function CompaniesTab() {
               </div>
             </div>
             <div className="admin-row-actions">
-              <button className="request-action complete" onClick={() => openEdit(c)}>
+              <button className="request-action complete" onClick={() => openEdit(c)} disabled={saving}>
                 {t('Edit')}
               </button>
-              {databaseBoolean(c.enabled) && <ConfirmButton onConfirm={() => disableCompany(c.id)}>{t('Disable')}</ConfirmButton>}
+              {databaseBoolean(c.enabled) && <ConfirmButton disabled={saving} onConfirm={() => disableCompany(c.id)}>{t('Disable')}</ConfirmButton>}
             </div>
           </div>
         ))}
@@ -282,10 +298,10 @@ export default function CompaniesTab() {
           {editingId !== 'new' && (
             <div className="hotline-row">
               <span>{t('Enabled')}</span>
-              <Switch checked={form.enabled} onChange={(next) => setForm({ ...form, enabled: next })} />
+              <Switch checked={form.enabled} disabled={saving} onChange={(next) => setForm({ ...form, enabled: next })} />
             </div>
           )}
-          <button className="login-button" onClick={save}>
+          <button className="login-button" onClick={save} disabled={saving} aria-busy={saving}>
             {t('Save')}
           </button>
 
@@ -298,9 +314,9 @@ export default function CompaniesTab() {
             <div className="sheet-section">
               <div className="section-title">{t('Feature ceiling')}</div>
               <div className="ceiling-row">
-                <CeilingToggle label={t('Calls')} allowed={databaseBoolean(company.admin_calls_allowed)} onToggle={() => setCeiling({ callsAllowed: !databaseBoolean(company.admin_calls_allowed) })} />
-                <CeilingToggle label={t('Messages')} allowed={databaseBoolean(company.admin_messages_allowed)} onToggle={() => setCeiling({ messagesAllowed: !databaseBoolean(company.admin_messages_allowed) })} />
-                <CeilingToggle label={t('Requests')} allowed={databaseBoolean(company.admin_requests_allowed)} onToggle={() => setCeiling({ requestsAllowed: !databaseBoolean(company.admin_requests_allowed) })} />
+                <CeilingToggle disabled={saving} label={t('Calls')} allowed={databaseBoolean(company.admin_calls_allowed)} onToggle={() => setCeiling({ callsAllowed: !databaseBoolean(company.admin_calls_allowed) })} />
+                <CeilingToggle disabled={saving} label={t('Messages')} allowed={databaseBoolean(company.admin_messages_allowed)} onToggle={() => setCeiling({ messagesAllowed: !databaseBoolean(company.admin_messages_allowed) })} />
+                <CeilingToggle disabled={saving} label={t('Requests')} allowed={databaseBoolean(company.admin_requests_allowed)} onToggle={() => setCeiling({ requestsAllowed: !databaseBoolean(company.admin_requests_allowed) })} />
               </div>
 
               <div className="section-title">{t('Phone numbers')}</div>
@@ -319,7 +335,7 @@ export default function CompaniesTab() {
                       value={editingNumber.number}
                       onChange={(e) => setEditingNumber({ ...editingNumber, number: e.target.value })}
                     />
-                    <button className="request-action accept" onClick={saveNumber}>
+                    <button className="request-action accept" onClick={saveNumber} disabled={saving}>
                       {t('Save')}
                     </button>
                     <button className="icon-button subtle" onClick={() => setEditingNumber(null)} aria-label={t('Cancel editing this number')}>
@@ -335,17 +351,18 @@ export default function CompaniesTab() {
                     <div className="admin-row-actions">
                       <button
                         className="request-action complete"
+                        disabled={saving}
                         onClick={() => setEditingNumber({ id: n.id, label: n.label, number: n.number })}
                       >
                         {t('Edit')}
                       </button>
                       {!databaseBoolean(n.is_main) &&
                         (databaseBoolean(n.enabled) ? (
-                          <ConfirmButton className="icon-button subtle" ariaLabel="delete this number" onConfirm={() => deleteNumber(n.id)}>
+                          <ConfirmButton disabled={saving} className="icon-button subtle" ariaLabel="delete this number" onConfirm={() => deleteNumber(n.id)}>
                             <Icon name="x" size={13} />
                           </ConfirmButton>
                         ) : (
-                          <button className="request-action complete" onClick={() => enableNumber(n.id)}>
+                          <button className="request-action complete" onClick={() => enableNumber(n.id)} disabled={saving}>
                             {t('Re-enable')}
                           </button>
                         ))}
@@ -356,7 +373,7 @@ export default function CompaniesTab() {
               <div className="admin-inline-form">
                 <input className="search-input" placeholder={t('Label')} value={newNumber.label} onChange={(e) => setNewNumber({ ...newNumber, label: e.target.value })} />
                 <input className="search-input" placeholder={t('Number')} value={newNumber.number} onChange={(e) => setNewNumber({ ...newNumber, number: e.target.value })} />
-                <button className="request-action accept" onClick={addNumber}>
+                <button className="request-action accept" onClick={addNumber} disabled={saving}>
                   {t('Add')}
                 </button>
               </div>
@@ -364,7 +381,7 @@ export default function CompaniesTab() {
               <div className="section-title">{t('Company leader')}</div>
               <div className="admin-inline-form">
                 <input className="search-input" placeholder={t('Player ID')} value={playerId} onChange={(e) => setPlayerId(e.target.value)} />
-                <button className="request-action accept" onClick={assignBoss}>
+                <button className="request-action accept" onClick={assignBoss} disabled={saving}>
                   {t('Make leader')}
                 </button>
               </div>
@@ -374,7 +391,7 @@ export default function CompaniesTab() {
                   <div className="section-title">{t('Danger zone')}</div>
                   <div className="hotline-row">
                     <span>{t('Delete this company')}</span>
-                    <ConfirmButton onConfirm={() => disableCompany(company.id, true)}>{t('Delete company')}</ConfirmButton>
+                    <ConfirmButton disabled={saving} onConfirm={() => disableCompany(company.id, true)}>{t('Delete company')}</ConfirmButton>
                   </div>
                   <div className="hint">{t('The company is disabled; its call, message and request history is preserved.')}</div>
                 </>

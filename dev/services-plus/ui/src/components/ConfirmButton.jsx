@@ -54,7 +54,7 @@ export default function ConfirmButton({ onConfirm, className = 'request-action c
   }
 
   return (
-    <button className={className} aria-label={ariaLabel} onClick={arm} disabled={disabled || executing}>
+    <button className={className} aria-label={ariaLabel ? t(ariaLabel) : undefined} onClick={arm} disabled={disabled || executing}>
       {children ?? t('Delete')}
     </button>
   )

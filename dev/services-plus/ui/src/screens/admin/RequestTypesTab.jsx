@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { fetchNui } from '../../lib/nui.js'
 import Sheet from '../../components/Sheet.jsx'
 import ConfirmButton from '../../components/ConfirmButton.jsx'
@@ -27,6 +27,8 @@ export default function RequestTypesTab() {
   const [types, setTypes] = useState(null)
   const [categories, setCategories] = useState([])
   const [editing, setEditing] = useState(null)
+  const [saving, setSaving] = useState(false)
+  const savingLock = useRef(false)
 
   const load = () => fetchNui('admin:getRequestTypes').then((r) => r && setTypes(r))
 
@@ -38,31 +40,49 @@ export default function RequestTypesTab() {
   const categoryName = (id) => categories.find((c) => c.id === id)?.name || '—'
 
   const save = async () => {
+    if (savingLock.current) return
+    savingLock.current = true
+    setSaving(true)
     const action = editing.id ? 'admin:updateRequestType' : 'admin:createRequestType'
     const wasNew = !editing.id
-    if (await fetchNui(action, { ...editing, categoryId: editing.categoryId || null })) {
-      setEditing(null)
-      load()
-      showToast(t(wasNew ? 'Request type created.' : 'Request type saved.'))
-    } else {
+    try {
+      if (await fetchNui(action, { ...editing, categoryId: editing.categoryId || null })) {
+        setEditing(null)
+        load()
+        showToast(t(wasNew ? 'Request type created.' : 'Request type saved.'))
+      } else showToast(t('Could not save this request type.'), 'error')
+    } catch {
       showToast(t('Could not save this request type.'), 'error')
+    } finally {
+      savingLock.current = false
+      setSaving(false)
     }
   }
 
   // Soft-delete only server-side (plan review round 3 §9) - this disables
   // the type instead of removing it, so its request history survives.
   const disable = async (id) => {
-    if (await fetchNui('admin:deleteRequestType', { id })) {
-      load()
-      showToast(t('Request type disabled.'))
-    } else {
+    if (savingLock.current) return
+    savingLock.current = true
+    setSaving(true)
+    try {
+      if (await fetchNui('admin:deleteRequestType', { id })) {
+        load()
+        showToast(t('Request type disabled.'))
+        return
+      }
       showToast(t('Could not disable this request type.'), 'error')
+    } catch {
+      showToast(t('Could not disable this request type.'), 'error')
+    } finally {
+      savingLock.current = false
+      setSaving(false)
     }
   }
 
   return (
     <div className="tab-panel">
-      <button className="login-button" onClick={() => setEditing({ ...EMPTY })}>
+      <button className="login-button" disabled={saving} onClick={() => setEditing({ ...EMPTY })}>
         {t('+ New request type')}
       </button>
 
@@ -83,6 +103,7 @@ export default function RequestTypesTab() {
             <div className="admin-row-actions">
               <button
                 className="request-action complete"
+                disabled={saving}
                 onClick={() =>
                   setEditing({
                     id: type.id, categoryId: type.category_id || '', name: type.name,
@@ -99,7 +120,7 @@ export default function RequestTypesTab() {
                 {t('Edit')}
               </button>
               {databaseBoolean(type.enabled) && (
-                <ConfirmButton onConfirm={() => disable(type.id)}>{t('Disable')}</ConfirmButton>
+                <ConfirmButton disabled={saving} onConfirm={() => disable(type.id)}>{t('Disable')}</ConfirmButton>
               )}
             </div>
           </div>
@@ -196,7 +217,7 @@ export default function RequestTypesTab() {
               <Switch checked={editing.enabled} onChange={(next) => setEditing({ ...editing, enabled: next })} />
             </div>
           )}
-          <button className="login-button" onClick={save}>
+          <button className="login-button" disabled={saving} aria-busy={saving} onClick={save}>
             {t('Save')}
           </button>
         </Sheet>

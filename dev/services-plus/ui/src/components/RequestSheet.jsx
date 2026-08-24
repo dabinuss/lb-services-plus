@@ -13,21 +13,35 @@ export default function RequestSheet({ company, onClose }) {
   const [passengerCount, setPassengerCount] = useState('')
   const [description, setDescription] = useState('')
   const [state, setState] = useState('form') // form | sending | sent | queued | failed
+  const [loadError, setLoadError] = useState(false)
   const submittingRef = useRef(false)
   const passengerMode = requestTypePassengerMode(type)
   const noteMode = requestTypeNoteMode(type)
   const countLabel = type?.count_label || t('Passenger count')
 
-  useEffect(() => {
-    fetchNui('getRequestTypes', { categoryId: company.categoryId }).then((result) => {
-      const list = result || []
+  const loadTypes = async () => {
+    setTypes(null)
+    setLoadError(false)
+    try {
+      const result = await fetchNui('getRequestTypes', { categoryId: company.categoryId })
+      if (!Array.isArray(result)) throw new Error('request_types_unavailable')
+      const list = result
       setTypes(list)
       if (list.length === 1) setType(list[0])
-    })
+    } catch {
+      setTypes([])
+      setLoadError(true)
+    }
+  }
+
+  useEffect(() => {
+    loadTypes()
+    // The selected company is the only input that changes the available types.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [company])
 
   const submit = async () => {
-    if (submittingRef.current) return
+    if (submittingRef.current || !type) return
     if (passengerMode === 'required' && !passengerCount) return
     if (noteMode === 'required' && !description.trim()) return
     submittingRef.current = true
@@ -64,7 +78,14 @@ export default function RequestSheet({ company, onClose }) {
     <Sheet title={t('Request · {company}', { company: company.name })} onClose={onClose}>
       {types === null && <div className="empty-state">{t('Loading request options…')}</div>}
 
-      {types !== null && !type && (
+      {loadError && (
+        <div className="request-recovery">
+          <div className="empty-state">{t('Could not load request options.')}</div>
+          <button className="sheet-option" onClick={loadTypes}>{t('Try again')}</button>
+        </div>
+      )}
+
+      {types !== null && !loadError && !type && (
         <>
           {types.length === 0 && <div className="empty-state">{t('No request types available.')}</div>}
           {types.map((item) => (
@@ -110,13 +131,24 @@ export default function RequestSheet({ company, onClose }) {
           >
             {t('Send request')}
           </button>
+          {types.length > 1 && (
+            <button className="sheet-option" onClick={() => setType(null)}>{t('Choose another request type')}</button>
+          )}
         </div>
       )}
 
       {state === 'sending' && <div className="empty-state">{t('Sending…')}</div>}
       {state === 'sent' && <div className="empty-state">{t('Request sent!')}</div>}
       {state === 'queued' && <div className="empty-state">{t('Nobody available right now - request queued, check Activity later.')}</div>}
-      {state === 'failed' && <div className="empty-state">{t('Could not send this request.')}</div>}
+      {state === 'failed' && (
+        <div className="request-recovery">
+          <div className="empty-state">{t('Could not send this request.')}</div>
+          <button className="sheet-option" onClick={() => setState('form')}>{t('Try again')}</button>
+          {types.length > 1 && (
+            <button className="sheet-option" onClick={() => { setType(null); setState('form') }}>{t('Choose another request type')}</button>
+          )}
+        </div>
+      )}
     </Sheet>
   )
 }

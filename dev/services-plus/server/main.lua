@@ -389,12 +389,14 @@ end)
 -- ---------------------------------------------------------------------------
 -- Employee-side inbox (plan §37). Skips numbers without their own mailbox.
 -- ---------------------------------------------------------------------------
-RegisterCallback("getCompanyConversations", function(source, reply, page)
+RegisterCallback("getCompanyConversations", function(source, reply, rawCursor)
     local company = Companies.GetForPlayer(source)
     if not company then return reply(false) end
 
-    local rows = MySQL.query.await([[
-        SELECT c.id AS channel_id, c.contact_number, c.last_message, c.updated_at, n.label,
+    local cursor = NormalizeListCursor(rawCursor)
+    local query = [[
+        SELECT c.id AS channel_id, c.contact_number, c.last_message, c.updated_at,
+               UNIX_TIMESTAMP(c.updated_at) AS cursor_time, n.label,
                (
                    SELECT COUNT(*) FROM phone_services_plus_messages m
                    WHERE m.channel_id = c.id AND m.sender_type = 'customer'
@@ -405,12 +407,23 @@ RegisterCallback("getCompanyConversations", function(source, reply, page)
         LEFT JOIN phone_services_plus_conversation_reads cr
           ON cr.owner_key = ? AND cr.viewer_scope = 'employee' AND cr.channel_id = c.id
         WHERE n.company_id = ? AND n.mailbox_enabled = 1 AND c.archived_by_company = 0
+    ]]
+    local parameters = { Framework.GetIdentifier(source), company.id }
+    if cursor then
+        query = query .. [[
+          AND (c.updated_at < FROM_UNIXTIME(?) OR (c.updated_at = FROM_UNIXTIME(?) AND c.id < ?))
+        ]]
+        parameters[#parameters + 1] = cursor.time
+        parameters[#parameters + 1] = cursor.time
+        parameters[#parameters + 1] = cursor.id
+    end
+    query = query .. [[
         ORDER BY c.updated_at DESC, c.id DESC
-        LIMIT ?, ?
-    ]], {
-        Framework.GetIdentifier(source), company.id,
-        ClampPage(page) * Config.PageSize.messages, Config.PageSize.messages,
-    })
+        LIMIT ?
+    ]]
+    parameters[#parameters + 1] = Config.PageSize.messages
+
+    local rows = MySQL.query.await(query, parameters)
 
     reply(rows or {})
 end)
@@ -791,12 +804,14 @@ end)
 -- ---------------------------------------------------------------------------
 -- Activity (plan §39-41): a compact personal history, own conversations only.
 -- ---------------------------------------------------------------------------
-RegisterCallback("getActivity", function(source, reply, page)
+RegisterCallback("getActivity", function(source, reply, rawCursor)
     local contactNumber = Framework.GetPhoneNumber(source)
     if not contactNumber then return reply({}) end
 
-    local rows = MySQL.query.await([[
-        SELECT c.id AS channel_id, c.last_message, c.updated_at, n.company_id, n.label,
+    local cursor = NormalizeListCursor(rawCursor)
+    local query = [[
+        SELECT c.id AS channel_id, c.last_message, c.updated_at,
+               UNIX_TIMESTAMP(c.updated_at) AS cursor_time, n.company_id, n.label,
                (
                    SELECT COUNT(*) FROM phone_services_plus_messages m
                    WHERE m.channel_id = c.id AND m.sender_type = 'company'
@@ -809,12 +824,23 @@ RegisterCallback("getActivity", function(source, reply, page)
         LEFT JOIN phone_services_plus_conversation_reads cr
           ON cr.owner_key = ? AND cr.viewer_scope = 'customer' AND cr.channel_id = c.id
         WHERE c.contact_number = ? AND c.archived_by_contact = 0
+    ]]
+    local parameters = { contactNumber, contactNumber }
+    if cursor then
+        query = query .. [[
+          AND (c.updated_at < FROM_UNIXTIME(?) OR (c.updated_at = FROM_UNIXTIME(?) AND c.id < ?))
+        ]]
+        parameters[#parameters + 1] = cursor.time
+        parameters[#parameters + 1] = cursor.time
+        parameters[#parameters + 1] = cursor.id
+    end
+    query = query .. [[
         ORDER BY c.updated_at DESC, c.id DESC
-        LIMIT ?, ?
-    ]], {
-        contactNumber, contactNumber,
-        ClampPage(page) * Config.PageSize.activity, Config.PageSize.activity,
-    })
+        LIMIT ?
+    ]]
+    parameters[#parameters + 1] = Config.PageSize.activity
+
+    local rows = MySQL.query.await(query, parameters)
 
     for i = 1, #(rows or {}) do
         rows[i].company = rows[i].company_name and {

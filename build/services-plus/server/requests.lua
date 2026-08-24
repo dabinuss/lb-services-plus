@@ -1163,26 +1163,46 @@ RegisterCallback("cancelRequest", function(source, reply, requestId)
     reply(Requests.Cancel(requestId, source) ~= false)
 end)
 
-RegisterCallback("getCompanyRequests", function(source, reply, page)
+RegisterCallback("getCompanyRequests", function(source, reply, rawCursor)
     local company = Companies.GetForPlayer(source)
     if not company then return reply(false) end
 
     local identifier = Framework.GetIdentifier(source)
 
-    local rows = MySQL.query.await([[
+    local cursor = NormalizeListCursor(rawCursor)
+    local query = [[
         SELECT r.id, r.company_id, r.status, r.pos_x AS x, r.pos_y AS y,
-               r.passenger_count, r.description, r.created_at, r.feature_data,
+               r.passenger_count, r.description, r.created_at,
+               UNIX_TIMESTAMP(r.created_at) AS cursor_time, r.feature_data,
                t.name AS type_name, t.icon AS type_icon, t.count_label,
                (r.employee_identifier = ?) AS is_mine
         FROM phone_services_plus_requests r
         JOIN phone_services_plus_request_types t ON t.id = r.request_type_id
-        WHERE r.company_id = ? OR (r.company_id IS NULL AND t.category_id = ? AND r.status = 'open')
+        WHERE (r.company_id = ? OR (r.company_id IS NULL AND t.category_id = ? AND r.status = 'open'))
+    ]]
+    local parameters = { identifier, company.id, company.category_id }
+    if cursor then
+        query = query .. [[
+          AND (
+            (r.status = 'open') < ?
+            OR ((r.status = 'open') = ? AND (
+              r.created_at < FROM_UNIXTIME(?) OR (r.created_at = FROM_UNIXTIME(?) AND r.id < ?)
+            ))
+          )
+        ]]
+        parameters[#parameters + 1] = cursor.open
+        parameters[#parameters + 1] = cursor.open
+        parameters[#parameters + 1] = cursor.time
+        parameters[#parameters + 1] = cursor.time
+        parameters[#parameters + 1] = cursor.id
+    end
+    query = query .. [[
         ORDER BY (r.status = 'open') DESC, r.created_at DESC, r.id DESC
-        LIMIT ?, ?
-    ]], {
-        identifier, company.id, company.category_id,
-        ClampPage(page) * Config.PageSize.requests, Config.PageSize.requests,
-    })
+        LIMIT ?
+    ]]
+    parameters[#parameters + 1] = Config.PageSize.requests
+
+    local rows = MySQL.query.await(query, parameters)
 
     rows = rows or {}
     for i = 1, #rows do
@@ -1200,21 +1220,37 @@ RegisterCallback("getCompanyRequests", function(source, reply, page)
     reply(rows)
 end)
 
-RegisterCallback("getMyRequests", function(source, reply, page)
+RegisterCallback("getMyRequests", function(source, reply, rawCursor)
     local number = Framework.GetPhoneNumber(source)
     if not number then return reply({}) end
 
-    local rows = MySQL.query.await([[
-        SELECT r.id, r.status, r.created_at, r.description, r.passenger_count,
+    local cursor = NormalizeListCursor(rawCursor)
+    local query = [[
+        SELECT r.id, r.status, r.created_at, UNIX_TIMESTAMP(r.created_at) AS cursor_time,
+               r.description, r.passenger_count,
                t.name AS type_name, t.icon AS type_icon, t.count_label,
                c.name AS company_name, c.icon AS company_icon
         FROM phone_services_plus_requests r
         JOIN phone_services_plus_request_types t ON t.id = r.request_type_id
         LEFT JOIN phone_services_plus_companies c ON c.id = r.company_id
         WHERE r.requester_number = ?
+    ]]
+    local parameters = { number }
+    if cursor then
+        query = query .. [[
+          AND (r.created_at < FROM_UNIXTIME(?) OR (r.created_at = FROM_UNIXTIME(?) AND r.id < ?))
+        ]]
+        parameters[#parameters + 1] = cursor.time
+        parameters[#parameters + 1] = cursor.time
+        parameters[#parameters + 1] = cursor.id
+    end
+    query = query .. [[
         ORDER BY r.created_at DESC, r.id DESC
-        LIMIT ?, ?
-    ]], { number, ClampPage(page) * Config.PageSize.requests, Config.PageSize.requests })
+        LIMIT ?
+    ]]
+    parameters[#parameters + 1] = Config.PageSize.requests
+
+    local rows = MySQL.query.await(query, parameters)
 
     reply(rows or {})
 end)

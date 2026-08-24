@@ -24,6 +24,25 @@ function ClampPage(page)
     return page
 end
 
+--- Validates a keyset-pagination cursor supplied by NUI. List queries expose
+--- their timestamp as a numeric UNIX value, so clients never need to send a
+--- driver-specific DATETIME representation back to MySQL.
+---@param cursor any
+---@return table?
+function NormalizeListCursor(cursor)
+    if type(cursor) ~= "table" then return nil end
+
+    local id = math.floor(tonumber(cursor.id) or 0)
+    local timestamp = tonumber(cursor.time)
+    if id < 1 or not timestamp or timestamp ~= timestamp or timestamp < 0 or timestamp > 4102444800 then return nil end
+
+    return {
+        id = id,
+        time = timestamp,
+        open = DatabaseBoolean(cursor.open) and 1 or 0,
+    }
+end
+
 --- Normalizes MySQL boolean columns across drivers. oxmysql can return
 --- TINYINT(1) as Lua booleans while other adapters return 0/1 numbers.
 ---@param value any

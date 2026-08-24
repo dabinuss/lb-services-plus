@@ -23,7 +23,7 @@ const TABS = [
 // Everything past the fake-login (plan §19, §35-38, §20-24, §33-34).
 export default function CompanyDashboard({
   session, employee, company, onLogout, onOpenConversation, teamUpdate,
-  messageBadge = 0, requestBadge = 0, messageRevision, requestRevision, onReadConversation, onReadRequests,
+  messageBadge = 0, requestBadge = 0, messageRefreshToken, requestRefresh, onReadConversation, onReadRequests,
 }) {
   const { t } = useI18n()
   const [tab, setTab] = useState('home')
@@ -83,8 +83,8 @@ export default function CompanyDashboard({
             teamUpdate={teamUpdate}
           />
         )}
-        {tab === 'requests' && <RequestsTab key={`requests-${requestRevision || 0}`} />}
-        {tab === 'messages' && <MessagesTab key={`messages-${messageRevision || 0}`} onOpenConversation={onOpenConversation} onReadConversation={onReadConversation} />}
+        {tab === 'requests' && <RequestsTab refresh={requestRefresh} />}
+        {tab === 'messages' && <MessagesTab refreshToken={messageRefreshToken} onOpenConversation={onOpenConversation} onReadConversation={onReadConversation} />}
         {tab === 'calls' && <CallsTab />}
         {tab === 'settings' && session.employee.isBoss && <SettingsTab />}
       </div>

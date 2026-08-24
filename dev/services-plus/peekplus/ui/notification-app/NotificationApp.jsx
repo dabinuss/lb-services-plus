@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import Frame from '../../../ui/src/components/Frame.jsx'
 import { devMode, fetchNui, getSettings, onNuiEvent, onSettingsChange } from '../../../ui/src/lib/nui.js'
@@ -44,13 +44,13 @@ function Timer({ timer }) {
   return <div className="pn-history-timer"><span>{timer.label ? t(timer.label) : t('Timer')}</span><strong>{minutes}:{String(seconds).padStart(2, '0')}</strong></div>
 }
 
-function HistoryCard({ entry, expanded, onOpen, onDelete }) {
+function HistoryCard({ entry, expanded, onOpen, onDelete, disabled }) {
   const { t } = useI18n()
   const card = entry.card || {}
   const variant = card.variant || 'neutral'
   return (
     <article className={`pn-card variant-${variant}${entry.read ? '' : ' unread'}`}>
-      <button className="pn-card-main" onClick={onOpen}>
+      <button className="pn-card-main" onClick={onOpen} disabled={disabled}>
         <span className="pn-variant-icon">{VARIANT_ICON[variant] || '●'}</span>
         <span className="pn-copy">
           <span className="pn-title">{card.title ? t(card.title) : t('Notification')}</span>
@@ -67,7 +67,7 @@ function HistoryCard({ entry, expanded, onOpen, onDelete }) {
           <Progress progress={card.progress} />
           <Timer timer={card.timer} />
           <div className="pn-meta"><span>{entry.owner}</span><span>{t(entry.result)}</span></div>
-          <button className="pn-delete" onClick={onDelete}>{t('Delete')}</button>
+          <button className="pn-delete" onClick={onDelete} disabled={disabled}>{t('Delete')}</button>
         </div>
       )}
     </article>
@@ -77,14 +77,27 @@ function HistoryCard({ entry, expanded, onOpen, onDelete }) {
 export default function NotificationApp() {
   const { t } = useI18n()
   const [theme, setTheme] = useState('light')
-  const [entries, setEntries] = useState([])
+  const [entries, setEntries] = useState(null)
   const [filter, setFilter] = useState('all')
   const [expanded, setExpanded] = useState(null)
+  const [error, setError] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const actionLock = useRef(false)
 
   const load = useCallback(async () => {
-    if (devMode) return setEntries(DEV_HISTORY)
-    const result = await fetchNui('peekplusGetHistory')
-    setEntries(Array.isArray(result) ? result : [])
+    if (devMode) {
+      setEntries(DEV_HISTORY)
+      return
+    }
+    try {
+      const result = await fetchNui('peekplusGetHistory')
+      if (!Array.isArray(result)) throw new Error('history_unavailable')
+      setEntries(result)
+      setError(false)
+    } catch {
+      setEntries((current) => current || [])
+      setError(true)
+    }
   }, [])
 
   useEffect(() => {
@@ -103,7 +116,7 @@ export default function NotificationApp() {
   useEffect(() => onNuiEvent('peekplusHistoryChanged', load), [load])
   useEffect(() => {
     const timer = window.setInterval(() => {
-      setEntries((current) => current.length === 0 ? current : current.map((entry) => ({
+      setEntries((current) => !current || current.length === 0 ? current : current.map((entry) => ({
           ...entry,
           ageSeconds: Number(entry.ageSeconds || 0) + 60,
         })))
@@ -112,47 +125,88 @@ export default function NotificationApp() {
   }, [])
   useEffect(() => { document.body.setAttribute('data-theme', theme) }, [theme])
 
-  const visible = useMemo(() => filter === 'unread' ? entries.filter((entry) => !entry.read) : entries, [entries, filter])
-  const unread = entries.reduce((count, entry) => count + (entry.read ? 0 : 1), 0)
+  const visible = useMemo(() => {
+    const list = entries || []
+    return filter === 'unread' ? list.filter((entry) => !entry.read) : list
+  }, [entries, filter])
+  const unread = (entries || []).reduce((count, entry) => count + (entry.read ? 0 : 1), 0)
+
+  const runAction = async (operation, apply) => {
+    if (actionLock.current) return
+    actionLock.current = true
+    setBusy(true)
+    setError(false)
+    try {
+      const result = await operation()
+      if (result === false || (result && typeof result === 'object' && 'ok' in result && !result.ok)) {
+        throw new Error('history_action_failed')
+      }
+      apply()
+    } catch {
+      setError(true)
+    } finally {
+      actionLock.current = false
+      setBusy(false)
+    }
+  }
 
   const markAllRead = async () => {
-    if (!devMode) await fetchNui('peekplusMarkHistoryRead', { read: true })
-    setEntries((current) => current.map((entry) => ({ ...entry, read: true })))
+    await runAction(
+      () => devMode ? true : fetchNui('peekplusMarkHistoryRead', { read: true }),
+      () => setEntries((current) => current.map((entry) => ({ ...entry, read: true }))),
+    )
   }
   const open = async (entry) => {
     setExpanded((current) => current === entry.id ? null : entry.id)
     if (!entry.read) {
-      if (!devMode) await fetchNui('peekplusMarkHistoryRead', { id: entry.id, read: true })
-      setEntries((current) => current.map((item) => item.id === entry.id ? { ...item, read: true } : item))
+      await runAction(
+        () => devMode ? true : fetchNui('peekplusMarkHistoryRead', { id: entry.id, read: true }),
+        () => setEntries((current) => current.map((item) => item.id === entry.id ? { ...item, read: true } : item)),
+      )
     }
   }
   const remove = async (id) => {
-    if (!devMode) await fetchNui('peekplusClearHistory', { id })
-    setEntries((current) => current.filter((entry) => entry.id !== id))
-    setExpanded(null)
+    await runAction(
+      () => devMode ? true : fetchNui('peekplusClearHistory', { id }),
+      () => {
+        setEntries((current) => current.filter((entry) => entry.id !== id))
+        setExpanded(null)
+      },
+    )
   }
   const clear = async () => {
-    if (!devMode) await fetchNui('peekplusClearHistory')
-    setEntries([])
-    setExpanded(null)
+    await runAction(
+      () => devMode ? true : fetchNui('peekplusClearHistory'),
+      () => {
+        setEntries([])
+        setExpanded(null)
+      },
+    )
   }
 
   const app = (
     <div className="notification-app" data-theme={theme}>
       <header className="pn-header">
         <div><h1>{t('Notifications')}</h1><p>{unread ? t('{count} unread', { count: unread }) : t('All caught up')}</p></div>
-        {entries.length > 0 && <button onClick={clear}>{t('Clear')}</button>}
+        {(entries?.length || 0) > 0 && <button onClick={clear} disabled={busy}>{t('Clear')}</button>}
       </header>
       <div className="pn-toolbar">
         <div className="pn-filter">
-          <button className={filter === 'all' ? 'active' : ''} onClick={() => setFilter('all')}>{t('All')}</button>
-          <button className={filter === 'unread' ? 'active' : ''} onClick={() => setFilter('unread')}>{t('Unread')}</button>
+          <button className={filter === 'all' ? 'active' : ''} onClick={() => setFilter('all')} disabled={busy}>{t('All')}</button>
+          <button className={filter === 'unread' ? 'active' : ''} onClick={() => setFilter('unread')} disabled={busy}>{t('Unread')}</button>
         </div>
-        {unread > 0 && <button className="pn-read-all" onClick={markAllRead}>{t('Read all')}</button>}
+        {unread > 0 && <button className="pn-read-all" onClick={markAllRead} disabled={busy}>{t('Read all')}</button>}
       </div>
       <main className="pn-list">
-        {visible.map((entry) => <HistoryCard key={entry.id} entry={entry} expanded={expanded === entry.id} onOpen={() => open(entry)} onDelete={() => remove(entry.id)} />)}
-        {visible.length === 0 && <div className="pn-empty"><span>✓</span><strong>{t('No notifications')}</strong><p>{t('New PeekPlus notifications will appear here.')}</p></div>}
+        {entries === null && <div className="pn-empty"><strong>{t('Loading notifications…')}</strong></div>}
+        {error && (
+          <div className="notice pn-error">
+            <span>{t('Could not update notifications. Try again.')}</span>
+            <button onClick={load} disabled={busy}>{t('Try again')}</button>
+          </div>
+        )}
+        {visible.map((entry) => <HistoryCard key={entry.id} entry={entry} expanded={expanded === entry.id} onOpen={() => open(entry)} onDelete={() => remove(entry.id)} disabled={busy} />)}
+        {entries !== null && !error && visible.length === 0 && <div className="pn-empty"><span>✓</span><strong>{t('No notifications')}</strong><p>{t('New PeekPlus notifications will appear here.')}</p></div>}
       </main>
     </div>
   )

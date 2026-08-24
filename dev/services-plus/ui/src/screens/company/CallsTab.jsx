@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
-import { fetchNui, createCall } from '../../lib/nui.js'
+import { createCall } from '../../lib/nui.js'
 import Icon from '../../components/Icon.jsx'
 import { useI18n } from '../../lib/i18n.jsx'
+import { useCursorList } from '../../lib/useCursorList.js'
+import ListError from '../../components/ListError.jsx'
 
 const STATE_LABEL = { ringing: 'Ringing', answered: 'Answered', missed: 'Missed' }
 
@@ -13,30 +14,13 @@ const PAGE_SIZE = 25
 // own call events (see server/calls.lua) - Services+ never places calls.
 export default function CallsTab() {
   const { t } = useI18n()
-  const [calls, setCalls] = useState(null)
-  const [hasMore, setHasMore] = useState(false)
-  const [loadingMore, setLoadingMore] = useState(false)
-
-  const loadPage = (page) => {
-    if (page > 0) setLoadingMore(true)
-
-    fetchNui('getCallHistory', { page }).then((r) => {
-      setLoadingMore(false)
-      if (!r) return
-
-      setCalls((prev) => (page === 0 ? r : [...(prev || []), ...r]))
-      setHasMore(r.length === PAGE_SIZE)
-    })
-  }
-
-  useEffect(() => loadPage(0), [])
-
-  const loadMore = () => loadPage(Math.floor((calls?.length || 0) / PAGE_SIZE))
+  const { items: calls, hasMore, loadingMore, error, loadMore, reload } = useCursorList('getCallHistory', { pageSize: PAGE_SIZE })
 
   return (
     <div className="tab-panel">
       {calls === null && <div className="empty-state">{t('Loading call history…')}</div>}
-      {calls !== null && calls.length === 0 && (
+      {error && <ListError onRetry={reload} />}
+      {!error && calls !== null && calls.length === 0 && (
         <div className="empty-state">{t('No calls yet. Incoming and outgoing company calls will show up here.')}</div>
       )}
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { fetchNui } from '../../lib/nui.js'
 import { showToast } from '../../lib/toast.js'
 import { useI18n } from '../../lib/i18n.jsx'
@@ -18,12 +18,19 @@ const BILLING_MODE_OPTIONS = [
 // Renders nothing when this company's category has no request type with the
 // taxi_pricing feature turned on by an admin - empty for every business
 // type except taxi companies.
-export default function TaxiPricingSettings() {
+export default function TaxiPricingSettings({ disabled = false }) {
   const { t } = useI18n()
   const [taxiPricing, setTaxiPricing] = useState([])
+  const [saving, setSaving] = useState(false)
+  const saveLock = useRef(false)
+  const committedPricing = useRef([])
 
   useEffect(() => {
-    fetchNui('getTaxiPricingSettings').then((r) => r && setTaxiPricing(r))
+    fetchNui('getTaxiPricingSettings').then((result) => {
+      if (!result) return
+      committedPricing.current = result
+      setTaxiPricing(result)
+    })
   }, [])
 
   if (taxiPricing.length === 0) return null
@@ -32,11 +39,29 @@ export default function TaxiPricingSettings() {
   // to one request type's row since each has its own independent billing
   // config.
   const saveTaxiPricing = async (requestTypeId, patch) => {
-    const previous = taxiPricing
-    setTaxiPricing((prev) => prev.map((t) => (t.requestTypeId === requestTypeId ? { ...t, ...patch } : t)))
-    if (!(await fetchNui('updateTaxiPricingSettings', { requestTypeId, settings: patch }))) {
+    if (disabled || saveLock.current) return
+    if (String(patch.rate).trim() === '' || !Number.isFinite(Number(patch.rate)) || Number(patch.rate) < 0) {
+      showToast(t('Enter a valid non-negative rate.'), 'error')
+      return
+    }
+    saveLock.current = true
+    setSaving(true)
+    const previous = committedPricing.current
+    const normalized = { ...patch, rate: Number(patch.rate) }
+    setTaxiPricing((prev) => prev.map((row) => (row.requestTypeId === requestTypeId ? { ...row, ...normalized } : row)))
+    try {
+      if (await fetchNui('updateTaxiPricingSettings', { requestTypeId, settings: normalized })) {
+        committedPricing.current = previous.map((row) => (row.requestTypeId === requestTypeId ? { ...row, ...normalized } : row))
+        return
+      }
       setTaxiPricing(previous)
       showToast(t('Could not save that change. Try again.'), 'error')
+    } catch {
+      setTaxiPricing(previous)
+      showToast(t('Could not save that change. Try again.'), 'error')
+    } finally {
+      saveLock.current = false
+      setSaving(false)
     }
   }
 
@@ -51,6 +76,8 @@ export default function TaxiPricingSettings() {
               <button
                 key={o.key}
                 className={`category-chip${pricing.billingMode === o.key ? ' active' : ''}`}
+                disabled={disabled || saving}
+                onMouseDown={(event) => event.preventDefault()}
                 onClick={() => saveTaxiPricing(pricing.requestTypeId, { billingMode: o.key, rate: pricing.rate })}
               >
                 {t(o.label)}
@@ -63,6 +90,7 @@ export default function TaxiPricingSettings() {
             min="0"
             step="0.1"
             value={pricing.rate}
+            disabled={disabled || saving}
             onChange={(e) =>
               setTaxiPricing((prev) =>
                 prev.map((p) => (p.requestTypeId === pricing.requestTypeId ? { ...p, rate: e.target.value } : p)),

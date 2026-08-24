@@ -133,6 +133,9 @@
   font-weight: 600;
 }
 
+.list-error { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; }
+.list-error button { color: var(--sp-accent); font-weight: 700; flex-shrink: 0; }
+
 .count-badge {
   min-width: 1.05rem;
   height: 1.05rem;
@@ -626,6 +629,27 @@
   gap: 0.5rem;
   padding: 0.6rem var(--sp-content-edge) var(--sp-chat-safe-bottom);
   border-top: 1px solid var(--sp-separator);
+}
+
+.activity-list > .activity-row { width: 100%; color: inherit; text-align: left; }
+
+.activity-row-open:focus-visible,
+.request-row-open:focus-visible,
+.activity-row:where(button):focus-visible {
+  outline: 2px solid var(--sp-accent);
+  outline-offset: -2px;
+  border-radius: 0.45rem;
+}
+
+.activity-row-open,
+.request-row-open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  color: inherit;
+  text-align: left;
 }
 
 .conversation-input input {

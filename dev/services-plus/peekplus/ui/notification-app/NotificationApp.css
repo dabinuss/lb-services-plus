@@ -45,3 +45,5 @@
 .pn-empty span { margin: 0 auto .7rem; width: 2.8rem; height: 2.8rem; border-radius: 50%; display: grid; place-items: center; background: var(--sp-bg-highlight); color: var(--sp-success); font-size: 1.25rem; }
 .pn-empty strong { display: block; color: var(--sp-text-primary); font-size: .9rem; }
 .pn-empty p { margin-top: .25rem; max-width: 12rem; font-size: .7rem; line-height: 1.35; }
+.pn-error { display: flex; flex-direction: column; gap: .4rem; text-align: center; }
+.pn-error button { color: var(--sp-accent); font-weight: 700; }

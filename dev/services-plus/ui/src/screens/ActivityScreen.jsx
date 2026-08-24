@@ -13,7 +13,7 @@ const TABS = [
 
 // Personal history (plan §39-41), split into its three kinds instead of one
 // merged feed - deliberately still compact, not a CRM-style history.
-export default function ActivityScreen({ onOpen, messageBadge = 0, messageRevision, requestUpdate, onReadConversation }) {
+export default function ActivityScreen({ onOpen, messageBadge = 0, messageRefreshToken, requestUpdate, onReadConversation }) {
   const { t } = useI18n()
   const [tab, setTab] = useState('messages')
 
@@ -31,7 +31,7 @@ export default function ActivityScreen({ onOpen, messageBadge = 0, messageRevisi
       </div>
 
       <div className="dashboard-body">
-        {tab === 'messages' && <MessagesTab key={`messages-${messageRevision || 0}`} onOpen={onOpen} onReadConversation={onReadConversation} />}
+        {tab === 'messages' && <MessagesTab refreshToken={messageRefreshToken} onOpen={onOpen} onReadConversation={onReadConversation} />}
         {tab === 'requests' && <RequestsTab update={requestUpdate} />}
         {tab === 'calls' && <CallsTab />}
       </div>

@@ -46,7 +46,11 @@ export function isValidBrandingUrl(value) {
 // devMode actually exercise "Load more" instead of always handing back
 // every fixture row regardless of `page`.
 const FIXTURE_PAGE_SIZE = 25
-const paginate = (list, page) => list.slice((page || 0) * FIXTURE_PAGE_SIZE, ((page || 0) + 1) * FIXTURE_PAGE_SIZE)
+const paginateAfter = (list, cursor, idKey = 'id') => {
+  if (!cursor?.id) return list.slice(0, FIXTURE_PAGE_SIZE)
+  const index = list.findIndex((item) => Number(item[idKey]) === Number(cursor.id))
+  return list.slice(index < 0 ? 0 : index + 1, (index < 0 ? 0 : index + 1) + FIXTURE_PAGE_SIZE)
+}
 
 // One company per category, each with its own background banner, so the
 // Services overview/CompanyCard/dashboard-header blur treatment all have
@@ -342,9 +346,9 @@ let fixtureTaxiPricing = [
 // different contact numbers so the list (and its own pagination) has
 // something to show beyond one row.
 let fixtureCompanyConversations = [
-  { channel_id: 1, contact_number: '5550100', last_message: 'Thanks for your patience!', label: 'Main Hotline', unread_count: 0 },
-  { channel_id: 5, contact_number: '5551122', last_message: 'Can you fix a flat tire?', label: 'Workshop', unread_count: 3 },
-  { channel_id: 6, contact_number: '5553344', last_message: 'What are your hours?', label: 'Main Hotline', unread_count: 1 },
+  { channel_id: 1, contact_number: '5550100', last_message: 'Thanks for your patience!', label: 'Main Hotline', unread_count: 0, updated_at: new Date(Date.now() - 60000).toISOString() },
+  { channel_id: 5, contact_number: '5551122', last_message: 'Can you fix a flat tire?', label: 'Workshop', unread_count: 3, updated_at: new Date(Date.now() - 3600000).toISOString() },
+  { channel_id: 6, contact_number: '5553344', last_message: 'What are your hours?', label: 'Main Hotline', unread_count: 1, updated_at: new Date(Date.now() - 7200000).toISOString() },
 ]
 
 // --------------------------------------------------------- admin fixtures
@@ -489,7 +493,7 @@ async function fetchNuiFixture(action, data) {
       return withoutSender
     }
     case 'getActivity':
-      return paginate(fixtureActivity, data.page)
+      return paginateAfter(fixtureActivity, data.cursor, 'channel_id')
     case 'archiveConversation':
       return true
     case 'resolveCall': {
@@ -502,7 +506,7 @@ async function fetchNuiFixture(action, data) {
     }
     case 'getCallHistory':
     case 'getMyCalls':
-      return paginate(fixtureCalls, data.page)
+      return paginateAfter(fixtureCalls, data.cursor)
     case 'getHotlines':
       return fixtureHotlines
     case 'toggleHotline':
@@ -511,7 +515,7 @@ async function fetchNuiFixture(action, data) {
     case 'getTeam':
       return fixtureTeam
     case 'getCompanyConversations':
-      return paginate(fixtureCompanyConversations, data.page)
+      return paginateAfter(fixtureCompanyConversations, data.cursor, 'channel_id')
     case 'getTaxiPricingSettings':
       return fixtureTaxiPricing
     case 'updateTaxiPricingSettings':
@@ -579,14 +583,14 @@ async function fetchNuiFixture(action, data) {
       fixtureRequests = fixtureRequests.map((r) => (r.id === data.requestId ? { ...r, status: 'cancelled' } : r))
       return true
     case 'getCompanyRequests':
-      return paginate(fixtureRequests, data.page)
+      return paginateAfter(fixtureRequests, data.cursor)
     case 'getMyRequests':
-      return paginate(
+      return paginateAfter(
         fixtureRequests.map((r) => {
           const company = fixtures.bootstrap.companies.find((c) => c.id === r.company_id)
           return { ...r, company_name: company?.name, company_icon: company?.icon }
         }),
-        data.page,
+        data.cursor,
       )
     case 'setWaypoint':
       console.log('[dev] setWaypoint', data)

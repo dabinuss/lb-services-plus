@@ -4,6 +4,8 @@ import Sheet from '../../components/Sheet.jsx'
 import ConfirmButton from '../../components/ConfirmButton.jsx'
 import Icon from '../../components/Icon.jsx'
 import { useI18n } from '../../lib/i18n.jsx'
+import { useCursorList } from '../../lib/useCursorList.js'
+import ListError from '../../components/ListError.jsx'
 
 // Mirrors Config.PageSize.requests in shared/config.lua - a page shorter
 // than this means there's nothing left to load (plan §68, plan review
@@ -13,34 +15,29 @@ const PAGE_SIZE = 25
 // Employee-side request queue (plan §36, §45, §47). Open requests can be
 // accepted by anyone eligible; only the employee who accepted one can
 // complete or cancel it.
-export default function RequestsTab() {
+export default function RequestsTab({ refresh }) {
   const { t, formatDateTime } = useI18n()
-  const [requests, setRequests] = useState(null)
   const [details, setDetails] = useState(null)
-  const [hasMore, setHasMore] = useState(false)
-  const [loadingMore, setLoadingMore] = useState(false)
   const [pendingAction, setPendingAction] = useState(null)
   const actionLock = useRef(false)
 
-  const loadPage = (page) => {
-    if (page > 0) setLoadingMore(true)
+  const { items: requests, hasMore, loadingMore, error, loadMore, reload } = useCursorList('getCompanyRequests', {
+    pageSize: PAGE_SIZE, open: true, refreshToken: refresh?.sequence, removedId: refresh?.requestId,
+  })
 
-    fetchNui('getCompanyRequests', { page }).then((r) => {
-      setLoadingMore(false)
-      if (!r) return
-
-      setRequests((prev) => (page === 0 ? r : [...(prev || []), ...r]))
-      setHasMore(r.length === PAGE_SIZE)
+  useEffect(() => {
+    setDetails((current) => {
+      if (!current) return current
+      const refreshed = requests?.find((request) => request.id === current.id)
+      if (refreshed) return refreshed
+      if (refresh?.requestId === current.id && refresh.status) return { ...current, status: refresh.status }
+      return current
     })
-  }
-
-  useEffect(() => loadPage(0), [])
+  }, [requests, refresh])
 
   // Any action can reorder or drop rows (open-first sort, status changes),
   // so a refresh after one always restarts from page 0 rather than trying
   // to patch the loaded pages in place.
-  const loadMore = () => loadPage(Math.floor((requests?.length || 0) / PAGE_SIZE))
-
   const setLocation = (request) => {
     const x = request.x ?? request.pos_x
     const y = request.y ?? request.pos_y
@@ -56,7 +53,7 @@ export default function RequestsTab() {
       if (!result) return
       if (result.x != null && result.y != null) fetchNui('setWaypoint', { x: result.x, y: result.y })
       setDetails(null)
-      loadPage(0)
+      reload()
     } finally {
       actionLock.current = false
       setPendingAction(null)
@@ -70,7 +67,7 @@ export default function RequestsTab() {
     try {
       if (await fetchNui('completeRequest', { requestId: request.id })) {
         setDetails(null)
-        loadPage(0)
+        reload()
       }
     } finally {
       actionLock.current = false
@@ -85,7 +82,7 @@ export default function RequestsTab() {
     try {
       if (await fetchNui('cancelRequest', { requestId: request.id })) {
         setDetails(null)
-        loadPage(0)
+        reload()
       }
     } finally {
       actionLock.current = false
@@ -96,21 +93,24 @@ export default function RequestsTab() {
   return (
     <div className="tab-panel">
       {requests === null && <div className="empty-state">{t('Loading requests…')}</div>}
-      {requests !== null && requests.length === 0 && (
+      {error && <ListError onRetry={reload} />}
+      {!error && requests !== null && requests.length === 0 && (
         <div className="empty-state">{t('No requests yet. New customer requests will show up here.')}</div>
       )}
 
       <div className="request-list">
         {requests?.map((r) => (
-          <div key={r.id} className={`request-row status-${r.status}`} onClick={() => setDetails(r)}>
-            <div className="request-info">
-              <div className="request-type">{t(r.type_name)}</div>
-              <div className="request-meta">
-                {r.passenger_count ? `${r.count_label || t('Passenger count')}: ${r.passenger_count} · ` : ''}
-                {r.description ? t(r.description) : t('No description')}
-                {r.feature_data?.amount != null ? ` · $${r.feature_data.amount.toFixed(2)}` : ''}
+          <div key={r.id} className={`request-row status-${r.status}`}>
+            <button className="request-row-open" onClick={() => setDetails(r)}>
+              <div className="request-info">
+                <div className="request-type">{t(r.type_name)}</div>
+                <div className="request-meta">
+                  {r.passenger_count ? `${r.count_label || t('Passenger count')}: ${r.passenger_count} · ` : ''}
+                  {r.description || t('No description')}
+                  {r.feature_data?.amount != null ? ` · $${r.feature_data.amount.toFixed(2)}` : ''}
+                </div>
               </div>
-            </div>
+            </button>
 
             {r.status === 'open' && (
               <button className="request-action accept" disabled={pendingAction !== null} aria-busy={pendingAction === `accept:${r.id}`} onClick={(e) => { e.stopPropagation(); accept(r) }}>
@@ -161,7 +161,7 @@ export default function RequestsTab() {
             {details.description && (
               <div className="request-detail-row">
                 <span className="hint">{t('Notes')}</span>
-                <span>{t(details.description)}</span>
+                <span>{details.description}</span>
               </div>
             )}
             {details.feature_data?.amount != null && (

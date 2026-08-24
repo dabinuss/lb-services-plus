@@ -57,9 +57,8 @@ export default function App() {
   const [numberPicker, setNumberPicker] = useState(null) // { mode: 'call'|'message', company, numbers }
   const [requestSheet, setRequestSheet] = useState(null) // { company }
   const [incomingMessage, setIncomingMessage] = useState(null)
-  const [incomingRequest, setIncomingRequest] = useState(null)
   const [requestUpdate, setRequestUpdate] = useState(null)
-  const [requestQueueRevision, setRequestQueueRevision] = useState(0)
+  const [requestRefresh, setRequestRefresh] = useState(null)
   const [teamUpdate, setTeamUpdate] = useState(null)
   const [unread, setUnread] = useState({ activityMessages: 0, companyMessages: 0, companyRequests: 0 })
 
@@ -136,7 +135,11 @@ export default function App() {
 
   useEffect(() => {
     return onNuiEvent('newRequest', (data) => {
-      setIncomingRequest(data.request)
+      setRequestRefresh((current) => ({
+        sequence: (current?.sequence || 0) + 1,
+        requestId: data.request?.id || data.request?.requestId || null,
+        status: data.request?.status || 'open',
+      }))
       setUnread((current) => ({ ...current, companyRequests: current.companyRequests + 1 }))
     })
   }, [])
@@ -145,7 +148,11 @@ export default function App() {
     return onNuiEvent('requestQueueChanged', (data) => {
       const delta = Number(data.unreadDelta) || 0
       if (delta) setUnread((current) => ({ ...current, companyRequests: Math.max(0, current.companyRequests + delta) }))
-      setRequestQueueRevision((current) => current + 1)
+      setRequestRefresh((current) => ({
+        sequence: (current?.sequence || 0) + 1,
+        requestId: data.requestId || null,
+        status: data.status || null,
+      }))
     })
   }, [])
 
@@ -217,10 +224,16 @@ export default function App() {
     setNumberPicker(null)
     if (!number) return
 
-    const target = await fetchNui('resolveCall', { companyId: company.id, numberId: number.id })
-    if (!target) return
-
-    createCall(target.company ? { company: target.company } : { number: target.number })
+    try {
+      const target = await fetchNui('resolveCall', { companyId: company.id, numberId: number.id })
+      if (!target) {
+        showToast(t('This company is currently unavailable by phone.'), 'error')
+        return
+      }
+      createCall(target.company ? { company: target.company } : { number: target.number })
+    } catch {
+      showToast(t('This company is currently unavailable by phone.'), 'error')
+    }
   }
 
   const content = !bootstrap ? (
@@ -240,7 +253,7 @@ export default function App() {
         <ActivityScreen
           onOpen={setConversation}
           messageBadge={unread.activityMessages}
-          messageRevision={incomingMessage?.message?.id}
+          messageRefreshToken={incomingMessage?.message?.id}
           requestUpdate={requestUpdate}
           onReadConversation={(channelId, count) => readConversation(channelId, count, 'activityMessages')}
         />
@@ -256,8 +269,8 @@ export default function App() {
           teamUpdate={teamUpdate}
           messageBadge={unread.companyMessages}
           requestBadge={unread.companyRequests}
-          messageRevision={incomingMessage?.message?.id}
-          requestRevision={`${incomingRequest?.requestId || 0}-${requestQueueRevision}`}
+          messageRefreshToken={incomingMessage?.message?.id}
+          requestRefresh={requestRefresh}
           onReadConversation={(channelId, count) => readConversation(channelId, count, 'companyMessages')}
           onReadRequests={readCompanyRequests}
         />
