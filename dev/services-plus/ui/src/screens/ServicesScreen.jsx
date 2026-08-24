@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import CompanyCard from '../components/CompanyCard.jsx'
 import CategoryIcon from '../components/CategoryIcon.jsx'
 import Icon from '../components/Icon.jsx'
 import FlagIcon from '../components/FlagIcon.jsx'
+import SearchField from '../components/SearchField.jsx'
 import { useI18n } from '../lib/i18n.jsx'
 
 export default function ServicesScreen({ companies, categories, onCall, onMessage, onRequest }) {
@@ -27,6 +28,11 @@ export default function ServicesScreen({ companies, categories, onCall, onMessag
     categories.forEach((cat) => map.set(cat.id, cat.name))
     return map
   }, [categories])
+  const activeCategoryName = activeCategory === null ? null : categoryNames.get(activeCategory)
+
+  useEffect(() => {
+    if (activeCategory !== null && !categoryNames.has(activeCategory)) setActiveCategory(null)
+  }, [activeCategory, categoryNames])
 
   return (
     <div className="screen services-screen">
@@ -38,11 +44,11 @@ export default function ServicesScreen({ companies, categories, onCall, onMessag
         </div>
       </div>
 
-      <input
-        className="search-input"
+      <SearchField
         placeholder={t('Search companies')}
         value={search}
-        onChange={(e) => setSearch(e.target.value)}
+        onChange={setSearch}
+        clearLabel={t('Clear company search')}
       />
 
       {/* Icon-only (plan review: text pills ran out of room / overflowed the
@@ -75,6 +81,13 @@ export default function ServicesScreen({ companies, categories, onCall, onMessag
           ))}
         </div>
       </div>
+
+      {activeCategoryName && (
+        <div className="active-filter-label">
+          <span>{t('Category')}</span>
+          <strong>{t(activeCategoryName)}</strong>
+        </div>
+      )}
 
       <div className="company-list">
         {filtered.length === 0 && (

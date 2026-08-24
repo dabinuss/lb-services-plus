@@ -16,6 +16,12 @@ const TABS = [
 export default function AdminScreen() {
   const { t } = useI18n()
   const [tab, setTab] = useState('companies')
+  const [visitedTabs, setVisitedTabs] = useState(() => new Set(['companies']))
+
+  const openTab = (next) => {
+    setVisitedTabs((current) => current.has(next) ? current : new Set([...current, next]))
+    setTab(next)
+  }
 
   return (
     <div className="screen admin-screen">
@@ -23,17 +29,17 @@ export default function AdminScreen() {
 
       <div className="category-row subtab-row admin-tabs">
         {TABS.map((item) => (
-          <button key={item.key} className={`category-chip${tab === item.key ? ' active' : ''}`} onClick={() => setTab(item.key)}>
+          <button key={item.key} className={`category-chip${tab === item.key ? ' active' : ''}`} onClick={() => openTab(item.key)}>
             {t(item.label)}
           </button>
         ))}
       </div>
 
       <div className="dashboard-body">
-        {tab === 'companies' && <CompaniesTab />}
-        {tab === 'categories' && <CategoriesTab />}
-        {tab === 'requestTypes' && <RequestTypesTab />}
-        {tab === 'settings' && <ServiceSettingsTab />}
+        {visitedTabs.has('companies') && <div className={`subtab-view${tab === 'companies' ? ' active' : ''}`}><CompaniesTab /></div>}
+        {visitedTabs.has('categories') && <div className={`subtab-view${tab === 'categories' ? ' active' : ''}`}><CategoriesTab /></div>}
+        {visitedTabs.has('requestTypes') && <div className={`subtab-view${tab === 'requestTypes' ? ' active' : ''}`}><RequestTypesTab /></div>}
+        {visitedTabs.has('settings') && <div className={`subtab-view${tab === 'settings' ? ' active' : ''}`}><ServiceSettingsTab /></div>}
       </div>
     </div>
   )

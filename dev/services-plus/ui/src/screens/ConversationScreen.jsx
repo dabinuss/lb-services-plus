@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import { fetchNui } from '../lib/nui.js'
 import Icon from '../components/Icon.jsx'
 import { useI18n } from '../lib/i18n.jsx'
@@ -13,7 +13,7 @@ const PAGE_SIZE = 25
 // already known). Behaviour intentionally mirrors native LB-Phone messaging
 // (plan §37).
 export default function ConversationScreen({ target, incoming, onClose }) {
-  const { t } = useI18n()
+  const { t, formatTime, formatMessageDay } = useI18n()
   const [channelId, setChannelId] = useState(target.channelId ?? null)
   const [messages, setMessages] = useState(null)
   const [text, setText] = useState('')
@@ -174,12 +174,18 @@ export default function ConversationScreen({ target, incoming, onClose }) {
           <div className="empty-state">{t('Messages are disabled for this phone number.')}</div>
         )}
         {loadingOlder && <div className="empty-state">{t('Loading older messages…')}</div>}
-        {messages?.map((m) => {
+        {messages?.map((m, index) => {
           const mine = viewerRole === 'employee' ? m.sender_type === 'company' : m.sender_type === 'customer'
+          const day = formatMessageDay(m.created_at)
+          const previousDay = index > 0 ? formatMessageDay(messages[index - 1].created_at) : null
           return (
-            <div key={m.id} className={`bubble ${mine ? 'mine' : 'theirs'}`}>
-              {m.content}
-            </div>
+            <Fragment key={m.id}>
+              {day !== previousDay && <div className="message-day"><span>{day}</span></div>}
+              <div className={`bubble ${mine ? 'mine' : 'theirs'}`}>
+                <span className="bubble-content">{m.content}</span>
+                <time className="bubble-time" dateTime={m.created_at}>{formatTime(m.created_at)}</time>
+              </div>
+            </Fragment>
           )
         })}
       </div>

@@ -7,10 +7,9 @@ import Icon from '../components/Icon.jsx'
 // Company area (plan §17-19): the login presentation is cosmetic, but its
 // server-side session gates incoming company traffic; employment is checked
 // independently as well. Everything past login is phase 2 -
-// CompanyDashboard and its tabs. `session` is owned by App.jsx, not here -
-// it needs to survive this component unmounting when the user switches to
-// another bottom-nav tab and back (stays logged in until logout, going
-// off-duty, or a real reload/phone switch - never just from leaving this tab).
+// CompanyDashboard and its tabs. `session` is owned by App.jsx, not here,
+// because login state belongs to the whole app and must only end through
+// logout, going off-duty, or a real reload/phone switch.
 export default function CompanyScreen({
   employee, companies, session, onLogin, onLogout, onOpenConversation, teamUpdate,
   messageBadge, requestBadge, messageRefreshToken, requestRefresh, onReadConversation, onReadRequests,

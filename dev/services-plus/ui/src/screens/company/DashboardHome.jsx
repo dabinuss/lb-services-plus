@@ -3,6 +3,7 @@ import { fetchNui, createCall } from '../../lib/nui.js'
 import Switch from '../../components/Switch.jsx'
 import Icon from '../../components/Icon.jsx'
 import { useI18n } from '../../lib/i18n.jsx'
+import SearchField from '../../components/SearchField.jsx'
 
 // A colored presence dot per option (same shared Icon set as the rest of
 // the app, colored via CSS below) plus its own label - never just a color
@@ -195,11 +196,11 @@ export default function DashboardHome({ initialOnDuty, initialStatus, employeeMe
           {notice && <div className="notice">{notice}</div>}
 
           <div className="section-title">{t('Team')}</div>
-          <input
-            className="search-input"
+          <SearchField
             placeholder={t('Search team…')}
             value={teamSearch}
-            onChange={(e) => setTeamSearch(e.target.value)}
+            onChange={setTeamSearch}
+            clearLabel={t('Clear team search')}
           />
           <div className="team-list">
             {team === null && <div className="empty-state">{t('Loading team…')}</div>}

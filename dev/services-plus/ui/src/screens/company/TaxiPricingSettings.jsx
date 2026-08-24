@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { fetchNui } from '../../lib/nui.js'
 import { showToast } from '../../lib/toast.js'
 import { useI18n } from '../../lib/i18n.jsx'
+import FormField from '../../components/FormField.jsx'
 
 const BILLING_MODE_OPTIONS = [
   { key: 'per_minute', label: 'Per minute' },
@@ -84,20 +85,22 @@ export default function TaxiPricingSettings({ disabled = false }) {
               </button>
             ))}
           </div>
-          <input
-            className="search-input"
-            type="number"
-            min="0"
-            step="0.1"
-            value={pricing.rate}
-            disabled={disabled || saving}
-            onChange={(e) =>
-              setTaxiPricing((prev) =>
-                prev.map((p) => (p.requestTypeId === pricing.requestTypeId ? { ...p, rate: e.target.value } : p)),
-              )
-            }
-            onBlur={(e) => saveTaxiPricing(pricing.requestTypeId, { billingMode: pricing.billingMode, rate: Number(e.target.value) })}
-          />
+          <FormField label={t('Rate')} className="taxi-rate-field">
+            <input
+              className="search-input"
+              type="number"
+              min="0"
+              step="0.1"
+              value={pricing.rate}
+              disabled={disabled || saving}
+              onChange={(e) =>
+                setTaxiPricing((prev) =>
+                  prev.map((p) => (p.requestTypeId === pricing.requestTypeId ? { ...p, rate: e.target.value } : p)),
+                )
+              }
+              onBlur={(e) => saveTaxiPricing(pricing.requestTypeId, { billingMode: pricing.billingMode, rate: Number(e.target.value) })}
+            />
+          </FormField>
         </div>
       ))}
     </>

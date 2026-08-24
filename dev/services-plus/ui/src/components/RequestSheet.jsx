@@ -3,6 +3,7 @@ import { fetchNui } from '../lib/nui.js'
 import Sheet from './Sheet.jsx'
 import { useI18n } from '../lib/i18n.jsx'
 import { requestTypeNoteMode, requestTypePassengerMode } from '../lib/database.js'
+import FormField from './FormField.jsx'
 
 // Create a request (plan §11-14): only asks for what the chosen request type
 // actually needs. Location is automatic - never a field here (plan §14).
@@ -102,25 +103,15 @@ export default function RequestSheet({ company, onClose }) {
           {type.description && <div className="request-form-description">{t(type.description)}</div>}
 
           {passengerMode !== 'disabled' && (
-            <input
-              className="search-input"
-              type="number"
-              min="1"
-              placeholder={`${countLabel} (${t(passengerMode === 'optional' ? 'optional' : 'required')})`}
-              value={passengerCount}
-              onChange={(e) => setPassengerCount(e.target.value)}
-              required={passengerMode === 'required'}
-            />
+            <FormField label={`${countLabel} (${t(passengerMode === 'optional' ? 'optional' : 'required')})`}>
+              <input className="search-input" type="number" min="1" value={passengerCount} onChange={(e) => setPassengerCount(e.target.value)} required={passengerMode === 'required'} />
+            </FormField>
           )}
 
           {noteMode !== 'disabled' && (
-            <input
-              className="search-input"
-              placeholder={`${t('Additional note')} (${t(noteMode === 'required' ? 'required' : 'optional')})`}
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              required={noteMode === 'required'}
-            />
+            <FormField label={`${t('Additional note')} (${t(noteMode === 'required' ? 'required' : 'optional')})`}>
+              <input className="search-input" value={description} onChange={(e) => setDescription(e.target.value)} required={noteMode === 'required'} />
+            </FormField>
           )}
 
           <button

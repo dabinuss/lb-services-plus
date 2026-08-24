@@ -47,6 +47,7 @@ export default function App() {
   const { t, setLanguage } = useI18n()
   const [theme, setTheme] = useState('light')
   const [tab, setTab] = useState('services')
+  const [visitedTabs, setVisitedTabs] = useState(() => new Set(['services']))
   const [bootstrap, setBootstrap] = useState(null)
   // Lifted out of CompanyScreen so switching away to another tab and back
   // doesn't unmount-and-lose it - the fake-login should only ever end via
@@ -186,8 +187,13 @@ export default function App() {
 
   const visibleTabs = TABS.filter((t) => !t.requires || bootstrap?.[t.requires])
 
+  const openTab = (next) => {
+    setVisitedTabs((current) => current.has(next) ? current : new Set([...current, next]))
+    setTab(next)
+  }
+
   useEffect(() => {
-    if (bootstrap && !visibleTabs.some((t) => t.key === tab)) setTab('services')
+    if (bootstrap && !visibleTabs.some((t) => t.key === tab)) openTab('services')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bootstrap])
 
@@ -240,42 +246,50 @@ export default function App() {
     <div className="empty-state">{t('Loading Services+…')}</div>
   ) : (
     <>
-      {tab === 'services' && (
-        <ServicesScreen
-          companies={bootstrap.companies}
-          categories={bootstrap.categories}
-          onCall={callCompany}
-          onMessage={openMessage}
-          onRequest={(company) => setRequestSheet({ company })}
-        />
+      {visitedTabs.has('services') && (
+        <div className={`main-tab-view${tab === 'services' ? ' active' : ''}`}>
+          <ServicesScreen
+            companies={bootstrap.companies}
+            categories={bootstrap.categories}
+            onCall={callCompany}
+            onMessage={openMessage}
+            onRequest={(company) => setRequestSheet({ company })}
+          />
+        </div>
       )}
-      {tab === 'activity' && (
-        <ActivityScreen
-          onOpen={setConversation}
-          messageBadge={unread.activityMessages}
-          messageRefreshToken={incomingMessage?.message?.id}
-          requestUpdate={requestUpdate}
-          onReadConversation={(channelId, count) => readConversation(channelId, count, 'activityMessages')}
-        />
+      {visitedTabs.has('activity') && (
+        <div className={`main-tab-view${tab === 'activity' ? ' active' : ''}`}>
+          <ActivityScreen
+            onOpen={setConversation}
+            messageBadge={unread.activityMessages}
+            messageRefreshToken={incomingMessage?.message?.id}
+            requestUpdate={requestUpdate}
+            onReadConversation={(channelId, count) => readConversation(channelId, count, 'activityMessages')}
+          />
+        </div>
       )}
-      {tab === 'company' && bootstrap.employee && (
-        <CompanyScreen
-          employee={bootstrap.employee}
-          companies={bootstrap.companies}
-          session={companySession}
-          onLogin={loginCompany}
-          onLogout={logoutCompany}
-          onOpenConversation={setConversation}
-          teamUpdate={teamUpdate}
-          messageBadge={unread.companyMessages}
-          requestBadge={unread.companyRequests}
-          messageRefreshToken={incomingMessage?.message?.id}
-          requestRefresh={requestRefresh}
-          onReadConversation={(channelId, count) => readConversation(channelId, count, 'companyMessages')}
-          onReadRequests={readCompanyRequests}
-        />
+      {visitedTabs.has('company') && bootstrap.employee && (
+        <div className={`main-tab-view${tab === 'company' ? ' active' : ''}`}>
+          <CompanyScreen
+            employee={bootstrap.employee}
+            companies={bootstrap.companies}
+            session={companySession}
+            onLogin={loginCompany}
+            onLogout={logoutCompany}
+            onOpenConversation={setConversation}
+            teamUpdate={teamUpdate}
+            messageBadge={unread.companyMessages}
+            requestBadge={unread.companyRequests}
+            messageRefreshToken={incomingMessage?.message?.id}
+            requestRefresh={requestRefresh}
+            onReadConversation={(channelId, count) => readConversation(channelId, count, 'companyMessages')}
+            onReadRequests={readCompanyRequests}
+          />
+        </div>
       )}
-      {tab === 'admin' && bootstrap.admin && <AdminScreen />}
+      {visitedTabs.has('admin') && bootstrap.admin && (
+        <div className={`main-tab-view${tab === 'admin' ? ' active' : ''}`}><AdminScreen /></div>
+      )}
     </>
   )
 
@@ -286,7 +300,7 @@ export default function App() {
       {bootstrap && (
         <div className="nav-bar">
           {visibleTabs.map((item) => (
-            <button key={item.key} className={`nav-item${tab === item.key ? ' active' : ''}`} onClick={() => setTab(item.key)}>
+            <button key={item.key} className={`nav-item${tab === item.key ? ' active' : ''}`} onClick={() => openTab(item.key)}>
               <Icon name={item.icon} size={22} className="nav-icon" />
               <span className="nav-label">{t(item.label)}</span>
               {item.key === 'activity' && <Badge count={unread.activityMessages} className="nav-badge" />}

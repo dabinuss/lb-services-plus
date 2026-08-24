@@ -27,7 +27,13 @@ export default function CompanyDashboard({
 }) {
   const { t } = useI18n()
   const [tab, setTab] = useState('home')
+  const [visitedTabs, setVisitedTabs] = useState(() => new Set(['home']))
   const tabs = TABS.filter((t) => !t.bossOnly || session.employee.isBoss)
+
+  const openTab = (next) => {
+    setVisitedTabs((current) => current.has(next) ? current : new Set([...current, next]))
+    setTab(next)
+  }
 
   useEffect(() => {
     if (tab === 'requests') onReadRequests?.()
@@ -61,7 +67,7 @@ export default function CompanyDashboard({
           <button
             key={item.key}
             className={`category-chip${tab === item.key ? ' active' : ''}`}
-            onClick={() => setTab(item.key)}
+            onClick={() => openTab(item.key)}
           >
             {t(item.label)}
             {item.key === 'messages' && <Badge count={messageBadge} className="tab-badge" />}
@@ -71,8 +77,8 @@ export default function CompanyDashboard({
       </div>
 
       <div className="dashboard-body">
-        {tab === 'home' && (
-          <DashboardHome
+        {visitedTabs.has('home') && (
+          <div className={`subtab-view${tab === 'home' ? ' active' : ''}`}><DashboardHome
             companyId={employee.companyId}
             initialOnDuty={employee.onDuty}
             initialStatus={employee.status}
@@ -81,12 +87,12 @@ export default function CompanyDashboard({
             employeeRankTitle={session.employee.gradeLabel || employee.jobLabel || session.company.name}
             onLogout={onLogout}
             teamUpdate={teamUpdate}
-          />
+          /></div>
         )}
-        {tab === 'requests' && <RequestsTab refresh={requestRefresh} />}
-        {tab === 'messages' && <MessagesTab refreshToken={messageRefreshToken} onOpenConversation={onOpenConversation} onReadConversation={onReadConversation} />}
-        {tab === 'calls' && <CallsTab />}
-        {tab === 'settings' && session.employee.isBoss && <SettingsTab />}
+        {visitedTabs.has('requests') && <div className={`subtab-view${tab === 'requests' ? ' active' : ''}`}><RequestsTab refresh={requestRefresh} /></div>}
+        {visitedTabs.has('messages') && <div className={`subtab-view${tab === 'messages' ? ' active' : ''}`}><MessagesTab refreshToken={messageRefreshToken} onOpenConversation={onOpenConversation} onReadConversation={onReadConversation} /></div>}
+        {visitedTabs.has('calls') && <div className={`subtab-view${tab === 'calls' ? ' active' : ''}`}><CallsTab /></div>}
+        {visitedTabs.has('settings') && session.employee.isBoss && <div className={`subtab-view${tab === 'settings' ? ' active' : ''}`}><SettingsTab /></div>}
       </div>
     </div>
   )

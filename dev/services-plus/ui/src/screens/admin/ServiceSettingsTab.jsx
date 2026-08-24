@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { fetchNui } from '../../lib/nui.js'
 import { useI18n } from '../../lib/i18n.jsx'
+import FormField from '../../components/FormField.jsx'
 
 export default function ServiceSettingsTab() {
   const { t } = useI18n()
@@ -47,16 +48,9 @@ export default function ServiceSettingsTab() {
         <div className="hint">
           {t('If an assigned employee does not reconnect within this time, their active request is cancelled automatically.')}
         </div>
-        <input
-          className="search-input"
-          type="number"
-          min="1"
-          max="60"
-          step="1"
-          value={graceMinutes}
-          disabled={loading || saving}
-          onChange={(event) => setGraceMinutes(event.target.value)}
-        />
+        <FormField label={t('Grace period in minutes')}>
+          <input className="search-input" type="number" min="1" max="60" step="1" value={graceMinutes} disabled={loading || saving} onChange={(event) => setGraceMinutes(event.target.value)} />
+        </FormField>
         <button className="login-button" disabled={loading || saving} aria-busy={saving} onClick={save}>{t('Save settings')}</button>
         {notice && <div className="notice">{notice}</div>}
       </div>

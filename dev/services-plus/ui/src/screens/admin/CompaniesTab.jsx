@@ -7,6 +7,7 @@ import Icon from '../../components/Icon.jsx'
 import { showToast } from '../../lib/toast.js'
 import { useI18n } from '../../lib/i18n.jsx'
 import { databaseBoolean } from '../../lib/database.js'
+import FormField from '../../components/FormField.jsx'
 
 const EMPTY_FORM = { job: '', name: '', categoryId: '', icon: '', background: '', bossGrade: 100, mainNumber: '', enabled: true }
 
@@ -227,73 +228,38 @@ export default function CompaniesTab() {
         <Sheet title={t(editingId === 'new' ? 'New company' : 'Edit company')} onClose={closeSheet}>
           {saveError && <div className="notice">{saveError}</div>}
           {editingId === 'new' && (
-            <input
-              className="search-input"
-              placeholder={t('Framework job')}
-              value={form.job}
-              onChange={(e) => setForm({ ...form, job: e.target.value })}
-            />
+            <FormField label={t('Framework job')}>
+              <input className="search-input" value={form.job} onChange={(e) => setForm({ ...form, job: e.target.value })} />
+            </FormField>
           )}
-          <input
-            className="search-input"
-            placeholder={t('Name')}
-            value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
-          />
-          <select
-            className="search-input"
-            value={form.categoryId}
-            onChange={(e) => setForm({ ...form, categoryId: e.target.value ? Number(e.target.value) : '' })}
-          >
-            <option value="">{t('No category')}</option>
-            {categories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-          <input
-            className="search-input"
-            type="url"
-            maxLength={255}
-            inputMode="url"
-            autoCapitalize="none"
-            spellCheck={false}
-            placeholder={t('Icon URL (https://…)')}
-            value={form.icon}
-            onChange={(e) => {
-              setSaveError('')
-              setForm({ ...form, icon: e.target.value })
-            }}
-          />
-          <input
-            className="search-input"
-            type="url"
-            maxLength={255}
-            inputMode="url"
-            autoCapitalize="none"
-            spellCheck={false}
-            placeholder={t('Background image URL (optional, https://…)')}
-            value={form.background}
-            onChange={(e) => {
-              setSaveError('')
-              setForm({ ...form, background: e.target.value })
-            }}
-          />
-          <input
-            className="search-input"
-            type="number"
-            placeholder={t('Boss grade (standalone only)')}
-            value={form.bossGrade}
-            onChange={(e) => setForm({ ...form, bossGrade: Number(e.target.value) })}
-          />
-          {editingId === 'new' && (
+          <FormField label={t('Name')}>
+            <input className="search-input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+          </FormField>
+          <FormField label={t('Category')}>
+            <select className="search-input" value={form.categoryId} onChange={(e) => setForm({ ...form, categoryId: e.target.value ? Number(e.target.value) : '' })}>
+              <option value="">{t('No category')}</option>
+              {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </FormField>
+          <FormField label={t('Icon URL (https://…)')}>
             <input
-              className="search-input"
-              placeholder={t('Main phone number')}
-              value={form.mainNumber}
-              onChange={(e) => setForm({ ...form, mainNumber: e.target.value })}
+              className="search-input" type="url" maxLength={255} inputMode="url" autoCapitalize="none" spellCheck={false}
+              value={form.icon} onChange={(e) => { setSaveError(''); setForm({ ...form, icon: e.target.value }) }}
             />
+          </FormField>
+          <FormField label={t('Background image URL (optional, https://…)')}>
+            <input
+              className="search-input" type="url" maxLength={255} inputMode="url" autoCapitalize="none" spellCheck={false}
+              value={form.background} onChange={(e) => { setSaveError(''); setForm({ ...form, background: e.target.value }) }}
+            />
+          </FormField>
+          <FormField label={t('Boss grade (standalone only)')}>
+            <input className="search-input" type="number" value={form.bossGrade} onChange={(e) => setForm({ ...form, bossGrade: Number(e.target.value) })} />
+          </FormField>
+          {editingId === 'new' && (
+            <FormField label={t('Main phone number')}>
+              <input className="search-input" value={form.mainNumber} onChange={(e) => setForm({ ...form, mainNumber: e.target.value })} />
+            </FormField>
           )}
           {editingId !== 'new' && (
             <div className="hotline-row">
@@ -323,18 +289,12 @@ export default function CompaniesTab() {
               {company.numbers.map((n) =>
                 editingNumber?.id === n.id ? (
                   <div key={n.id} className="admin-inline-form">
-                    <input
-                      className="search-input"
-                      placeholder={t('Label')}
-                      value={editingNumber.label}
-                      onChange={(e) => setEditingNumber({ ...editingNumber, label: e.target.value })}
-                    />
-                    <input
-                      className="search-input"
-                      placeholder={t('Number')}
-                      value={editingNumber.number}
-                      onChange={(e) => setEditingNumber({ ...editingNumber, number: e.target.value })}
-                    />
+                    <FormField label={t('Label')}>
+                      <input className="search-input" value={editingNumber.label} onChange={(e) => setEditingNumber({ ...editingNumber, label: e.target.value })} />
+                    </FormField>
+                    <FormField label={t('Number')}>
+                      <input className="search-input" value={editingNumber.number} onChange={(e) => setEditingNumber({ ...editingNumber, number: e.target.value })} />
+                    </FormField>
                     <button className="request-action accept" onClick={saveNumber} disabled={saving}>
                       {t('Save')}
                     </button>
@@ -371,8 +331,8 @@ export default function CompaniesTab() {
                 ),
               )}
               <div className="admin-inline-form">
-                <input className="search-input" placeholder={t('Label')} value={newNumber.label} onChange={(e) => setNewNumber({ ...newNumber, label: e.target.value })} />
-                <input className="search-input" placeholder={t('Number')} value={newNumber.number} onChange={(e) => setNewNumber({ ...newNumber, number: e.target.value })} />
+                <FormField label={t('Label')}><input className="search-input" value={newNumber.label} onChange={(e) => setNewNumber({ ...newNumber, label: e.target.value })} /></FormField>
+                <FormField label={t('Number')}><input className="search-input" value={newNumber.number} onChange={(e) => setNewNumber({ ...newNumber, number: e.target.value })} /></FormField>
                 <button className="request-action accept" onClick={addNumber} disabled={saving}>
                   {t('Add')}
                 </button>
@@ -380,7 +340,7 @@ export default function CompaniesTab() {
 
               <div className="section-title">{t('Company leader')}</div>
               <div className="admin-inline-form">
-                <input className="search-input" placeholder={t('Player ID')} value={playerId} onChange={(e) => setPlayerId(e.target.value)} />
+                <FormField label={t('Player ID')}><input className="search-input" inputMode="numeric" value={playerId} onChange={(e) => setPlayerId(e.target.value)} /></FormField>
                 <button className="request-action accept" onClick={assignBoss} disabled={saving}>
                   {t('Make leader')}
                 </button>

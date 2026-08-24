@@ -22,6 +22,9 @@ const DE = {
   'Request': 'Anfrage',
   'Loading Services+…': 'Services+ wird geladen…',
   'Search companies': 'Unternehmen suchen',
+  'Clear company search': 'Unternehmenssuche leeren',
+  'Clear team search': 'Teamsuche leeren',
+  'Category': 'Kategorie',
   'All': 'Alle',
   'No companies have been set up yet. Check back later.': 'Es wurden noch keine Unternehmen eingerichtet. Schau später wieder vorbei.',
   'No companies match your search. Try a different name or category.': 'Keine Unternehmen entsprechen deiner Suche. Versuche einen anderen Namen oder eine andere Kategorie.',
@@ -76,6 +79,8 @@ const DE = {
   'This company is currently unavailable by phone.': 'Dieses Unternehmen ist telefonisch derzeit nicht erreichbar.',
   'Could not load this list.': 'Diese Liste konnte nicht geladen werden.',
   'Loading older messages…': 'Ältere Nachrichten werden geladen…',
+  'Today': 'Heute',
+  'Yesterday': 'Gestern',
   'Send': 'Senden',
   'Cancel': 'Abbrechen',
   'Delete': 'Löschen',
@@ -152,6 +157,8 @@ const DE = {
   'Settings saved.': 'Einstellungen gespeichert.',
   'Could not save settings.': 'Die Einstellungen konnten nicht gespeichert werden.',
   'Save settings': 'Einstellungen speichern',
+  'Grace period in minutes': 'Kulanzzeit in Minuten',
+  'Rate': 'Tarif',
   '+ New category': '+ Neue Kategorie',
   'Loading categories…': 'Kategorien werden geladen…',
   'Category created.': 'Kategorie erstellt.',
@@ -169,6 +176,8 @@ const DE = {
   'Name': 'Name',
   'Icon (police, bank, law, medical, taxi, car-dealer, wrench, tow-truck, car-wash, restaurant, bar, barber, tattoo, music, news, shop, people, funeral)': 'Icon (police, bank, law, medical, taxi, car-dealer, wrench, tow-truck, car-wash, restaurant, bar, barber, tattoo, music, news, shop, people, funeral)',
   'Sort order': 'Sortierreihenfolge',
+  'Icon': 'Icon',
+  'Available icons: police, bank, law, medical, taxi, car-dealer, wrench, tow-truck, car-wash, restaurant, bar, barber, tattoo, music, news, shop, people, funeral': 'Verfügbare Icons: police, bank, law, medical, taxi, car-dealer, wrench, tow-truck, car-wash, restaurant, bar, barber, tattoo, music, news, shop, people, funeral',
   'Allow competition requests': 'Wettbewerbsanfragen erlauben',
   'Save': 'Speichern',
   '+ New company': '+ Neues Unternehmen',
@@ -356,7 +365,24 @@ export function LanguageProvider({ children }) {
       dateStyle: 'short', timeStyle: 'short',
     }).format(new Date(value))
 
-    return { language, setLanguage, t, formatRelativeTime, formatDateTime }
+    const formatTime = (value) => new Intl.DateTimeFormat(language === 'de' ? 'de-DE' : 'en-US', {
+      hour: '2-digit', minute: '2-digit',
+    }).format(new Date(value))
+
+    const formatMessageDay = (value) => {
+      const date = new Date(value)
+      const today = new Date()
+      const day = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+      const currentDay = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+      const difference = Math.round((currentDay.getTime() - day.getTime()) / 86400000)
+      if (difference === 0) return t('Today')
+      if (difference === 1) return t('Yesterday')
+      return new Intl.DateTimeFormat(language === 'de' ? 'de-DE' : 'en-US', {
+        weekday: 'short', day: '2-digit', month: '2-digit', year: date.getFullYear() === today.getFullYear() ? undefined : 'numeric',
+      }).format(date)
+    }
+
+    return { language, setLanguage, t, formatRelativeTime, formatDateTime, formatTime, formatMessageDay }
   }, [language])
 
   return <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>

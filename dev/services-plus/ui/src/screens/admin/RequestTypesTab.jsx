@@ -6,6 +6,7 @@ import Switch from '../../components/Switch.jsx'
 import { showToast } from '../../lib/toast.js'
 import { useI18n } from '../../lib/i18n.jsx'
 import { databaseBoolean, requestTypeNoteMode, requestTypePassengerMode } from '../../lib/database.js'
+import FormField from '../../components/FormField.jsx'
 
 const EMPTY = {
   categoryId: '', name: '', description: '',
@@ -129,30 +130,18 @@ export default function RequestTypesTab() {
 
       {editing && (
         <Sheet title={t(editing.id ? 'Edit request type' : 'New request type')} onClose={() => setEditing(null)}>
-          <select
-            className="search-input"
-            value={editing.categoryId}
-            onChange={(e) => setEditing({ ...editing, categoryId: e.target.value ? Number(e.target.value) : '' })}
-          >
-            <option value="">{t('No category')}</option>
-            {categories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-          <input
-            className="search-input"
-            placeholder={t('Name')}
-            value={editing.name}
-            onChange={(e) => setEditing({ ...editing, name: e.target.value })}
-          />
-          <input
-            className="search-input"
-            placeholder={t('Description shown to the requester')}
-            value={editing.description}
-            onChange={(e) => setEditing({ ...editing, description: e.target.value })}
-          />
+          <FormField label={t('Category')}>
+            <select className="search-input" value={editing.categoryId} onChange={(e) => setEditing({ ...editing, categoryId: e.target.value ? Number(e.target.value) : '' })}>
+              <option value="">{t('No category')}</option>
+              {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </FormField>
+          <FormField label={t('Name')}>
+            <input className="search-input" value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} />
+          </FormField>
+          <FormField label={t('Description shown to the requester')}>
+            <input className="search-input" value={editing.description} onChange={(e) => setEditing({ ...editing, description: e.target.value })} />
+          </FormField>
           <div className="request-type-setting">
             <label htmlFor="request-type-passenger-mode">{t('Passenger count')}</label>
             <select
@@ -167,12 +156,9 @@ export default function RequestTypesTab() {
             </select>
           </div>
           {editing.passengerMode !== 'disabled' && (
-            <input
-              className="search-input"
-              placeholder={t('Number field label')}
-              value={editing.countLabel}
-              onChange={(e) => setEditing({ ...editing, countLabel: e.target.value })}
-            />
+            <FormField label={t('Number field label')}>
+              <input className="search-input" value={editing.countLabel} onChange={(e) => setEditing({ ...editing, countLabel: e.target.value })} />
+            </FormField>
           )}
           <div className="request-type-setting">
             <label htmlFor="request-type-note-mode">{t('Additional note')}</label>
