@@ -176,8 +176,7 @@ end)
 ---@param reply fun(...)
 ---@param page number?
 RegisterCallback("getCallHistory", function(source, reply, page)
-    local job = Framework.GetJob(source)
-    local company = job and Companies.GetByJob(job.name)
+    local company = Companies.GetForPlayer(source)
     if not company then return reply(false) end
 
     local rows = MySQL.query.await([[

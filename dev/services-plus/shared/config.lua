@@ -84,7 +84,3 @@ Config.RequestJourneyTracking = {
     arrivalRadius = 50,     -- metres from the original reported location
     averageSpeedKmh = 35,   -- deliberately coarse ETA, not a traffic prediction
 }
-
--- Config.Taxi (cosmetic fare estimate) lives in request-types/taxi/register.lua
--- now, next to the rest of what that request type owns, rather than here
--- among the resource-wide settings.

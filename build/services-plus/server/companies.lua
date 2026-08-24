@@ -154,6 +154,13 @@ function Companies.GetByJob(job)
     return companiesByJob[job]
 end
 
+---@param source number
+---@return table? company, table? job
+function Companies.GetForPlayer(source)
+    local job = Framework.GetJob(source)
+    return job and companiesByJob[job.name] or nil, job
+end
+
 ---@param companyId number
 ---@return table[]
 function Companies.GetNumbers(companyId)

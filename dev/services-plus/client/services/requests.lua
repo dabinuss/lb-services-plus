@@ -3,13 +3,16 @@ local peekByRequest = {}
 local requestByPeek = {}
 local activeRequestId = nil
 local distanceToken = 0
-local journeyReporterStopped = {}
 local journeyReporterRequestId = nil
 local journeyReporterToken = 0
 local customerPeekByRequest = {}
 local customerRequestByPeek = {}
 local requestTypeTemplates = {}
 local requestTypeTemplateDefinitions = {}
+local rawJourneyConfig = type(Config.RequestJourneyTracking) == "table" and Config.RequestJourneyTracking or {}
+local JOURNEY_TRACKING_ENABLED = rawJourneyConfig.enabled ~= false
+local JOURNEY_REPORT_INTERVAL = math.max(5000, math.min(60000,
+    tonumber(rawJourneyConfig.updateInterval) or 15000))
 
 local function normalizeIdentifier(value)
     if type(value) ~= "string" then return nil end
@@ -128,7 +131,6 @@ local function forgetRequest(id)
         activeRequestId = nil
         distanceToken = distanceToken + 1
     end
-    journeyReporterStopped[id] = nil
 end
 
 local function removeRequest(id, reason)
@@ -176,13 +178,6 @@ local function reportedPickup(payload)
     return street
 end
 
--- Cosmetic-only estimate for the taxi dispatch card - see Config.Taxi in
--- request-types/taxi/register.lua. No payment is charged anywhere from this value.
-local function estimatedFare(distanceMeters)
-    local fare = Config.Taxi.baseFare + (distanceMeters / 1000) * Config.Taxi.perKm
-    return ("~$%d"):format(math.floor(fare + 0.5))
-end
-
 activeDetails = function(payload, distance)
     local details = {}
     if payload.passengerCount ~= nil then
@@ -199,9 +194,6 @@ activeDetails = function(payload, distance)
             value = ("%.1f mi"):format(distance / 1609.34),
             icon = "distance",
         }
-        if payload.category == "taxi" then
-            details[#details + 1] = { label = label(payload, "estimatedFare", "Estimated fare"), value = estimatedFare(distance), icon = "price" }
-        end
     end
     return details
 end
@@ -270,24 +262,28 @@ end
 local function startJourneyReporter(payload)
     local id = requestId(payload)
     if not id or type(payload.x) ~= "number" or type(payload.y) ~= "number"
-        or not Config.RequestJourneyTracking or Config.RequestJourneyTracking.enabled == false then return end
+        or not JOURNEY_TRACKING_ENABLED then return end
 
     journeyReporterToken = journeyReporterToken + 1
     local token = journeyReporterToken
     journeyReporterRequestId = id
-    journeyReporterStopped[id] = false
-    local reportInterval = math.max(5000, math.min(60000,
-        tonumber(Config.RequestJourneyTracking.updateInterval) or 15000))
 
     CreateThread(function()
-        while token == journeyReporterToken and journeyReporterRequestId == id
-            and not journeyReporterStopped[id] do
+        while token == journeyReporterToken and journeyReporterRequestId == id do
             local coords = GetEntityCoords(PlayerPedId())
             TriggerServerEvent("services-plus:server:requestJourneyProgress", id,
                 independentTravelDistance(payload, coords))
-            Wait(reportInterval)
+            Wait(JOURNEY_REPORT_INTERVAL)
         end
     end)
+end
+
+local function upsertPeek(index, id, card)
+    local peekId = index[id]
+    if peekId and PeekPlus.Get(peekId, owner) then
+        return PeekPlus.Update(peekId, card, owner) and peekId or nil
+    end
+    return PeekPlus.Show(card, owner)
 end
 
 local function showPending(payload)
@@ -307,20 +303,12 @@ end
 local function showActive(payload)
     local id = requestId(payload)
     if not id then return false end
-    local peekId = peekByRequest[id]
-    local success = false
-    if peekId and PeekPlus.Get(peekId, owner) then
-        success = PeekPlus.Update(peekId, activeCard(payload), owner)
-    else
-        peekId = PeekPlus.Show(activeCard(payload), owner)
-        success = peekId ~= nil
-    end
-    if not success then return false end
+    local peekId = upsertPeek(peekByRequest, id, activeCard(payload))
+    if not peekId then return false end
 
     peekByRequest[id] = peekId
     requestByPeek[peekId] = { requestId = id, payload = payload }
     activeRequestId = id
-    journeyReporterStopped[id] = false
     startDistanceUpdates(payload, peekId)
     startJourneyReporter(payload)
     return true
@@ -349,15 +337,8 @@ end
 local function showCustomerJourney(payload)
     local id = payload and tonumber(payload.requestId)
     if not id then return false end
-    local peekId = customerPeekByRequest[id]
-    local success
-    if peekId and PeekPlus.Get(peekId, owner) then
-        success = PeekPlus.Update(peekId, customerJourneyCard(payload), owner)
-    else
-        peekId = PeekPlus.Show(customerJourneyCard(payload), owner)
-        success = peekId ~= nil
-    end
-    if not success then return false end
+    local peekId = upsertPeek(customerPeekByRequest, id, customerJourneyCard(payload))
+    if not peekId then return false end
     customerPeekByRequest[id] = peekId
     customerRequestByPeek[peekId] = id
     return true
@@ -420,10 +401,7 @@ end)
 
 RegisterNetEvent("services-plus:client:requestJourneyReporterStopped", function(id)
     id = tonumber(id)
-    if id then
-        journeyReporterStopped[id] = true
-        stopJourneyReporter(id)
-    end
+    if id then stopJourneyReporter(id) end
 end)
 
 PeekPlus.RegisterActionHandler(owner, function(data)

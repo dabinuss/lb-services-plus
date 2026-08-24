@@ -211,15 +211,13 @@ function TaxiPricing.OnComplete(requestId)
 end
 
 RegisterCallback("getTaxiPricingSettings", function(source, reply)
-    local job = Framework.GetJob(source)
-    local company = job and Companies.GetByJob(job.name)
+    local company, job = Companies.GetForPlayer(source)
     if not company or not Framework.IsBoss(source, job.name, company.boss_grade) then return reply(false) end
     reply(TaxiPricing.GetCompanySettings(company))
 end)
 
 RegisterCallback("updateTaxiPricingSettings", function(source, reply, requestTypeId, settings)
-    local job = Framework.GetJob(source)
-    local company = job and Companies.GetByJob(job.name)
+    local company, job = Companies.GetForPlayer(source)
     if not company or not Framework.IsBoss(source, job.name, company.boss_grade) then return reply(false) end
     reply(TaxiPricing.UpdateCompanySettings(company, requestTypeId, settings))
 end)

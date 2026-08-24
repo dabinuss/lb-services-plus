@@ -32,6 +32,20 @@ function DatabaseBoolean(value)
     return value == true or value == 1 or value == "1"
 end
 
+--- Safely resolves the currently connected source that owns a phone number.
+--- LB Phone may throw while stopping/restarting, so every caller shares the
+--- same guarded lookup and online-player validation.
+---@param phoneNumber string?
+---@return number?
+function ResolvePhoneSource(phoneNumber)
+    if type(phoneNumber) ~= "string" or phoneNumber == "" then return nil end
+    local ok, playerSource = pcall(function()
+        return exports["lb-phone"]:GetSourceFromNumber(phoneNumber)
+    end)
+    playerSource = ok and tonumber(playerSource) or nil
+    return playerSource and playerSource > 0 and GetPlayerName(playerSource) ~= nil and playerSource or nil
+end
+
 local supportedLocales = { en = true, de = true }
 local localeByNumber = {}
 

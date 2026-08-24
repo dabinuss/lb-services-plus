@@ -22,7 +22,6 @@
     "requests.markedLocation": "Markierter Standort",
     "requests.reportedLocation": "Gemeldeter Standort",
     "requests.distance": "Entfernung",
-    "requests.estimatedFare": "Geschätzter Fahrpreis",
     "requests.decline": "Ablehnen",
     "requests.accept": "Annehmen",
     "requests.cancel": "Abbrechen",

@@ -22,7 +22,6 @@
     "requests.markedLocation": "Marked location",
     "requests.reportedLocation": "Reported location",
     "requests.distance": "Distance",
-    "requests.estimatedFare": "Estimated fare",
     "requests.decline": "Decline",
     "requests.accept": "Accept",
     "requests.cancel": "Cancel",

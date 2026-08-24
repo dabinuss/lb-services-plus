@@ -63,10 +63,8 @@ function Messages.Send(company, number, channel, senderNumber, senderType, conte
     local payload = { channelId = channel.id, id = messageId, sender_type = senderType, content = content }
 
     if senderType == "company" then
-        local ok, contactSource = pcall(function()
-            return exports["lb-phone"]:GetSourceFromNumber(channel.contact_number)
-        end)
-        if ok and contactSource then
+        local contactSource = ResolvePhoneSource(channel.contact_number)
+        if contactSource then
             TriggerClientEvent("services-plus:client:newMessage", contactSource, payload)
         end
 
@@ -179,8 +177,7 @@ local function getUnreadCounts(source)
         ]], { phoneNumber, phoneNumber })) or 0
     end
 
-    local job = Framework.GetJob(source)
-    local company = job and Companies.GetByJob(job.name)
+    local company = Companies.GetForPlayer(source)
     if not company or not Employees.IsLoggedIn(source, company.id) then return result end
 
     local ownerKey = Framework.GetIdentifier(source)
@@ -260,8 +257,7 @@ local function markRead(source, scope)
 
     local ownerKey, companyId = Framework.GetPhoneNumber(source), 0
     if scope ~= "activity_messages" then
-        local job = Framework.GetJob(source)
-        local company = job and Companies.GetByJob(job.name)
+        local company = Companies.GetForPlayer(source)
         if not company then return false end
         ownerKey, companyId = Framework.GetIdentifier(source), company.id
     end
@@ -281,8 +277,7 @@ local function markRead(source, scope)
 end
 
 RegisterCallback("bootstrap", function(source, reply)
-    local job = Framework.GetJob(source)
-    local company = job and Companies.GetByJob(job.name)
+    local company, job = Companies.GetForPlayer(source)
     local phoneNumber = Framework.GetPhoneNumber(source)
 
     reply({
@@ -340,8 +335,7 @@ end)
 -- Hotlines (plan §20-22) and team overview (plan §24).
 -- ---------------------------------------------------------------------------
 RegisterCallback("getHotlines", function(source, reply)
-    local job = Framework.GetJob(source)
-    local company = job and Companies.GetByJob(job.name)
+    local company = Companies.GetForPlayer(source)
     if not company then return reply(false) end
 
     reply(Employees.GetHotlineOptions(source, company.id))
@@ -396,8 +390,7 @@ end)
 -- Employee-side inbox (plan §37). Skips numbers without their own mailbox.
 -- ---------------------------------------------------------------------------
 RegisterCallback("getCompanyConversations", function(source, reply, page)
-    local job = Framework.GetJob(source)
-    local company = job and Companies.GetByJob(job.name)
+    local company = Companies.GetForPlayer(source)
     if not company then return reply(false) end
 
     local rows = MySQL.query.await([[
@@ -428,8 +421,7 @@ end)
 -- freely toggle everything a company row already has.
 -- ---------------------------------------------------------------------------
 RegisterCallback("getCompanySettings", function(source, reply)
-    local job = Framework.GetJob(source)
-    local company = job and Companies.GetByJob(job.name)
+    local company, job = Companies.GetForPlayer(source)
     if not company or not Framework.IsBoss(source, job.name, company.boss_grade) then return reply(false) end
 
     local numbers = Companies.GetNumbers(company.id)
@@ -463,8 +455,7 @@ end)
 local ROUTING_MODES = { all = true, random = true, hotline = true }
 
 RegisterCallback("updateCompanySettings", function(source, reply, settings)
-    local job = Framework.GetJob(source)
-    local company = job and Companies.GetByJob(job.name)
+    local company, job = Companies.GetForPlayer(source)
     if not company or not Framework.IsBoss(source, job.name, company.boss_grade) then return reply(false) end
     if type(settings) ~= "table"
         or type(settings.callsEnabled) ~= "boolean"
@@ -498,8 +489,7 @@ RegisterCallback("updateCompanySettings", function(source, reply, settings)
 end)
 
 RegisterCallback("updateNumberSettings", function(source, reply, numberId, settings)
-    local job = Framework.GetJob(source)
-    local company = job and Companies.GetByJob(job.name)
+    local company, job = Companies.GetForPlayer(source)
     if not company or not Framework.IsBoss(source, job.name, company.boss_grade) then return reply(false) end
     numberId = tonumber(numberId)
     if not numberId or numberId ~= math.floor(numberId) or type(settings) ~= "table"
@@ -581,8 +571,7 @@ RegisterCallback("companyLogout", function(source, reply)
 end)
 
 AddEventHandler("services-plus:internal:dutyChanged", function(source)
-    local job = Framework.GetJob(source)
-    local company = job and Companies.GetByJob(job.name)
+    local company = Companies.GetForPlayer(source)
     if not Framework.GetOnDuty(source) then Employees.ClearCompanySession(source) end
     if company then Companies.NotifyDirectoryChanged(company.id) end
 end)
@@ -604,8 +593,7 @@ RegisterCallback("toggleDuty", function(source, reply, state)
     -- Services+ duty is scoped to being an actual employee of one of our
     -- companies - it must not become a universal duty switch for whatever
     -- job the player happens to hold (that flips QB/QBX's real job.onduty).
-    local job = Framework.GetJob(source)
-    local company = job and Companies.GetByJob(job.name)
+    local company = Companies.GetForPlayer(source)
     if not company then return reply(false) end
 
     if not Framework.SetDuty(source, state == true) then return reply(false) end

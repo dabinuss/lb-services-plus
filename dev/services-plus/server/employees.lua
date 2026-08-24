@@ -198,8 +198,7 @@ end
 ---@param active boolean
 ---@return boolean ok, string? reason
 function Employees.ToggleHotline(source, numberId, active)
-    local job = Framework.GetJob(source)
-    local company = job and Companies.GetByJob(job.name)
+    local company, job = Companies.GetForPlayer(source)
     if not company then return false, "not_employee" end
 
     -- Employment alone isn't enough - numberId also has to actually belong
@@ -434,8 +433,7 @@ end
 --- row - not a full team re-broadcast.
 ---@param source number
 function Employees.BroadcastStateChanged(source)
-    local job = Framework.GetJob(source)
-    local company = job and Companies.GetByJob(job.name)
+    local company, job = Companies.GetForPlayer(source)
     if not company then return end
 
     local row = Employees.GetTeamMemberRow(source, company.id)
@@ -475,8 +473,7 @@ function Employees.BroadcastRemoved(source, job)
 end
 
 local function employeeSnapshot(source)
-    local job = Framework.GetJob(source)
-    local company = job and Companies.GetByJob(job.name)
+    local company, job = Companies.GetForPlayer(source)
     if not company then return nil end
 
     return {
@@ -532,8 +529,7 @@ end
 -- live; this keeps Main-hotline materialization, Team realtime and the
 -- affected client's native LB-Phone calls state equally current.
 AddEventHandler("services-plus:internal:dutyChanged", function(source)
-    local job = Framework.GetJob(source)
-    local company = job and Companies.GetByJob(job.name)
+    local company, job = Companies.GetForPlayer(source)
     if not company then return end
 
     Employees.SyncMainHotline(job.name)

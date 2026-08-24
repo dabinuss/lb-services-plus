@@ -31,12 +31,3 @@ Config.RequestTypeTemplates.taxi_pickup = Config.RequestTypeTemplates.taxi_picku
     or { pending = taxiTemplate, active = taxiTemplate }
 Config.RequestTypeTemplates.taxi_ride = Config.RequestTypeTemplates.taxi_ride
     or { pending = taxiTemplate, active = taxiTemplate }
-
--- Cosmetic-only fare shown on the taxi dispatch card (client/services/requests.lua's
--- estimatedFare()). No payment is ever charged for it - it's a
--- distance-based estimate so the card isn't just blank where the mockup
--- shows a price.
-Config.Taxi = {
-    baseFare = 5,   -- flat starting amount
-    perKm = 2,      -- added per kilometre of straight-line pickup distance
-}
