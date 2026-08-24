@@ -269,6 +269,23 @@ const DE = {
   'Progress': 'Fortschritt',
   'Timer': 'Timer',
   '{count} new': '{count} neu',
+  'New request': 'Neue Anfrage',
+  'Active request': 'Aktive Anfrage',
+  'Marked location': 'Markierter Standort',
+  'Reported location': 'Gemeldeter Standort',
+  'Distance': 'Entfernung',
+  'Estimated fare': 'Geschätzter Fahrpreis',
+  'Decline': 'Ablehnen',
+  'Confirm completion?': 'Abschluss bestätigen?',
+  'shown': 'Angezeigt',
+  'pending': 'Ausstehend',
+  'claimed': 'Zugewiesen',
+  'ended': 'Beendet',
+  'declined': 'Abgelehnt',
+  'accept_failed': 'Annahme fehlgeschlagen',
+  'expired': 'Abgelaufen',
+  'removed': 'Entfernt',
+  'owner_stopped': 'Quelle gestoppt',
 }
 
 const LanguageContext = createContext(null)
@@ -285,6 +302,19 @@ export function LanguageProvider({ children }) {
   useEffect(() => {
     document.documentElement.lang = language
   }, [language])
+
+  // Services+ and the PeekPlus notification centre are separate LB Phone
+  // iframes on the same resource origin. Keep an already-open notification
+  // iframe in sync when the language is changed in the main app.
+  useEffect(() => {
+    const syncStoredLanguage = (event) => {
+      if (event.key === STORAGE_KEY && (event.newValue === 'de' || event.newValue === 'en')) {
+        setLanguageState(event.newValue)
+      }
+    }
+    window.addEventListener('storage', syncStoredLanguage)
+    return () => window.removeEventListener('storage', syncStoredLanguage)
+  }, [])
 
   const value = useMemo(() => {
     const setLanguage = (next) => {

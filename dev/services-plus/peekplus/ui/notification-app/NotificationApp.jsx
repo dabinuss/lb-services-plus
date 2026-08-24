@@ -28,7 +28,7 @@ function Progress({ progress }) {
   const percent = Math.max(0, Math.min(100, (progress.value / progress.max) * 100))
   return (
     <div className="pn-progress">
-      <div className="pn-progress-label"><span>{progress.label || t('Progress')}</span><span>{Math.round(percent)}%</span></div>
+      <div className="pn-progress-label"><span>{progress.label ? t(progress.label) : t('Progress')}</span><span>{Math.round(percent)}%</span></div>
       <div className="pn-progress-track"><span style={{ width: `${percent}%` }} /></div>
     </div>
   )
@@ -41,7 +41,7 @@ function Timer({ timer }) {
   const total = Math.max(0, Math.floor(value / 1000))
   const minutes = Math.floor(total / 60)
   const seconds = total % 60
-  return <div className="pn-history-timer"><span>{timer.label || t('Timer')}</span><strong>{minutes}:{String(seconds).padStart(2, '0')}</strong></div>
+  return <div className="pn-history-timer"><span>{timer.label ? t(timer.label) : t('Timer')}</span><strong>{minutes}:{String(seconds).padStart(2, '0')}</strong></div>
 }
 
 function HistoryCard({ entry, expanded, onOpen, onDelete }) {
@@ -53,20 +53,20 @@ function HistoryCard({ entry, expanded, onOpen, onDelete }) {
       <button className="pn-card-main" onClick={onOpen}>
         <span className="pn-variant-icon">{VARIANT_ICON[variant] || '●'}</span>
         <span className="pn-copy">
-          <span className="pn-title">{card.title || t('Notification')}</span>
-          {card.subtitle && <span className="pn-subtitle">{card.subtitle}</span>}
-          {card.description && <span className={`pn-description${expanded ? ' expanded' : ''}`}>{card.description}</span>}
+          <span className="pn-title">{card.title ? t(card.title) : t('Notification')}</span>
+          {card.subtitle && <span className="pn-subtitle">{t(card.subtitle)}</span>}
+          {card.description && <span className={`pn-description${expanded ? ' expanded' : ''}`}>{t(card.description)}</span>}
         </span>
         <span className="pn-time">{entry.ageSeconds < 60 ? t('now') : entry.ageSeconds < 3600 ? t('{count}m', { count: Math.floor(entry.ageSeconds / 60) }) : entry.ageSeconds < 86400 ? t('{count}h', { count: Math.floor(entry.ageSeconds / 3600) }) : t('{count}d', { count: Math.floor(entry.ageSeconds / 86400) })}</span>
       </button>
       {expanded && (
         <div className="pn-details">
           {Array.isArray(card.details) && card.details.map((row, index) => (
-            <div className="pn-detail-row" key={`${row.label}-${index}`}><span>{row.label}</span><strong>{row.value}</strong></div>
+            <div className="pn-detail-row" key={`${row.label}-${index}`}><span>{t(row.label)}</span><strong>{t(row.value)}</strong></div>
           ))}
           <Progress progress={card.progress} />
           <Timer timer={card.timer} />
-          <div className="pn-meta"><span>{entry.owner}</span><span>{entry.result}</span></div>
+          <div className="pn-meta"><span>{entry.owner}</span><span>{t(entry.result)}</span></div>
           <button className="pn-delete" onClick={onDelete}>{t('Delete')}</button>
         </div>
       )}
