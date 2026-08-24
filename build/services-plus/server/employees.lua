@@ -16,7 +16,11 @@
 
 Employees = {}
 
--- source -> { status = "available"|"pause"|"busy", hotlines = { [numberId] = true } }
+-- source -> {
+--   status = "available"|"pause"|"busy",
+--   hotlines = { [numberId] = true },
+--   companySession = { companyId: number, phoneNumber: string }
+-- }
 local state = {}
 
 local function ensure(source)
@@ -36,9 +40,12 @@ end
 
 local function onDutyCountForJob(job)
     local staff = Framework.GetPlayersByJob(job)
+    local company = Companies.GetByJob(job)
     local count = 0
     for i = 1, #staff do
-        if Framework.GetOnDuty(staff[i]) then count = count + 1 end
+        if company and Employees.IsLoggedIn(staff[i], company.id) and Framework.GetOnDuty(staff[i]) then
+            count = count + 1
+        end
     end
     return count
 end
@@ -55,11 +62,13 @@ end
 ---@return number
 local function realHolderCount(job, numberId, excludeSource)
     local staff = Framework.GetPlayersByJob(job)
+    local company = Companies.GetByJob(job)
     local count = 0
 
     for i = 1, #staff do
         local s = staff[i]
-        if s ~= excludeSource and Framework.GetOnDuty(s) and state[s] and state[s].hotlines[numberId] == true then
+        if s ~= excludeSource and company and Employees.IsLoggedIn(s, company.id)
+            and Framework.GetOnDuty(s) and state[s] and state[s].hotlines[numberId] == true then
             count = count + 1
         end
     end
@@ -80,6 +89,43 @@ function Employees.SetStatus(source, status)
     if status ~= "available" and status ~= "pause" and status ~= "busy" then return false end
     ensure(source).status = status
     return true
+end
+
+--- Records the server-authoritative company login for this connection and
+--- equipped phone. Employment and duty remain separate eligibility checks.
+---@param source number
+---@param companyId number
+---@param phoneNumber string
+function Employees.SetCompanySession(source, companyId, phoneNumber)
+    ensure(source).companySession = { companyId = companyId, phoneNumber = phoneNumber }
+end
+
+---@param source number
+function Employees.ClearCompanySession(source)
+    if state[source] then state[source].companySession = nil end
+end
+
+---@param source number
+---@param companyId number
+---@return boolean
+function Employees.IsLoggedIn(source, companyId)
+    local session = state[source] and state[source].companySession
+    if not session or session.companyId ~= companyId then return false end
+
+    if Framework.GetPhoneNumber(source) ~= session.phoneNumber then
+        state[source].companySession = nil
+        return false
+    end
+
+    return true
+end
+
+---@param source number
+---@return table?
+function Employees.GetCompanySession(source)
+    local session = state[source] and state[source].companySession
+    if not session or not Employees.IsLoggedIn(source, session.companyId) then return nil end
+    return session
 end
 
 --- Drops this player's Services+ runtime state back to defaults (plan
@@ -205,7 +251,7 @@ function Employees.SyncMainHotline(job)
     local sole, count = nil, 0
 
     for i = 1, #staff do
-        if Framework.GetOnDuty(staff[i]) then
+        if Employees.IsLoggedIn(staff[i], company.id) and Framework.GetOnDuty(staff[i]) then
             count = count + 1
             sole = staff[i]
         end
@@ -226,9 +272,11 @@ end
 ---@return number? source
 function Employees.FindSourceByIdentifier(job, identifier)
     local staff = Framework.GetPlayersByJob(job)
+    local company = Companies.GetByJob(job)
 
     for i = 1, #staff do
-        if Framework.GetIdentifier(staff[i]) == identifier then
+        if company and Employees.IsLoggedIn(staff[i], company.id)
+            and Framework.GetIdentifier(staff[i]) == identifier then
             return staff[i]
         end
     end
@@ -248,6 +296,7 @@ end
 ---@param precomputedOnDutyCount? number see IsHotlineActive
 ---@return boolean
 function Employees.IsEligible(source, companyId, numberId, requireHotline, precomputedOnDutyCount)
+    if not Employees.IsLoggedIn(source, companyId) then return false end
     if not Framework.GetOnDuty(source) then return false end
 
     local status = Employees.GetStatus(source)
@@ -278,7 +327,9 @@ function Employees.GetEligible(companyId, numberId, requireHotline)
     -- (plan review round 2 §5).
     local onDutyCount = 0
     for i = 1, #staff do
-        if Framework.GetOnDuty(staff[i]) then onDutyCount = onDutyCount + 1 end
+        if Employees.IsLoggedIn(staff[i], companyId) and Framework.GetOnDuty(staff[i]) then
+            onDutyCount = onDutyCount + 1
+        end
     end
 
     local eligible = {}
@@ -302,14 +353,16 @@ function Employees.GetTeam(companyId)
 
     local onDutyCount = 0
     for i = 1, #staff do
-        if Framework.GetOnDuty(staff[i]) then onDutyCount = onDutyCount + 1 end
+        if Employees.IsLoggedIn(staff[i], companyId) and Framework.GetOnDuty(staff[i]) then
+            onDutyCount = onDutyCount + 1
+        end
     end
 
     local team = {}
 
     for i = 1, #staff do
         local source = staff[i]
-        if Framework.GetOnDuty(source) then
+        if Employees.IsLoggedIn(source, companyId) and Framework.GetOnDuty(source) then
             local job = Framework.GetJob(source)
             local activeHotlines = {}
 
@@ -347,7 +400,7 @@ end
 ---@return table? nil if not currently on duty (colleagues only ever see the
 ---  on-duty subset, same as GetTeam)
 function Employees.GetTeamMemberRow(source, companyId)
-    if not Framework.GetOnDuty(source) then return nil end
+    if not Employees.IsLoggedIn(source, companyId) or not Framework.GetOnDuty(source) then return nil end
 
     local job = Framework.GetJob(source)
     if not job then return nil end
@@ -390,7 +443,7 @@ function Employees.BroadcastStateChanged(source)
 
     local staff = Framework.GetPlayersByJob(job.name)
     for i = 1, #staff do
-        if staff[i] ~= source and Framework.GetOnDuty(staff[i]) then
+        if staff[i] ~= source and Employees.IsLoggedIn(staff[i], company.id) and Framework.GetOnDuty(staff[i]) then
             TriggerClientEvent("services-plus:client:employeeStateChanged", staff[i], row)
         end
     end
@@ -415,7 +468,7 @@ function Employees.BroadcastRemoved(source, job)
 
     local staff = Framework.GetPlayersByJob(job)
     for i = 1, #staff do
-        if staff[i] ~= source and Framework.GetOnDuty(staff[i]) then
+        if staff[i] ~= source and Employees.IsLoggedIn(staff[i], company.id) and Framework.GetOnDuty(staff[i]) then
             TriggerClientEvent("services-plus:client:employeeStateChanged", staff[i], payload)
         end
     end
@@ -437,6 +490,7 @@ local function employeeSnapshot(source)
         isBoss = Framework.IsBoss(source, job.name, company.boss_grade),
         onDuty = Framework.GetOnDuty(source),
         status = Employees.GetStatus(source),
+        loggedIn = Employees.IsLoggedIn(source, company.id),
     }
 end
 
@@ -463,11 +517,13 @@ function Employees.UpdateStatus(source, status)
 
     Employees.BroadcastStateChanged(source)
     pushOwnDutyState(source, false)
+    TriggerEvent("services-plus:internal:availabilityChanged")
 
     return {
         ok = true,
         onDuty = Framework.GetOnDuty(source),
         status = status,
+        loggedIn = Employees.IsLoggedIn(source, company.id),
     }
 end
 

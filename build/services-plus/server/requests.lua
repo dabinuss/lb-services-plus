@@ -427,6 +427,49 @@ local function emitLifecycle(eventName, requestId)
     return request
 end
 
+--- Removes every still-pending request card from one employee when their
+--- company session ends, without affecting the other logged-in recipients.
+---@param source number
+function Requests.ClearPendingNotificationsForSource(source)
+    for requestId, entry in pairs(notifiedSources) do
+        local kept = {}
+        local removed = false
+
+        for i = 1, #entry.sources do
+            if entry.sources[i] == source then
+                removed = true
+            else
+                kept[#kept + 1] = entry.sources[i]
+            end
+        end
+
+        if removed then
+            entry.sources = kept
+            TriggerClientEvent("services-plus:client:requestClaimed", source, requestId)
+        end
+    end
+end
+
+--- Treats an intentional company logout like a temporary disconnect for an
+--- assigned active request: remove the phone overlay now, start the existing
+--- grace period, and restore it if the employee logs back in in time.
+---@param source number
+function Requests.SuspendActiveForSource(source)
+    local assignment = activeAssignments[source]
+    local identifier = assignment and assignment.identifier or Framework.GetIdentifier(source)
+    activeAssignments[source] = nil
+
+    if assignment and assignment.requestId then
+        TriggerClientEvent("services-plus:client:requestEnded", source, assignment.requestId)
+    end
+
+    MySQL.update.await([[
+        UPDATE phone_services_plus_requests
+        SET employee_disconnected_at = NOW()
+        WHERE employee_identifier = ? AND status = 'active'
+    ]], { identifier })
+end
+
 pushRequestUpdate = function(request)
     if not request or not request.requesterNumber then return end
 
@@ -749,6 +792,10 @@ function Requests.GetActive(source)
     source = tonumber(source)
     if not source or GetPlayerName(source) == nil then return nil end
 
+    local job = Framework.GetJob(source)
+    local company = job and Companies.GetByJob(job.name)
+    if not company or not Employees.IsLoggedIn(source, company.id) then return nil end
+
     local identifier = Framework.GetIdentifier(source)
     cancelExpiredDisconnectedRequests(identifier)
 
@@ -1006,6 +1053,16 @@ end)
 function Requests.Initialize()
     seedIfEmpty()
     Requests.Reload()
+end
+
+--- Restores an assigned active request only after the employee has created a
+--- valid company session; reconnecting alone must not put company traffic on
+--- an otherwise logged-out phone.
+---@param source number
+function Requests.RestoreActiveForSource(source)
+    local payload = toOverlayPayload(Requests.GetActive(source), source)
+    if payload then TriggerClientEvent("services-plus:client:requestAccepted", source, payload) end
+    return payload
 end
 
 -- Safety net for requests nobody ever accepted or cancelled (player went

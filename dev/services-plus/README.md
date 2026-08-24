@@ -10,7 +10,7 @@ feature-complete Services+ 1.0 per the plan.
 dynamically via `AddCustomApp` (no files copied into `lb-phone`, no core
 edits); ESX/QBCore/Qbox/standalone framework adapter; company/category data
 model; Services overview with search/category filter/availability; multi-
-number messaging with its own React UI; personal Activity tab; fake-login.
+number messaging with its own React UI; personal Activity tab; company session login.
 
 **Phase 2** - company dashboard (duty/status/hotlines/team/messages/
 calls/settings), the request system (types, atomic first-accept-wins,

@@ -4,8 +4,9 @@ import CompanyDashboard from './company/CompanyDashboard.jsx'
 import { useI18n } from '../lib/i18n.jsx'
 import Icon from '../components/Icon.jsx'
 
-// Company area (plan §17-19): fake-login is purely cosmetic, the server
-// re-checks employment regardless. Everything past login is phase 2 -
+// Company area (plan §17-19): the login presentation is cosmetic, but its
+// server-side session gates incoming company traffic; employment is checked
+// independently as well. Everything past login is phase 2 -
 // CompanyDashboard and its tabs. `session` is owned by App.jsx, not here -
 // it needs to survive this component unmounting when the user switches to
 // another bottom-nav tab and back (stays logged in until logout, going

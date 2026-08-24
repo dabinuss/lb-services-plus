@@ -78,7 +78,7 @@ function Messages.Send(company, number, channel, senderNumber, senderType, conte
     else
         local staff = Framework.GetPlayersByJob(company.job)
         for i = 1, #staff do
-            if Framework.GetOnDuty(staff[i]) then
+            if Employees.IsLoggedIn(staff[i], company.id) and Framework.GetOnDuty(staff[i]) then
                 local staffNumber = Framework.GetPhoneNumber(staff[i])
                 if staffNumber then
                     TriggerClientEvent("services-plus:client:newMessage", staff[i], payload)
@@ -128,11 +128,6 @@ local READ_SCOPES = {
     company_requests = true,
 }
 
--- Cosmetic company login state lives for the player's current online
--- session. Every privileged callback still performs its own job/boss check;
--- this only decides whether the login presentation needs to be shown again.
-local companySessions = {}
-
 local function buildCompanySession(source, company, job)
     return {
         company = { id = company.id, name = company.name, job = company.job, icon = company.icon },
@@ -143,15 +138,17 @@ local function buildCompanySession(source, company, job)
             gradeLabel = job.gradeLabel,
             isBoss = Framework.IsBoss(source, job.name, company.boss_grade),
             onDuty = Framework.GetOnDuty(source),
+            status = Employees.GetStatus(source),
+            loggedIn = true,
         },
     }
 end
 
 local function getCompanySession(source, company, job, phoneNumber)
-    local stored = companySessions[source]
+    local stored = Employees.GetCompanySession(source)
     if not stored or not company or not job then return nil end
     if stored.companyId ~= company.id or stored.phoneNumber ~= phoneNumber then
-        companySessions[source] = nil
+        Employees.ClearCompanySession(source)
         return nil
     end
     return buildCompanySession(source, company, job)
@@ -184,7 +181,7 @@ local function getUnreadCounts(source)
 
     local job = Framework.GetJob(source)
     local company = job and Companies.GetByJob(job.name)
-    if not company then return result end
+    if not company or not Employees.IsLoggedIn(source, company.id) then return result end
 
     local ownerKey = Framework.GetIdentifier(source)
     result.companyMessages = tonumber(MySQL.scalar.await([[
@@ -307,6 +304,7 @@ RegisterCallback("bootstrap", function(source, reply)
             isBoss = Framework.IsBoss(source, job.name, company.boss_grade),
             onDuty = Framework.GetOnDuty(source),
             status = Employees.GetStatus(source),
+            loggedIn = Employees.IsLoggedIn(source, company.id),
         } or nil,
     })
 end)
@@ -543,39 +541,51 @@ RegisterCallback("updateNumberSettings", function(source, reply, numberId, setti
 end)
 
 -- ---------------------------------------------------------------------------
--- Company "fake login" (plan §17-19): server-side authority check, the
--- animation/username/password on the client side is purely cosmetic.
+-- Company login (plan §17-19): the presentation is cosmetic, but the
+-- resulting server-side session is an actual requirement for receiving
+-- company calls, messages, and requests on this phone.
 -- ---------------------------------------------------------------------------
 RegisterCallback("companyLogin", function(source, reply, companyId)
     local company = Companies.GetById(companyId)
     local job = Framework.GetJob(source)
 
-    if not company or not job or job.name ~= company.job then
+    local phoneNumber = Framework.GetPhoneNumber(source)
+    if not company or not job or job.name ~= company.job or not phoneNumber then
         return reply(false)
     end
 
-    companySessions[source] = {
-        companyId = company.id,
-        phoneNumber = Framework.GetPhoneNumber(source),
-    }
+    Employees.SetCompanySession(source, company.id, phoneNumber)
+    Employees.SyncMainHotline(job.name)
+    Employees.BroadcastStateChanged(source)
+    Requests.RestoreActiveForSource(source)
+    broadcastCompanyDirectoryChanged()
     reply(buildCompanySession(source, company, job))
 end)
 
 RegisterCallback("companyLogout", function(source, reply)
-    companySessions[source] = nil
-    reply(true)
+    local job = Framework.GetJob(source)
+    if job then Employees.BroadcastRemoved(source, job.name) end
+    Requests.ClearPendingNotificationsForSource(source)
+    Requests.SuspendActiveForSource(source)
+    Employees.ClearCompanySession(source)
+    if job then Employees.SyncMainHotline(job.name) end
+    broadcastCompanyDirectoryChanged()
+    reply({ ok = true, onDuty = Framework.GetOnDuty(source), status = Employees.GetStatus(source), loggedIn = false })
 end)
 
 AddEventHandler("services-plus:internal:dutyChanged", function(source)
-    if not Framework.GetOnDuty(source) then companySessions[source] = nil end
+    if not Framework.GetOnDuty(source) then Employees.ClearCompanySession(source) end
+    broadcastCompanyDirectoryChanged()
 end)
 
+AddEventHandler("services-plus:internal:availabilityChanged", broadcastCompanyDirectoryChanged)
+
 AddEventHandler("services-plus:internal:jobChanged", function(source)
-    companySessions[source] = nil
+    Employees.ClearCompanySession(source)
 end)
 
 AddEventHandler("services-plus:internal:playerDropped", function(source)
-    companySessions[source] = nil
+    Employees.ClearCompanySession(source)
 end)
 
 -- Same {onDuty, status} reply shape as setStatus, same reason.
@@ -584,12 +594,18 @@ RegisterCallback("toggleDuty", function(source, reply, state)
     -- companies - it must not become a universal duty switch for whatever
     -- job the player happens to hold (that flips QB/QBX's real job.onduty).
     local job = Framework.GetJob(source)
-    if not job or not Companies.GetByJob(job.name) then return reply(false) end
+    local company = job and Companies.GetByJob(job.name)
+    if not company then return reply(false) end
 
     if not Framework.SetDuty(source, state == true) then return reply(false) end
     Framework.RefreshDuty(source)
 
-    reply({ ok = true, onDuty = Framework.GetOnDuty(source), status = Employees.GetStatus(source) })
+    reply({
+        ok = true,
+        onDuty = Framework.GetOnDuty(source),
+        status = Employees.GetStatus(source),
+        loggedIn = Employees.IsLoggedIn(source, company.id),
+    })
 end)
 
 -- ---------------------------------------------------------------------------

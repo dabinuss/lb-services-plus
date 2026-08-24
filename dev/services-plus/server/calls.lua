@@ -57,6 +57,7 @@ RegisterCallback("resolveCall", function(source, reply, companyId, numberId)
         or not DatabaseBoolean(number.calls_enabled) then
         return reply(false)
     end
+    if not Companies.IsAvailable(company.id) then return reply(false) end
 
     local customerNumber = Framework.GetPhoneNumber(source)
     if not customerNumber then return reply(false) end

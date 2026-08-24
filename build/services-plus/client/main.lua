@@ -124,10 +124,11 @@ end
 local function syncNativeCompanyCalls(result)
     if type(result) ~= "table" then return end
 
-    local shouldReceive = result.onDuty == true and result.status == "available"
+    local shouldReceive = result.loggedIn == true and result.onDuty == true and result.status == "available"
+    local shouldRelease = result.release == true
 
     pcall(function()
-        if shouldReceive then
+        if shouldReceive or shouldRelease then
             local prior = getPriorNativeCompanyCalls()
             if prior ~= nil then
                 exports["lb-phone"]:ToggleCompanyCalls(prior)
@@ -157,7 +158,7 @@ RegisterNetEvent("services-plus:client:employeeDutyChanged", function(payload)
 
     -- Leaving every Services+ company must release a native calls toggle
     -- that may still be held from the old job's Busy/Pause/off-duty state.
-    syncNativeCompanyCalls(employee or { onDuty = true, status = "available" })
+    syncNativeCompanyCalls(employee or { release = true })
 
     exports["lb-phone"]:SendCustomAppMessage(Config.App.identifier, {
         type = "employeeDutyChanged",
@@ -190,7 +191,9 @@ RegisterNUICallback("bootstrap", function(_, cb)
 end)
 
 RegisterNUICallback("companyLogin", function(data, cb)
-    cb(bridge("companyLogin", data.companyId))
+    local result = bridge("companyLogin", data.companyId)
+    if result and result.employee then syncNativeCompanyCalls(result.employee) end
+    cb(result)
 end)
 
 -- A boss changing company/number capabilities updates every currently-open
@@ -205,7 +208,9 @@ RegisterNetEvent("services-plus:client:companiesChanged", function(payload)
 end)
 
 RegisterNUICallback("companyLogout", function(_, cb)
-    cb(bridge("companyLogout"))
+    local result = bridge("companyLogout")
+    syncNativeCompanyCalls(result)
+    cb(result and result.ok == true)
 end)
 
 RegisterNUICallback("toggleDuty", function(data, cb)
