@@ -77,6 +77,7 @@ end)
 exports("ReloadData", function()
     Companies.Reload()
     Requests.Reload()
+    Companies.NotifyDirectoryChanged(nil, true)
     return true
 end)
 

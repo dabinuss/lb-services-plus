@@ -17,11 +17,10 @@
     - phone_services_plus_company_features holds the company's own
       billing_mode/rate per request type (generic column, opaque JSON - see
       sql/install.sql). Only this file interprets what's inside it.
-    - phone_services_plus_requests.feature_data holds the *frozen* result
-      for one specific request, computed once at completion. A company
-      changing its rate later must never retroactively change what an old
-      ride shows it cost (plan discussion) - that's why this isn't derived
-      live from the row above whenever the history screen is opened.
+    - phone_services_plus_requests.feature_data holds the tariff frozen at
+      acceptance and, once completed, the resulting metric/amount. A company
+      changing its rate during a ride therefore cannot change that ride's
+      price.
 
     Distance is a proxy, not a real trip odometer (see sql/install.sql's
     `pickup_distance` comment) - this system has no drop-off location or
@@ -42,9 +41,20 @@ local function clampRate(value)
 end
 
 local function decodeConfig(raw)
+    if type(raw) == "table" then return raw end
     if type(raw) ~= "string" then return {} end
     local ok, decoded = pcall(json.decode, raw)
     return (ok and type(decoded) == "table") and decoded or {}
+end
+
+local function getPricingConfig(companyId, requestTypeId)
+    local configRow = MySQL.single.await(
+        "SELECT config FROM phone_services_plus_company_features WHERE company_id = ? AND request_type_id = ? AND feature = ?",
+        { companyId, requestTypeId, FEATURE }
+    )
+    local config = decodeConfig(configRow and configRow.config)
+    return BILLING_MODES[config.billingMode] and config.billingMode or "per_100m",
+        clampRate(config.rate) or 2
 end
 
 --- This company's own category's request types that currently expose the
@@ -127,18 +137,20 @@ end
 
 --- Requests.Accept hook - no-op unless this request's type has the feature
 --- on. Captures the one distance sample this feature ever gets (see file
---- header) while the accepting employee's ped position is still available
---- server-side, and starts the per-minute clock.
+--- header), freezes the currently configured tariff, and starts the
+--- per-minute clock.
 ---@param requestId number
 ---@param employeeSource number
 function TaxiPricing.OnAccept(requestId, employeeSource)
     local row = MySQL.single.await([[
-        SELECT r.pos_x, r.pos_y, t.feature
+        SELECT r.company_id, r.request_type_id, r.pos_x, r.pos_y, t.feature
         FROM phone_services_plus_requests r
         JOIN phone_services_plus_request_types t ON t.id = r.request_type_id
         WHERE r.id = ?
     ]], { requestId })
-    if not row or row.feature ~= FEATURE then return end
+    if not row or row.feature ~= FEATURE or not row.company_id then return end
+
+    local billingMode, rate = getPricingConfig(row.company_id, row.request_type_id)
 
     local distance = json.null
     if type(row.pos_x) == "number" and type(row.pos_y) == "number" then
@@ -151,33 +163,31 @@ function TaxiPricing.OnAccept(requestId, employeeSource)
     end
 
     MySQL.update.await(
-        "UPDATE phone_services_plus_requests SET accepted_at = NOW(), pickup_distance = ? WHERE id = ?",
-        { distance, requestId }
+        "UPDATE phone_services_plus_requests SET accepted_at = NOW(), pickup_distance = ?, feature_data = ? WHERE id = ?",
+        { distance, json.encode({ feature = FEATURE, billingMode = billingMode, rate = rate }), requestId }
     )
 end
 
 --- Requests.Complete hook - no-op unless this request's type has the
---- feature on. Reads the company's *current* billing config and freezes
---- the result onto this one request row - every later read (company
---- request history, this ride's own record) shows that frozen amount from
---- here on, unaffected by a rate change five minutes from now.
+--- feature on. Uses the tariff captured at acceptance and adds the final
+--- metric/amount. Requests that were already active before this version
+--- fall back to the current setting once for backwards compatibility.
 ---@param requestId number
 function TaxiPricing.OnComplete(requestId)
     local row = MySQL.single.await([[
-        SELECT r.company_id, r.request_type_id, r.accepted_at, r.pickup_distance, t.feature
+        SELECT r.company_id, r.request_type_id, r.accepted_at, r.pickup_distance, r.feature_data, t.feature
         FROM phone_services_plus_requests r
         JOIN phone_services_plus_request_types t ON t.id = r.request_type_id
         WHERE r.id = ?
     ]], { requestId })
     if not row or row.feature ~= FEATURE or not row.company_id then return end
 
-    local configRow = MySQL.single.await(
-        "SELECT config FROM phone_services_plus_company_features WHERE company_id = ? AND request_type_id = ? AND feature = ?",
-        { row.company_id, row.request_type_id, FEATURE }
-    )
-    local config = decodeConfig(configRow and configRow.config)
-    local billingMode = BILLING_MODES[config.billingMode] and config.billingMode or "per_100m"
-    local rate = clampRate(config.rate) or 2
+    local frozen = decodeConfig(row.feature_data)
+    local billingMode = BILLING_MODES[frozen.billingMode] and frozen.billingMode or nil
+    local rate = clampRate(frozen.rate)
+    if not billingMode or rate == nil then
+        billingMode, rate = getPricingConfig(row.company_id, row.request_type_id)
+    end
 
     local metric
     if billingMode == "per_minute" then

@@ -203,7 +203,10 @@ end)
 RegisterNetEvent("services-plus:client:companiesChanged", function(payload)
     exports["lb-phone"]:SendCustomAppMessage(Config.App.identifier, {
         type = "companiesChanged",
-        companies = payload and payload.companies or {},
+        companies = payload and payload.companies or nil,
+        companyId = payload and payload.companyId or nil,
+        company = payload and payload.company or nil,
+        categories = payload and payload.categories or nil,
     })
 end)
 

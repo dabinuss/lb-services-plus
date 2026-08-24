@@ -370,10 +370,26 @@ RegisterCallback("getTeam", function(source, reply, companyId)
     company = company or (visibility == "everyone" and ownCompany or nil)
     if not company then return reply(false) end
 
-    if visibility ~= "everyone" and (visibility ~= "employees" or not ownCompany
-        or ownCompany.id ~= company.id) then return reply(false) end
+    local isOwnLoggedInCompany = ownCompany and ownCompany.id == company.id
+        and Employees.IsLoggedIn(source, company.id)
 
-    reply(Employees.GetTeam(company.id))
+    if visibility ~= "everyone" and (visibility ~= "employees" or not ownCompany
+        or ownCompany.id ~= company.id or not isOwnLoggedInCompany) then return reply(false) end
+
+    local team = Employees.GetTeam(company.id)
+    if visibility == "everyone" and not isOwnLoggedInCompany then
+        local publicTeam = {}
+        for i = 1, #team do
+            publicTeam[i] = {
+                name = team[i].name,
+                gradeLabel = team[i].gradeLabel,
+                status = team[i].status,
+            }
+        end
+        return reply(publicTeam)
+    end
+
+    reply(team)
 end)
 
 -- ---------------------------------------------------------------------------
@@ -446,16 +462,6 @@ end)
 
 local ROUTING_MODES = { all = true, random = true, hotline = true }
 
--- Company/number settings are part of the public Services directory cached
--- by every open app. Push the refreshed snapshot immediately so a disabled
--- action disappears without requiring every customer to close/reopen the
--- phone first.
-local function broadcastCompanyDirectoryChanged()
-    TriggerClientEvent("services-plus:client:companiesChanged", -1, {
-        companies = Companies.GetPublicList(),
-    })
-end
-
 RegisterCallback("updateCompanySettings", function(source, reply, settings)
     local job = Framework.GetJob(source)
     local company = job and Companies.GetByJob(job.name)
@@ -487,8 +493,7 @@ RegisterCallback("updateCompanySettings", function(source, reply, settings)
         { callsEnabled and 1 or 0, messagesEnabled and 1 or 0, requestsEnabled and 1 or 0, callRouting, requestRouting, company.id }
     )
 
-    Companies.Reload()
-    broadcastCompanyDirectoryChanged()
+    Companies.ReloadAndNotify(company.id)
     reply(true)
 end)
 
@@ -535,8 +540,7 @@ RegisterCallback("updateNumberSettings", function(source, reply, numberId, setti
         { callsEnabled and 1 or 0, messagesEnabled and 1 or 0, mailboxEnabled and 1 or 0, numberId }
     )
 
-    Companies.Reload()
-    broadcastCompanyDirectoryChanged()
+    Companies.ReloadAndNotify(company.id)
     reply(true)
 end)
 
@@ -558,7 +562,7 @@ RegisterCallback("companyLogin", function(source, reply, companyId)
     Employees.SyncMainHotline(job.name)
     Employees.BroadcastStateChanged(source)
     Requests.RestoreActiveForSource(source)
-    broadcastCompanyDirectoryChanged()
+    Companies.NotifyDirectoryChanged(company.id)
     reply(buildCompanySession(source, company, job))
 end)
 
@@ -569,16 +573,23 @@ RegisterCallback("companyLogout", function(source, reply)
     Requests.SuspendActiveForSource(source)
     Employees.ClearCompanySession(source)
     if job then Employees.SyncMainHotline(job.name) end
-    broadcastCompanyDirectoryChanged()
+    if job then
+        local company = Companies.GetByJob(job.name)
+        if company then Companies.NotifyDirectoryChanged(company.id) end
+    end
     reply({ ok = true, onDuty = Framework.GetOnDuty(source), status = Employees.GetStatus(source), loggedIn = false })
 end)
 
 AddEventHandler("services-plus:internal:dutyChanged", function(source)
+    local job = Framework.GetJob(source)
+    local company = job and Companies.GetByJob(job.name)
     if not Framework.GetOnDuty(source) then Employees.ClearCompanySession(source) end
-    broadcastCompanyDirectoryChanged()
+    if company then Companies.NotifyDirectoryChanged(company.id) end
 end)
 
-AddEventHandler("services-plus:internal:availabilityChanged", broadcastCompanyDirectoryChanged)
+AddEventHandler("services-plus:internal:availabilityChanged", function(companyId)
+    Companies.NotifyDirectoryChanged(companyId)
+end)
 
 AddEventHandler("services-plus:internal:jobChanged", function(source)
     Employees.ClearCompanySession(source)

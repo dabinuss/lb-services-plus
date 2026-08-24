@@ -90,6 +90,47 @@ function Companies.Reload()
     print(("[services-plus] loaded %d categories, %d companies"):format(#categories, #companyRows))
 end
 
+--- Refresh only one company's cache entry after a company/number write. This
+--- keeps ordinary settings changes independent of the total number of
+--- companies and numbers on the server.
+---@param companyId number
+function Companies.Refresh(companyId)
+    local id = tonumber(companyId)
+    if not id then return false end
+
+    local previous = companiesById[id]
+    if previous then companiesByJob[previous.job] = nil end
+
+    local company = MySQL.single.await(
+        "SELECT * FROM phone_services_plus_companies WHERE id = ? AND enabled = 1",
+        { id }
+    )
+
+    if not company then
+        companiesById[id] = nil
+        numbersByCompany[id] = nil
+        return true
+    end
+
+    MySQL.update.await([[
+        UPDATE phone_services_plus_numbers
+        SET messages_enabled = 1, mailbox_enabled = 1
+        WHERE company_id = ? AND is_main = 1
+          AND (messages_enabled <> 1 OR mailbox_enabled <> 1)
+    ]], { id })
+
+    local numbers = MySQL.query.await([[
+        SELECT * FROM phone_services_plus_numbers
+        WHERE company_id = ? AND enabled = 1
+        ORDER BY is_main DESC, id ASC
+    ]], { id }) or {}
+
+    companiesById[id] = company
+    companiesByJob[company.job] = company
+    numbersByCompany[id] = numbers
+    return true
+end
+
 ---@return table[]
 function Companies.GetCategories()
     return categories
@@ -167,50 +208,93 @@ function Companies.IsAvailable(companyId)
     return false
 end
 
+local function publicCompany(companyId)
+    local company = companiesById[companyId]
+    if not company then return nil end
+
+    local available = Companies.IsAvailable(companyId)
+    if not available and Config.UnavailableCompanyMode == "hide" then return nil end
+
+    local numbers = numbersByCompany[companyId] or {}
+    local publicNumbers = {}
+    for i = 1, #numbers do
+        local n = numbers[i]
+        publicNumbers[i] = {
+            id = n.id,
+            label = n.label,
+            number = n.number,
+            isMain = DatabaseBoolean(n.is_main),
+            callsEnabled = DatabaseBoolean(n.calls_enabled),
+            messagesEnabled = DatabaseBoolean(n.messages_enabled),
+        }
+    end
+
+    return {
+        id = company.id,
+        job = company.job,
+        name = company.name,
+        categoryId = company.category_id,
+        icon = company.icon,
+        background = company.background,
+        available = available,
+        callsEnabled = DatabaseBoolean(company.calls_enabled),
+        messagesEnabled = DatabaseBoolean(company.messages_enabled),
+        requestsEnabled = DatabaseBoolean(company.requests_enabled),
+        numbers = publicNumbers,
+    }
+end
+
+---@param companyId number
+---@return table?
+function Companies.GetPublicCompany(companyId)
+    return publicCompany(tonumber(companyId))
+end
+
 --- Public list for the overview screen (plan §5-7): only what the UI needs,
 --- with availability pre-computed so the client never has to guess.
 ---@return table[]
 function Companies.GetPublicList()
     local list = {}
 
-    for id, company in pairs(companiesById) do
-        local numbers = numbersByCompany[id] or {}
-        local available = Companies.IsAvailable(id)
-
-        if available or Config.UnavailableCompanyMode ~= "hide" then
-            table.insert(list, {
-                id = company.id,
-                job = company.job,
-                name = company.name,
-                categoryId = company.category_id,
-                icon = company.icon,
-                background = company.background,
-                available = available,
-                callsEnabled = DatabaseBoolean(company.calls_enabled),
-                messagesEnabled = DatabaseBoolean(company.messages_enabled),
-                requestsEnabled = DatabaseBoolean(company.requests_enabled),
-                numbers = (function()
-                    local out = {}
-                    for i = 1, #numbers do
-                        local n = numbers[i]
-                        out[i] = {
-                            id = n.id,
-                            label = n.label,
-                            number = n.number,
-                            isMain = DatabaseBoolean(n.is_main),
-                            callsEnabled = DatabaseBoolean(n.calls_enabled),
-                            messagesEnabled = DatabaseBoolean(n.messages_enabled),
-                        }
-                    end
-                    return out
-                end)(),
-            })
-        end
+    for id in pairs(companiesById) do
+        local company = publicCompany(id)
+        if company then list[#list + 1] = company end
     end
 
     table.sort(list, function(a, b) return a.name < b.name end)
 
     return list
+end
+
+--- Official cache invalidation path for already-open apps. A known company
+--- is sent as one small upsert/removal delta; structural changes can request
+--- a full directory/category snapshot instead.
+---@param companyId? number
+---@param categoriesChanged? boolean
+function Companies.NotifyDirectoryChanged(companyId, categoriesChanged)
+    local id = tonumber(companyId)
+    local payload = {}
+
+    if id then
+        payload.companyId = id
+        payload.company = Companies.GetPublicCompany(id) or false
+    else
+        payload.companies = Companies.GetPublicList()
+    end
+
+    if categoriesChanged then payload.categories = Companies.GetCategories() end
+    TriggerClientEvent("services-plus:client:companiesChanged", -1, payload)
+end
+
+---@param companyId? number
+---@param categoriesChanged? boolean
+function Companies.ReloadAndNotify(companyId, categoriesChanged)
+    if tonumber(companyId) then
+        Companies.Refresh(companyId)
+    else
+        Companies.Reload()
+    end
+    Companies.NotifyDirectoryChanged(companyId, categoriesChanged)
 end
 
 function Companies.Initialize()

@@ -517,7 +517,7 @@ function Employees.UpdateStatus(source, status)
 
     Employees.BroadcastStateChanged(source)
     pushOwnDutyState(source, false)
-    TriggerEvent("services-plus:internal:availabilityChanged")
+    TriggerEvent("services-plus:internal:availabilityChanged", company.id)
 
     return {
         ok = true,

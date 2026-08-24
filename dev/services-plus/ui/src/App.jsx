@@ -133,8 +133,27 @@ export default function App() {
 
   useEffect(() => {
     return onNuiEvent('companiesChanged', (data) => {
-      if (!Array.isArray(data.companies)) return
-      setBootstrap((current) => (current ? { ...current, companies: data.companies } : current))
+      setBootstrap((current) => {
+        if (!current) return current
+
+        let companies = current.companies
+        if (Array.isArray(data.companies)) {
+          companies = data.companies
+        } else if (Number.isFinite(Number(data.companyId))) {
+          const companyId = Number(data.companyId)
+          companies = current.companies.filter((company) => Number(company.id) !== companyId)
+
+          if (data.company) {
+            companies = [...companies, data.company].sort((a, b) => a.name.localeCompare(b.name))
+          }
+        }
+
+        return {
+          ...current,
+          companies,
+          categories: Array.isArray(data.categories) ? data.categories : current.categories,
+        }
+      })
     })
   }, [])
 

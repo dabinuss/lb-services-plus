@@ -183,7 +183,7 @@ adminCallback("admin:createCategory", function(_, reply, data)
         { data.key, data.name, data.icon or json.null, tonumber(data.sort) or 0, data.competitionAllowed and 1 or 0 }
     )
 
-    Companies.Reload()
+    Companies.ReloadAndNotify(nil, true)
     reply(id ~= nil)
 end)
 
@@ -193,7 +193,7 @@ adminCallback("admin:updateCategory", function(_, reply, data)
         { data.name, data.icon or json.null, tonumber(data.sort) or 0, data.competitionAllowed and 1 or 0, data.id }
     )
 
-    Companies.Reload()
+    Companies.ReloadAndNotify(nil, true)
     reply(true)
 end)
 
@@ -209,7 +209,7 @@ adminCallback("admin:deleteCategory", function(_, reply, data)
     ]], { data.id, data.id, data.id })
 
     if not affected or affected == 0 then return reply(false) end
-    Companies.Reload()
+    Companies.ReloadAndNotify(nil, true)
     reply(true)
 end)
 
@@ -277,7 +277,7 @@ adminCallback("admin:createCompany", function(_, reply, data)
 
     local companyId = MySQL.scalar.await("SELECT id FROM phone_services_plus_companies WHERE job = ?", { data.job })
 
-    Companies.Reload()
+    Companies.ReloadAndNotify(companyId)
     reply({ id = companyId })
 end)
 
@@ -294,7 +294,7 @@ adminCallback("admin:updateCompany", function(_, reply, data)
         }
     )
 
-    Companies.Reload()
+    Companies.ReloadAndNotify(data.id)
     reply(true)
 end)
 
@@ -307,7 +307,7 @@ end)
 -- be re-enabled later.
 adminCallback("admin:deleteCompany", function(_, reply, data)
     MySQL.update.await("UPDATE phone_services_plus_companies SET enabled = 0 WHERE id = ?", { data.id })
-    Companies.Reload()
+    Companies.ReloadAndNotify(data.id)
     reply(true)
 end)
 
@@ -327,7 +327,7 @@ adminCallback("admin:setCompanyCeiling", function(_, reply, data)
         data.id,
     })
 
-    Companies.Reload()
+    Companies.ReloadAndNotify(data.id)
     reply(true)
 end)
 
@@ -360,8 +360,9 @@ adminCallback("admin:createNumber", function(_, reply, data)
         { data.companyId, data.label, data.number, data.callsEnabled and 1 or 0, data.messagesEnabled and 1 or 0, data.mailboxEnabled and 1 or 0 }
     )
 
-    Companies.Reload()
-    reply(id ~= nil)
+    if not id then return reply(false) end
+    Companies.ReloadAndNotify(data.companyId)
+    reply(true)
 end)
 
 -- Editing a number - including the main one (plan review round 6 §1: admin
@@ -381,12 +382,18 @@ adminCallback("admin:updateNumber", function(_, reply, data)
     )
     if existing then return reply(false) end
 
+    local number = MySQL.single.await(
+        "SELECT company_id FROM phone_services_plus_numbers WHERE id = ?",
+        { data.id }
+    )
+    if not number then return reply(false) end
+
     MySQL.update.await(
         "UPDATE phone_services_plus_numbers SET label = ?, number = ? WHERE id = ?",
         { data.label, data.number, data.id }
     )
 
-    Companies.Reload()
+    Companies.ReloadAndNotify(number.company_id)
     reply(true)
 end)
 
@@ -398,17 +405,20 @@ end)
 -- while admin:getCompanies still lists it (no WHERE enabled=1 there) so it
 -- can be re-enabled later.
 adminCallback("admin:deleteNumber", function(_, reply, data)
-    local number = MySQL.single.await("SELECT is_main FROM phone_services_plus_numbers WHERE id = ?", { data.id })
+    local number = MySQL.single.await("SELECT is_main, company_id FROM phone_services_plus_numbers WHERE id = ?", { data.id })
     if not number or DatabaseBoolean(number.is_main) then return reply(false) end -- plan §52: main number can't be removed
 
     MySQL.update.await("UPDATE phone_services_plus_numbers SET enabled = 0 WHERE id = ?", { data.id })
-    Companies.Reload()
+    Companies.ReloadAndNotify(number.company_id)
     reply(true)
 end)
 
 adminCallback("admin:enableNumber", function(_, reply, data)
+    local number = MySQL.single.await("SELECT company_id FROM phone_services_plus_numbers WHERE id = ?", { data.id })
+    if not number then return reply(false) end
+
     MySQL.update.await("UPDATE phone_services_plus_numbers SET enabled = 1 WHERE id = ?", { data.id })
-    Companies.Reload()
+    Companies.ReloadAndNotify(number.company_id)
     reply(true)
 end)
 
