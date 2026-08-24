@@ -24,6 +24,25 @@ const TABS = [
   { key: 'admin', label: 'Admin', icon: 'settings', requires: 'admin' },
 ]
 
+function applyCompanyDirectoryChange(current, data) {
+  if (!current) return current
+
+  let companies = current.companies
+  if (Array.isArray(data.companies)) {
+    companies = data.companies
+  } else if (Number.isFinite(Number(data.companyId))) {
+    const companyId = Number(data.companyId)
+    companies = current.companies.filter((company) => Number(company.id) !== companyId)
+    if (data.company) companies = [...companies, data.company].sort((a, b) => a.name.localeCompare(b.name))
+  }
+
+  return {
+    ...current,
+    companies,
+    categories: Array.isArray(data.categories) ? data.categories : current.categories,
+  }
+}
+
 export default function App() {
   const { t, setLanguage } = useI18n()
   const [theme, setTheme] = useState('light')
@@ -93,6 +112,15 @@ export default function App() {
     fetchNui('companyLogout').catch(() => {})
   }, [])
 
+  const loginCompany = useCallback((session) => {
+    setCompanySession(session)
+    if (!session || !('directoryCompany' in session)) return
+    setBootstrap((current) => applyCompanyDirectoryChange(current, {
+      companyId: session.company.id,
+      company: session.directoryCompany,
+    }))
+  }, [])
+
   // Realtime delta for an already-open conversation (plan review §15) -
   // the actual merge-into-open-conversation happens in ConversationScreen,
   // this just routes the push to whichever one (if any) is currently open.
@@ -133,27 +161,7 @@ export default function App() {
 
   useEffect(() => {
     return onNuiEvent('companiesChanged', (data) => {
-      setBootstrap((current) => {
-        if (!current) return current
-
-        let companies = current.companies
-        if (Array.isArray(data.companies)) {
-          companies = data.companies
-        } else if (Number.isFinite(Number(data.companyId))) {
-          const companyId = Number(data.companyId)
-          companies = current.companies.filter((company) => Number(company.id) !== companyId)
-
-          if (data.company) {
-            companies = [...companies, data.company].sort((a, b) => a.name.localeCompare(b.name))
-          }
-        }
-
-        return {
-          ...current,
-          companies,
-          categories: Array.isArray(data.categories) ? data.categories : current.categories,
-        }
-      })
+      setBootstrap((current) => applyCompanyDirectoryChange(current, data))
     })
   }, [])
 
@@ -242,7 +250,7 @@ export default function App() {
           employee={bootstrap.employee}
           companies={bootstrap.companies}
           session={companySession}
-          onLogin={setCompanySession}
+          onLogin={loginCompany}
           onLogout={logoutCompany}
           onOpenConversation={setConversation}
           teamUpdate={teamUpdate}

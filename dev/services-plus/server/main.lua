@@ -553,7 +553,13 @@ RegisterCallback("companyLogin", function(source, reply, companyId)
     Employees.BroadcastStateChanged(source)
     Requests.RestoreActiveForSource(source)
     Companies.NotifyDirectoryChanged(company.id)
-    reply(buildCompanySession(source, company, job))
+    local session = buildCompanySession(source, company, job)
+    -- Return the same freshly-computed delta directly to the app that
+    -- initiated the login. The global push keeps other phones current, but
+    -- the caller no longer depends on that separate event winning a race
+    -- with the NUI callback response.
+    session.directoryCompany = Companies.GetPublicCompany(company.id) or false
+    reply(session)
 end)
 
 RegisterCallback("companyLogout", function(source, reply)

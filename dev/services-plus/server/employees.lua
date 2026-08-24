@@ -508,8 +508,8 @@ end
 function Employees.UpdateStatus(source, status)
     source = tonumber(source)
     if not source or GetPlayerName(source) == nil then return false end
-    local job = Framework.GetJob(source)
-    if not job or not Companies.GetByJob(job.name) then return false end
+    local company = Companies.GetForPlayer(source)
+    if not company then return false end
     if not Employees.SetStatus(source, status) then return false end
 
     Employees.BroadcastStateChanged(source)

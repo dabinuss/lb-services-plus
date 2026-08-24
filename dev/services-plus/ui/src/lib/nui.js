@@ -458,6 +458,7 @@ async function fetchNuiFixture(action, data) {
       return {
         company: { id: 3, name: 'Downtown Cab Co.', job: 'mechanic', icon: fixtures.bootstrap.companies[2].icon },
         employee: { memberId: 1, name: 'Dabi', grade: 4, gradeLabel: 'Boss', isBoss: true, onDuty: true },
+        directoryCompany: { ...fixtures.bootstrap.companies[2], available: true },
       }
     case 'companyLogout':
       return true
