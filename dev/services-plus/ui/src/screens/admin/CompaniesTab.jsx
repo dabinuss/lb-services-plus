@@ -6,6 +6,7 @@ import Switch from '../../components/Switch.jsx'
 import Icon from '../../components/Icon.jsx'
 import { showToast } from '../../lib/toast.js'
 import { useI18n } from '../../lib/i18n.jsx'
+import { databaseBoolean } from '../../lib/database.js'
 
 const EMPTY_FORM = { job: '', name: '', categoryId: '', icon: '', background: '', bossGrade: 100, mainNumber: '', enabled: true }
 
@@ -68,7 +69,7 @@ export default function CompaniesTab() {
     setEditingId(c.id)
     setForm({
       name: c.name, categoryId: c.category_id || '', icon: c.icon || '',
-      background: c.background || '', bossGrade: c.boss_grade, enabled: c.enabled === 1,
+      background: c.background || '', bossGrade: c.boss_grade, enabled: databaseBoolean(c.enabled),
     })
     setPlayerId('')
     setEditingNumber(null)
@@ -123,9 +124,9 @@ export default function CompaniesTab() {
   const setCeiling = async (patch) => {
     await fetchNui('admin:setCompanyCeiling', {
       id: company.id,
-      callsAllowed: company.admin_calls_allowed === 1,
-      messagesAllowed: company.admin_messages_allowed === 1,
-      requestsAllowed: company.admin_requests_allowed === 1,
+      callsAllowed: databaseBoolean(company.admin_calls_allowed),
+      messagesAllowed: databaseBoolean(company.admin_messages_allowed),
+      requestsAllowed: databaseBoolean(company.admin_requests_allowed),
       ...patch,
     })
     load()
@@ -193,14 +194,14 @@ export default function CompaniesTab() {
             <div className="admin-row-info">
               <div className="admin-row-title">{c.name}</div>
               <div className="admin-row-meta">
-                {c.job} · {categoryName(c.category_id)} · {t(c.enabled ? 'enabled' : 'disabled')}
+                {c.job} · {categoryName(c.category_id)} · {t(databaseBoolean(c.enabled) ? 'enabled' : 'disabled')}
               </div>
             </div>
             <div className="admin-row-actions">
               <button className="request-action complete" onClick={() => openEdit(c)}>
                 {t('Edit')}
               </button>
-              {c.enabled === 1 && <ConfirmButton onConfirm={() => disableCompany(c.id)}>{t('Disable')}</ConfirmButton>}
+              {databaseBoolean(c.enabled) && <ConfirmButton onConfirm={() => disableCompany(c.id)}>{t('Disable')}</ConfirmButton>}
             </div>
           </div>
         ))}
@@ -297,9 +298,9 @@ export default function CompaniesTab() {
             <div className="sheet-section">
               <div className="section-title">{t('Feature ceiling')}</div>
               <div className="ceiling-row">
-                <CeilingToggle label={t('Calls')} allowed={company.admin_calls_allowed === 1} onToggle={() => setCeiling({ callsAllowed: company.admin_calls_allowed !== 1 })} />
-                <CeilingToggle label={t('Messages')} allowed={company.admin_messages_allowed === 1} onToggle={() => setCeiling({ messagesAllowed: company.admin_messages_allowed !== 1 })} />
-                <CeilingToggle label={t('Requests')} allowed={company.admin_requests_allowed === 1} onToggle={() => setCeiling({ requestsAllowed: company.admin_requests_allowed !== 1 })} />
+                <CeilingToggle label={t('Calls')} allowed={databaseBoolean(company.admin_calls_allowed)} onToggle={() => setCeiling({ callsAllowed: !databaseBoolean(company.admin_calls_allowed) })} />
+                <CeilingToggle label={t('Messages')} allowed={databaseBoolean(company.admin_messages_allowed)} onToggle={() => setCeiling({ messagesAllowed: !databaseBoolean(company.admin_messages_allowed) })} />
+                <CeilingToggle label={t('Requests')} allowed={databaseBoolean(company.admin_requests_allowed)} onToggle={() => setCeiling({ requestsAllowed: !databaseBoolean(company.admin_requests_allowed) })} />
               </div>
 
               <div className="section-title">{t('Phone numbers')}</div>
@@ -328,8 +329,8 @@ export default function CompaniesTab() {
                 ) : (
                   <div key={n.id} className="hotline-row">
                     <span>
-                      {n.label} <span className="hint">{n.number}</span> {n.is_main === 1 && <span className="hint">({t('main')})</span>}
-                      {n.enabled !== 1 && <span className="hint"> ({t('disabled')})</span>}
+                      {n.label} <span className="hint">{n.number}</span> {databaseBoolean(n.is_main) && <span className="hint">({t('main')})</span>}
+                      {!databaseBoolean(n.enabled) && <span className="hint"> ({t('disabled')})</span>}
                     </span>
                     <div className="admin-row-actions">
                       <button
@@ -338,8 +339,8 @@ export default function CompaniesTab() {
                       >
                         {t('Edit')}
                       </button>
-                      {n.is_main !== 1 &&
-                        (n.enabled === 1 ? (
+                      {!databaseBoolean(n.is_main) &&
+                        (databaseBoolean(n.enabled) ? (
                           <ConfirmButton className="icon-button subtle" ariaLabel="delete this number" onConfirm={() => deleteNumber(n.id)}>
                             <Icon name="x" size={13} />
                           </ConfirmButton>
@@ -368,7 +369,7 @@ export default function CompaniesTab() {
                 </button>
               </div>
 
-              {company.enabled === 1 && (
+              {databaseBoolean(company.enabled) && (
                 <>
                   <div className="section-title">{t('Danger zone')}</div>
                   <div className="hotline-row">

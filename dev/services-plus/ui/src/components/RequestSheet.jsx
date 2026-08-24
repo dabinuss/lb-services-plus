@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { fetchNui } from '../lib/nui.js'
 import Sheet from './Sheet.jsx'
 import { useI18n } from '../lib/i18n.jsx'
+import { requestTypeNoteMode, requestTypePassengerMode } from '../lib/database.js'
 
 // Create a request (plan §11-14): only asks for what the chosen request type
 // actually needs. Location is automatic - never a field here (plan §14).
@@ -13,8 +14,8 @@ export default function RequestSheet({ company, onClose }) {
   const [description, setDescription] = useState('')
   const [state, setState] = useState('form') // form | sending | sent | queued | failed
   const submittingRef = useRef(false)
-  const passengerMode = type?.passenger_mode || (type?.passenger_count === 1 ? 'required' : 'disabled')
-  const noteMode = type?.note_mode || (type?.description_enabled === 1 ? 'optional' : 'disabled')
+  const passengerMode = requestTypePassengerMode(type)
+  const noteMode = requestTypeNoteMode(type)
   const countLabel = type?.count_label || t('Passenger count')
 
   useEffect(() => {

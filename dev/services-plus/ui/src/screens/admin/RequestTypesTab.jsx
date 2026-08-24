@@ -5,6 +5,7 @@ import ConfirmButton from '../../components/ConfirmButton.jsx'
 import Switch from '../../components/Switch.jsx'
 import { showToast } from '../../lib/toast.js'
 import { useI18n } from '../../lib/i18n.jsx'
+import { databaseBoolean, requestTypeNoteMode, requestTypePassengerMode } from '../../lib/database.js'
 
 const EMPTY = {
   categoryId: '', name: '', description: '',
@@ -73,10 +74,10 @@ export default function RequestTypesTab() {
             <div className="admin-row-info">
               <div className="admin-row-title">{type.name}</div>
               <div className="admin-row-meta">
-                {categoryName(type.category_id)} · {t(type.competition_enabled ? 'competition' : 'exclusive')}
-                {(type.passenger_mode || (type.passenger_count ? 'required' : 'disabled')) !== 'disabled' ? ` · ${t('passengers')}` : ''}
+                {categoryName(type.category_id)} · {t(databaseBoolean(type.competition_enabled) ? 'competition' : 'exclusive')}
+                {requestTypePassengerMode(type) !== 'disabled' ? ` · ${t('passengers')}` : ''}
                 {type.feature ? ` · ${t(FEATURE_OPTIONS.find((f) => f.key === type.feature)?.label || type.feature)}` : ''}
-                {' · '}{t(type.enabled ? 'enabled' : 'disabled')}
+                {' · '}{t(databaseBoolean(type.enabled) ? 'enabled' : 'disabled')}
               </div>
             </div>
             <div className="admin-row-actions">
@@ -86,18 +87,18 @@ export default function RequestTypesTab() {
                   setEditing({
                     id: type.id, categoryId: type.category_id || '', name: type.name,
                     description: type.description || '',
-                    passengerMode: type.passenger_mode || (type.passenger_count === 1 ? 'required' : 'disabled'),
+                    passengerMode: requestTypePassengerMode(type),
                     countLabel: type.count_label || t('Passenger count'),
-                    noteMode: type.note_mode || (type.description_enabled === 1 ? 'optional' : 'disabled'),
-                    competitionEnabled: type.competition_enabled === 1,
-                    enabled: type.enabled === 1,
+                    noteMode: requestTypeNoteMode(type),
+                    competitionEnabled: databaseBoolean(type.competition_enabled),
+                    enabled: databaseBoolean(type.enabled),
                     feature: type.feature || '',
                   })
                 }
               >
                 {t('Edit')}
               </button>
-              {type.enabled === 1 && (
+              {databaseBoolean(type.enabled) && (
                 <ConfirmButton onConfirm={() => disable(type.id)}>{t('Disable')}</ConfirmButton>
               )}
             </div>

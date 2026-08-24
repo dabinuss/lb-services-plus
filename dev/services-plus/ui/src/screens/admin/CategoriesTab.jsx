@@ -6,6 +6,7 @@ import CategoryIcon from '../../components/CategoryIcon.jsx'
 import Switch from '../../components/Switch.jsx'
 import { showToast } from '../../lib/toast.js'
 import { useI18n } from '../../lib/i18n.jsx'
+import { databaseBoolean } from '../../lib/database.js'
 
 const EMPTY = { key: '', name: '', icon: '', sort: 0, competitionAllowed: false }
 
@@ -60,7 +61,7 @@ export default function CategoriesTab() {
             <div className="admin-row-info">
               <div className="admin-row-title">{cat.name}</div>
               <div className="admin-row-meta">
-                {t('sort {sort} · competition {competition}', { sort: cat.sort_order, competition: t(cat.competition_allowed ? 'allowed' : 'off') })}
+                {t('sort {sort} · competition {competition}', { sort: cat.sort_order, competition: t(databaseBoolean(cat.competition_allowed) ? 'allowed' : 'off') })}
               </div>
             </div>
             <div className="admin-row-actions">
@@ -69,7 +70,7 @@ export default function CategoriesTab() {
                 onClick={() =>
                   setEditing({
                     id: cat.id, key: cat.key, name: cat.name, icon: cat.icon || '',
-                    sort: cat.sort_order, competitionAllowed: cat.competition_allowed === 1,
+                    sort: cat.sort_order, competitionAllowed: databaseBoolean(cat.competition_allowed),
                   })
                 }
               >
