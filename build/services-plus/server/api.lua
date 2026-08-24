@@ -83,10 +83,12 @@ end)
 -- Rebuild the read-only lookup caches after an integration has changed the
 -- underlying company/request-type tables. This is server-only; clients
 -- cannot invoke resource exports directly.
-exports("ReloadData", function()
-    Companies.Reload()
-    Requests.Reload()
-    return true
+-- Server-only locale access for integrations that need to present text in
+-- the same language as Services+ notifications.
+exports("Translate", function(locale, key, variables)
+    if type(key) ~= "string" or key == "" or #key > 100 then return nil end
+    if variables ~= nil and type(variables) ~= "table" then return nil end
+    return LFor(NormalizeServicesLocale(locale), key, variables)
 end)
 
 exports("GetEmployeeState", function(source)

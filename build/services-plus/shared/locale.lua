@@ -4,12 +4,39 @@ Locales = Locales or {}
 
 local loaded = {}
 local fallback = "en"
+-- Capture this while the shared script is loaded by Services+ so callbacks
+-- and server exports always resolve the owning resource.
+local resourceName = GetCurrentResourceName()
+
+local function readServerFile(path)
+    if not IsDuplicityVersion() or type(io) ~= "table" or type(io.open) ~= "function" then return nil end
+    local root = GetResourcePath(resourceName)
+    if type(root) ~= "string" or root == "" then return nil end
+
+    local handle = io.open(root .. "/" .. path, "rb")
+    if not handle then return nil end
+    local content = handle:read("*a")
+    handle:close()
+    return content
+end
 
 local function loadFile(lang)
     if loaded[lang] then return loaded[lang] end
 
-    local raw = LoadResourceFile(GetCurrentResourceName(), ("locales/%s.json"):format(lang))
-    local decoded = raw and json.decode(raw) or {}
+    local path = ("locales/%s.json"):format(lang)
+    -- LoadResourceFile can return nil for non-script files when a local
+    -- Windows resource is mounted through an NTFS junction. Server-side we
+    -- can still read the same fixed, resource-relative file safely.
+    local raw = LoadResourceFile(resourceName, path) or readServerFile(path)
+    local decoded
+    if raw then
+        local ok, result = pcall(json.decode, raw)
+        if ok then decoded = result end
+    end
+    if type(decoded) ~= "table" then
+        print(("^1[services-plus] Could not load locale file %s/%s.^7"):format(resourceName, path))
+        decoded = {}
+    end
 
     loaded[lang] = decoded
     return decoded
