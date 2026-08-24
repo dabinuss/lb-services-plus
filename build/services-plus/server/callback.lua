@@ -79,12 +79,16 @@ local function isAdminWrite(name)
 end
 
 ---@param source number
+---@return boolean allowed
+local function checkGlobalRateLimit(source)
+    globalBuckets[source] = globalBuckets[source] or {}
+    return consume(globalBuckets[source], GLOBAL_LIMIT)
+end
+
+---@param source number
 ---@param name string
 ---@return boolean allowed
-local function checkRateLimit(source, name)
-    globalBuckets[source] = globalBuckets[source] or {}
-    if not consume(globalBuckets[source], GLOBAL_LIMIT) then return false end
-
+local function checkActionRateLimit(source, name)
     local actionLimit = ACTION_LIMITS[name] or (isAdminWrite(name) and ADMIN_WRITE_LIMIT or nil)
     if not actionLimit then return true end
 
@@ -117,10 +121,12 @@ RegisterNetEvent("services-plus:server:callback", function(name, requestId, ...)
         TriggerClientEvent("services-plus:client:callbackResponse", src, requestId, false, reason)
     end
 
-    if not checkRateLimit(src, name) then return fail("rate_limited") end
+    if not checkGlobalRateLimit(src) then return fail("rate_limited") end
 
     local handler = handlers[name]
     if not handler then return fail("unknown_callback") end
+
+    if not checkActionRateLimit(src, name) then return fail("rate_limited") end
 
     -- Hold an early RPC briefly instead of making consumers race the cache
     -- bootstrap. The client callback has a 10-second timeout, so leave it a
