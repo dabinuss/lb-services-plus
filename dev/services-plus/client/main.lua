@@ -253,8 +253,8 @@ RegisterNUICallback("toggleHotline", function(data, cb)
     cb(bridge("toggleHotline", data.numberId, data.active))
 end)
 
-RegisterNUICallback("getTeam", function(_, cb)
-    cb(bridge("getTeam"))
+RegisterNUICallback("getTeam", function(data, cb)
+    cb(bridge("getTeam", data and data.companyId))
 end)
 
 RegisterNUICallback("getCompanyConversations", function(data, cb)
@@ -287,13 +287,12 @@ RegisterNUICallback("markConversationRead", function(data, cb)
     cb(bridge("markConversationRead", data.channelId))
 end)
 
-local function relayRequestQueueChanged(requestId, status)
-    local unread = bridge("getUnreadCounts")
+local function relayRequestQueueChanged(requestId, status, unreadDelta)
     exports["lb-phone"]:SendCustomAppMessage(Config.App.identifier, {
         type = "requestQueueChanged",
         requestId = tonumber(requestId),
         status = status,
-        unread = unread,
+        unreadDelta = unreadDelta or 0,
     })
 end
 
@@ -301,11 +300,11 @@ end
 -- second listener keeps the app's queue and badge synchronized even when a
 -- colleague acts from that overlay while Services+ is open elsewhere.
 RegisterNetEvent("services-plus:client:requestClaimed", function(requestId)
-    relayRequestQueueChanged(requestId, "active")
+    relayRequestQueueChanged(requestId, "active", -1)
 end)
 
 RegisterNetEvent("services-plus:client:requestAccepted", function(payload)
-    relayRequestQueueChanged(payload and payload.requestId, "active")
+    relayRequestQueueChanged(payload and payload.requestId, "active", -1)
 end)
 
 RegisterNetEvent("services-plus:client:requestEnded", function(requestId)

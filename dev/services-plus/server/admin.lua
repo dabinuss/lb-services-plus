@@ -7,6 +7,32 @@
 
 Admin = {}
 
+local ADMIN_REQUIRED_IDS = {
+    ["admin:updateCategory"] = { "id" },
+    ["admin:deleteCategory"] = { "id" },
+    ["admin:updateCompany"] = { "id" },
+    ["admin:deleteCompany"] = { "id" },
+    ["admin:setCompanyCeiling"] = { "id" },
+    ["admin:assignBoss"] = { "companyId", "playerId" },
+    ["admin:createNumber"] = { "companyId" },
+    ["admin:updateNumber"] = { "id" },
+    ["admin:deleteNumber"] = { "id" },
+    ["admin:enableNumber"] = { "id" },
+    ["admin:updateRequestType"] = { "id" },
+    ["admin:deleteRequestType"] = { "id" },
+}
+
+local ADMIN_OPTIONAL_IDS = {
+    ["admin:createCompany"] = { "categoryId" },
+    ["admin:updateCompany"] = { "categoryId" },
+    ["admin:createRequestType"] = { "categoryId" },
+    ["admin:updateRequestType"] = { "categoryId" },
+}
+
+local function isPositiveInteger(value)
+    return type(value) == "number" and value == math.floor(value) and value > 0
+end
+
 ---@param source number
 ---@return boolean
 function Admin.IsAdmin(source)
@@ -28,6 +54,23 @@ end
 local function adminCallback(name, fn)
     RegisterCallback(name, function(source, reply, ...)
         if not Admin.IsAdmin(source) then return reply(false) end
+        -- Every admin write uses a single table payload. Reject malformed
+        -- clients here once instead of letting individual handlers discover
+        -- nil/scalar payloads through exceptions.
+        if name:sub(1, 9) ~= "admin:get" and type(select(1, ...)) ~= "table" then
+            return reply(false)
+        end
+
+        local data = select(1, ...)
+        local requiredIds = ADMIN_REQUIRED_IDS[name]
+        for i = 1, #(requiredIds or {}) do
+            if not isPositiveInteger(data[requiredIds[i]]) then return reply(false) end
+        end
+        local optionalIds = ADMIN_OPTIONAL_IDS[name]
+        for i = 1, #(optionalIds or {}) do
+            local value = data[optionalIds[i]]
+            if value ~= nil and not isPositiveInteger(value) then return reply(false) end
+        end
         fn(source, reply, ...)
     end)
 end

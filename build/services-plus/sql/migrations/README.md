@@ -11,6 +11,8 @@ that has not yet been applied:
    and per-phone notification language preferences.
 3. `003_conversation_reads.sql` upgrades message badges to individual,
    persistent read markers for every conversation.
+4. `004_request_abuse_hardening.sql` adds indexes for bounded open-request
+   creation and expiry cleanup.
 
 All migrations are idempotent and can safely be re-run. Migration 001 checks
 `information_schema` before each schema change and supports both MySQL and

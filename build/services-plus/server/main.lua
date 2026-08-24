@@ -362,10 +362,18 @@ RegisterCallback("toggleHotline", function(source, reply, numberId, active)
     reply({ ok = true, hotlines = Employees.GetHotlineOptions(source, company.id) })
 end)
 
-RegisterCallback("getTeam", function(source, reply)
+RegisterCallback("getTeam", function(source, reply, companyId)
+    local visibility = Config.SeeEmployees
+    if visibility == "none" then return reply({}) end
+
     local job = Framework.GetJob(source)
-    local company = job and Companies.GetByJob(job.name)
+    local ownCompany = job and Companies.GetByJob(job.name)
+    local company = visibility == "everyone" and Companies.GetById(tonumber(companyId)) or ownCompany
+    company = company or (visibility == "everyone" and ownCompany or nil)
     if not company then return reply(false) end
+
+    if visibility ~= "everyone" and (visibility ~= "employees" or not ownCompany
+        or ownCompany.id ~= company.id) then return reply(false) end
 
     reply(Employees.GetTeam(company.id))
 end)
@@ -444,15 +452,27 @@ RegisterCallback("updateCompanySettings", function(source, reply, settings)
     local job = Framework.GetJob(source)
     local company = job and Companies.GetByJob(job.name)
     if not company or not Framework.IsBoss(source, job.name, company.boss_grade) then return reply(false) end
+    if type(settings) ~= "table"
+        or type(settings.callsEnabled) ~= "boolean"
+        or type(settings.messagesEnabled) ~= "boolean"
+        or type(settings.requestsEnabled) ~= "boolean"
+        or not ROUTING_MODES[settings.callRouting]
+        or not ROUTING_MODES[settings.requestRouting] then return reply(false) end
 
     local callRouting = ROUTING_MODES[settings.callRouting] and settings.callRouting or company.call_routing
     local requestRouting = ROUTING_MODES[settings.requestRouting] and settings.requestRouting or company.request_routing
 
     -- Admin ceilings always win (plan §34): a boss can only ever request
     -- less than what's allowed, never more.
-    local callsEnabled = settings.callsEnabled and DatabaseBoolean(company.admin_calls_allowed)
-    local messagesEnabled = settings.messagesEnabled and DatabaseBoolean(company.admin_messages_allowed)
-    local requestsEnabled = settings.requestsEnabled and DatabaseBoolean(company.admin_requests_allowed)
+    local callsEnabled = settings.callsEnabled == true and DatabaseBoolean(company.admin_calls_allowed)
+    local messagesEnabled = settings.messagesEnabled == true and DatabaseBoolean(company.admin_messages_allowed)
+    local requestsEnabled = settings.requestsEnabled == true and DatabaseBoolean(company.admin_requests_allowed)
+
+    if callsEnabled == DatabaseBoolean(company.calls_enabled)
+        and messagesEnabled == DatabaseBoolean(company.messages_enabled)
+        and requestsEnabled == DatabaseBoolean(company.requests_enabled)
+        and callRouting == company.call_routing
+        and requestRouting == company.request_routing then return reply(true) end
 
     MySQL.update.await(
         "UPDATE phone_services_plus_companies SET calls_enabled = ?, messages_enabled = ?, requests_enabled = ?, call_routing = ?, request_routing = ? WHERE id = ?",
@@ -467,6 +487,10 @@ RegisterCallback("updateNumberSettings", function(source, reply, numberId, setti
     local job = Framework.GetJob(source)
     local company = job and Companies.GetByJob(job.name)
     if not company or not Framework.IsBoss(source, job.name, company.boss_grade) then return reply(false) end
+    numberId = tonumber(numberId)
+    if not numberId or numberId ~= math.floor(numberId) or type(settings) ~= "table"
+        or type(settings.callsEnabled) ~= "boolean"
+        or type(settings.messagesEnabled) ~= "boolean" then return reply(false) end
 
     local number
     local numbers = Companies.GetNumbers(company.id)
@@ -492,6 +516,10 @@ RegisterCallback("updateNumberSettings", function(source, reply, numberId, setti
     -- switches that visibly (and confusingly) moved each other.
     local messagesEnabled = settings.messagesEnabled == true
     local mailboxEnabled = messagesEnabled
+
+    if callsEnabled == DatabaseBoolean(number.calls_enabled)
+        and messagesEnabled == DatabaseBoolean(number.messages_enabled)
+        and mailboxEnabled == DatabaseBoolean(number.mailbox_enabled) then return reply(true) end
 
     MySQL.update.await(
         "UPDATE phone_services_plus_numbers SET calls_enabled = ?, messages_enabled = ?, mailbox_enabled = ? WHERE id = ?",

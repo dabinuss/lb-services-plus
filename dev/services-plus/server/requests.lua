@@ -138,6 +138,12 @@ local OPEN_REQUEST_TTL_MS = 30 * 60000
 -- and no leak risk from a mid-flight disconnect either: MySQL.await still
 -- resumes and completes this coroutine even after the player's gone.
 local acceptLocks = {}
+-- requester/company target -> true while the open-count check and INSERT are
+-- in flight. Competition requests use their category as target because they
+-- fan out to every participating company in it. Every request creation path
+-- funnels through Requests.Create(), making the limit race-safe across
+-- simultaneous RPC/export calls without blocking requests to other companies.
+local createLocks = {}
 -- source -> { identifier, requestId } for accepted/rehydrated requests. The
 -- stable identifier is captured while the framework player object still
 -- exists, because it may already be gone when playerDropped runs.
@@ -517,14 +523,45 @@ function Requests.Create(source, requestTypeReference, options)
         and category ~= nil and DatabaseBoolean(category.competition_allowed)
     local initialCompanyId = competition and json.null or company.id
 
-    local requestId = MySQL.insert.await([[
-        INSERT INTO phone_services_plus_requests
-            (request_type_id, company_id, requester_number, status, pos_x, pos_y, passenger_count, description)
-        VALUES (?, ?, ?, 'open', ?, ?, ?, ?)
-    ]], {
-        requestType.id, initialCompanyId, requesterNumber, coords.x, coords.y,
-        finalPassengerCount or json.null, finalDescription,
-    })
+    local limitScope = competition and ("category:" .. tostring(requestType.category_id))
+        or ("company:" .. tostring(company.id))
+    local createLockKey = requesterNumber .. ":" .. limitScope
+    if createLocks[createLockKey] then return false end
+    createLocks[createLockKey] = true
+
+    local ok, requestId = pcall(function()
+        local maxOpen = math.max(1, math.floor(
+            tonumber(Config.MaxOpenRequestsPerPhoneNumberPerCompany) or 3
+        ))
+        local openCount
+        if competition then
+            openCount = tonumber(MySQL.scalar.await([[
+                SELECT COUNT(*)
+                FROM phone_services_plus_requests r
+                JOIN phone_services_plus_request_types t ON t.id = r.request_type_id
+                WHERE r.requester_number = ? AND r.status = 'open'
+                  AND r.company_id IS NULL AND t.category_id = ?
+            ]], { requesterNumber, requestType.category_id })) or 0
+        else
+            openCount = tonumber(MySQL.scalar.await([[
+                SELECT COUNT(*) FROM phone_services_plus_requests
+                WHERE requester_number = ? AND status = 'open' AND company_id = ?
+            ]], { requesterNumber, company.id })) or 0
+        end
+        if openCount >= maxOpen then return false end
+
+        return MySQL.insert.await([[
+            INSERT INTO phone_services_plus_requests
+                (request_type_id, company_id, requester_number, status, pos_x, pos_y, passenger_count, description)
+            VALUES (?, ?, ?, 'open', ?, ?, ?, ?)
+        ]], {
+            requestType.id, initialCompanyId, requesterNumber, coords.x, coords.y,
+            finalPassengerCount or json.null, finalDescription,
+        })
+    end)
+
+    createLocks[createLockKey] = nil
+    if not ok then error(requestId) end
     if not requestId then return false end
 
     local routingRequest = {
@@ -568,7 +605,8 @@ end)
 function Requests.Accept(source, requestId)
     source = tonumber(source)
     requestId = tonumber(requestId)
-    if not source or not requestId or GetPlayerName(source) == nil then return false end
+    if not source or not requestId or requestId ~= math.floor(requestId) or requestId < 1
+        or GetPlayerName(source) == nil then return false end
 
     local job = Framework.GetJob(source)
     local company = job and Companies.GetByJob(job.name)
@@ -760,7 +798,7 @@ end
 ---@return table|false
 function Requests.Complete(requestId, actorSource)
     local id = tonumber(requestId)
-    if not id then return false end
+    if not id or id ~= math.floor(id) or id < 1 then return false end
 
     local before = Requests.Get(id)
     if not before or before.status ~= "active" then return false end
@@ -820,7 +858,7 @@ end
 ---@return table|false
 function Requests.Cancel(requestId, actorSource)
     local id = tonumber(requestId)
-    if not id then return false end
+    if not id or id ~= math.floor(id) or id < 1 then return false end
 
     local before = Requests.Get(id)
     if not before or (before.status ~= "open" and before.status ~= "active") then return false end
@@ -1002,17 +1040,20 @@ CreateThread(function()
     while true do
         Wait(5 * 60000)
 
-        local expired = MySQL.query.await([[
-            SELECT id FROM phone_services_plus_requests
-            WHERE status = 'open' AND created_at < NOW() - INTERVAL 30 MINUTE
-        ]]) or {}
-        local ids = {}
-        for i = 1, #expired do
-            local id = tonumber(expired[i].id)
-            if id then ids[#ids + 1] = id end
-        end
+        while true do
+            local expired = MySQL.query.await([[
+                SELECT id FROM phone_services_plus_requests
+                WHERE status = 'open' AND created_at < NOW() - INTERVAL 30 MINUTE
+                ORDER BY created_at, id
+                LIMIT 500
+            ]]) or {}
+            local ids = {}
+            for i = 1, #expired do
+                local id = tonumber(expired[i].id)
+                if id then ids[#ids + 1] = id end
+            end
 
-        if #ids > 0 then
+            if #ids == 0 then break end
             local idList = table.concat(ids, ",")
             MySQL.update.await((
                 "UPDATE phone_services_plus_requests SET status = 'cancelled' " ..
@@ -1028,6 +1069,9 @@ CreateThread(function()
                     TriggerEvent("services-plus:requestCancelled", requests[i])
                 end
             end
+
+            if #expired < 500 then break end
+            Wait(0)
         end
     end
 end)

@@ -114,9 +114,8 @@ export default function App() {
 
   useEffect(() => {
     return onNuiEvent('requestQueueChanged', (data) => {
-      if (data.unread) {
-        setUnread((current) => ({ ...current, companyRequests: data.unread.companyRequests || 0 }))
-      }
+      const delta = Number(data.unreadDelta) || 0
+      if (delta) setUnread((current) => ({ ...current, companyRequests: Math.max(0, current.companyRequests + delta) }))
       setRequestQueueRevision((current) => current + 1)
     })
   }, [])

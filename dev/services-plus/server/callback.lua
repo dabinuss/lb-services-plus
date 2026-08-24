@@ -35,6 +35,13 @@ local ADMIN_WRITE_LIMIT = { capacity = 10, refill = 2 }
 local ACTION_LIMITS = {
     sendMessage = { capacity = 5, refill = 1 },
     createRequest = { capacity = 3, refill = 0.1 },
+    updateCompanySettings = { capacity = 3, refill = 1 },
+    updateNumberSettings = { capacity = 3, refill = 1 },
+    completeRequest = { capacity = 3, refill = 0.5 },
+    cancelRequest = { capacity = 3, refill = 0.5 },
+    markRead = { capacity = 5, refill = 2 },
+    markConversationRead = { capacity = 5, refill = 2 },
+    setLocale = { capacity = 3, refill = 0.5 },
     resolveCall = { capacity = 5, refill = 0.3 },
     archiveConversation = { capacity = 5, refill = 0.5 },
     acceptRequest = { capacity = 5, refill = 0.5 },
@@ -97,14 +104,23 @@ end)
 RegisterNetEvent("services-plus:server:callback", function(name, requestId, ...)
     local src = source
 
+    -- Reject malformed envelope data without reflecting anything back. This
+    -- keeps invalid request ids out of the response event and bounds the
+    -- work done before rate limiting. Valid-but-unknown callback names still
+    -- receive an error, but only after consuming a global token.
+    if type(name) ~= "string" or #name == 0 or #name > 64
+        or not name:match("^[%w_:]+$") then return end
+    if type(requestId) ~= "number" or requestId ~= math.floor(requestId)
+        or requestId < 1 or requestId > 2147483647 then return end
+
     local function fail(reason)
         TriggerClientEvent("services-plus:client:callbackResponse", src, requestId, false, reason)
     end
 
+    if not checkRateLimit(src, name) then return fail("rate_limited") end
+
     local handler = handlers[name]
     if not handler then return fail("unknown_callback") end
-
-    if not checkRateLimit(src, name) then return fail("rate_limited") end
 
     -- Hold an early RPC briefly instead of making consumers race the cache
     -- bootstrap. The client callback has a 10-second timeout, so leave it a

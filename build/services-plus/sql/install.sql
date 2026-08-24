@@ -327,6 +327,8 @@ CREATE TABLE IF NOT EXISTS `phone_services_plus_requests` (
     PRIMARY KEY (`id`),
     KEY `company_status_created` (`company_id`, `status`, `created_at`),
     KEY `requester_created` (`requester_number`, `created_at`),
+    KEY `requester_status_created` (`requester_number`, `status`, `created_at`),
+    KEY `status_created_id` (`status`, `created_at`, `id`),
     KEY `employee_status` (`employee_identifier`, `status`),
     KEY `disconnected_status` (`status`, `employee_disconnected_at`),
     FOREIGN KEY (`request_type_id`) REFERENCES `phone_services_plus_request_types`(`id`) ON DELETE CASCADE,

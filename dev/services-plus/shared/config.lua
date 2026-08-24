@@ -62,6 +62,12 @@ Config.PageSize = {
 -- server/requests.lua).
 Config.MaxPassengerCount = 20
 
+-- Maximum number of still-unclaimed requests one phone number may have at
+-- the same company. Competition requests share one limit for their category
+-- because each such request is distributed to every participating company.
+-- Active requests that an employee is already handling do not count.
+Config.MaxOpenRequestsPerPhoneNumberPerCompany = 3
+
 -- Services+-owned request notifications trigger LB Phone's native notification
 -- peek, then the Sibling-NUI controller keeps that reached visual state for
 -- this duration. Set it to 0 to use LB Phone's native duration only. Once a
