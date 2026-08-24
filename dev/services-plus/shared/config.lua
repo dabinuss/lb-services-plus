@@ -74,6 +74,17 @@ Config.MaxOpenRequestsPerPhoneNumberPerCompany = 3
 -- request is accepted, its active card is held until the request ends.
 Config.RequestNotificationPeekDuration = 15000
 
+-- Customer-facing tracking for accepted requests. Road distance is calculated
+-- independently on the assigned employee's client; it never reads, creates or
+-- clears that player's personal GTA waypoint. The server remains authoritative
+-- for the assignment and arrival check.
+Config.RequestJourneyTracking = {
+    enabled = true,
+    updateInterval = 15000, -- milliseconds between route-distance samples
+    arrivalRadius = 50,     -- metres from the original reported location
+    averageSpeedKmh = 35,   -- deliberately coarse ETA, not a traffic prediction
+}
+
 -- Config.Taxi (cosmetic fare estimate) lives in request-types/taxi/register.lua
 -- now, next to the rest of what that request type owns, rather than here
 -- among the resource-wide settings.

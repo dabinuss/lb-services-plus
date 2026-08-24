@@ -22,6 +22,8 @@ local typesByCategory = {} -- categoryId -> ordered list
 local typesById = {}
 local typesByIdentifier = {}
 local pushRequestUpdate
+local activeJourneys = {} -- requestId -> server-owned customer tracking state
+local endCustomerJourney
 
 local function overlayLabels(phoneNumber)
     return {
@@ -243,6 +245,7 @@ local function cancelExpiredDisconnectedRequests(identifier)
             local row = claimed[tonumber(cancelled[i].id)]
             cancelledIds[#cancelledIds + 1] = tonumber(cancelled[i].id)
             clearNotifications(tonumber(cancelled[i].id))
+            endCustomerJourney(tonumber(cancelled[i].id), row and row.requester_number, "cancelled")
             if row and row.requester_number then
                 pcall(function()
                     exports["lb-phone"]:SendNotification(row.requester_number, {
@@ -487,6 +490,247 @@ pushRequestUpdate = function(request)
         updated_at = request.updatedAt,
     })
 end
+
+local function journeyConfig()
+    local config = type(Config.RequestJourneyTracking) == "table" and Config.RequestJourneyTracking or {}
+    return {
+        enabled = config.enabled ~= false,
+        updateInterval = math.max(5000, math.min(60000, tonumber(config.updateInterval) or 15000)),
+        arrivalRadius = math.max(10, math.min(200, tonumber(config.arrivalRadius) or 50)),
+        averageSpeedKmh = math.max(10, math.min(120, tonumber(config.averageSpeedKmh) or 35)),
+    }
+end
+
+local function sourceFromNumber(phoneNumber)
+    if not phoneNumber then return nil end
+    local ok, playerSource = pcall(function()
+        return exports["lb-phone"]:GetSourceFromNumber(phoneNumber)
+    end)
+    playerSource = ok and tonumber(playerSource) or nil
+    return playerSource and playerSource > 0 and GetPlayerName(playerSource) ~= nil and playerSource or nil
+end
+
+local function decodeFeatureData(raw)
+    if type(raw) == "table" then return raw end
+    if type(raw) ~= "string" then return {} end
+    local ok, decoded = pcall(json.decode, raw)
+    return ok and type(decoded) == "table" and decoded or {}
+end
+
+local function loadJourney(requestId)
+    local row = MySQL.single.await([[
+        SELECT r.id, r.requester_number, r.pos_x, r.pos_y, r.feature_data,
+               r.employee_identifier, t.icon AS type_identifier,
+               t.name AS type_name, category.`key` AS category_key,
+               company.job AS company_job, company.name AS company_name,
+               company.icon AS company_icon
+        FROM phone_services_plus_requests r
+        JOIN phone_services_plus_request_types t ON t.id = r.request_type_id
+        LEFT JOIN phone_services_plus_categories category ON category.id = t.category_id
+        JOIN phone_services_plus_companies company ON company.id = r.company_id
+        WHERE r.id = ? AND r.status = 'active'
+    ]], { requestId })
+    if not row or not row.requester_number then return nil end
+
+    local featureData = decodeFeatureData(row.feature_data)
+    local tariff
+    if featureData.feature == "taxi_pricing"
+        and (featureData.billingMode == "per_minute" or featureData.billingMode == "per_100m")
+        and tonumber(featureData.rate) then
+        tariff = { billingMode = featureData.billingMode, rate = tonumber(featureData.rate) }
+    end
+
+    return {
+        requestId = tonumber(row.id),
+        requesterNumber = row.requester_number,
+        employeeSource = row.company_job and row.employee_identifier
+            and Employees.FindSourceByIdentifier(row.company_job, row.employee_identifier) or nil,
+        x = tonumber(row.pos_x),
+        y = tonumber(row.pos_y),
+        companyName = row.company_name or Config.App.name,
+        companyIcon = row.company_icon,
+        typeIdentifier = row.type_identifier,
+        typeName = row.type_name,
+        category = row.category_key,
+        tariff = tariff,
+    }
+end
+
+local function cleanRate(rate)
+    local formatted = ("%.2f"):format(tonumber(rate) or 0)
+    return formatted:gsub("0+$", ""):gsub("%.$", "")
+end
+
+local function tariffText(journey)
+    if not journey.tariff then return nil end
+    local key = journey.tariff.billingMode == "per_minute"
+        and "notifications.taxiRatePerMinute" or "notifications.taxiRatePer100m"
+    return LForNumber(journey.requesterNumber, key, { rate = cleanRate(journey.tariff.rate) })
+end
+
+local function distanceText(distance)
+    if distance < 1000 then
+        local rounded = math.max(100, math.floor((distance + 50) / 100) * 100)
+        return ("~%d m"):format(rounded)
+    end
+    return ("~%.1f km"):format(math.floor(distance / 100 + 0.5) / 10)
+end
+
+local function etaText(phoneNumber, distance, speedKmh)
+    local minutes = distance / (speedKmh * 1000 / 60)
+    local key
+    if minutes < 1 then
+        key = "notifications.etaUnderOneMinute"
+    elseif minutes < 2 then
+        key = "notifications.etaOneToTwoMinutes"
+    elseif minutes < 4 then
+        key = "notifications.etaTwoToFourMinutes"
+    elseif minutes < 7 then
+        key = "notifications.etaFourToSevenMinutes"
+    else
+        key = "notifications.etaOverSevenMinutes"
+    end
+    return LForNumber(phoneNumber, key)
+end
+
+local function journeyPayload(journey, distance, arrived)
+    local details = {}
+    if type(distance) == "number" and not arrived then
+        details[#details + 1] = {
+            label = LForNumber(journey.requesterNumber, "notifications.journeyDistance"),
+            value = distanceText(distance),
+            icon = "distance",
+        }
+        details[#details + 1] = {
+            label = LForNumber(journey.requesterNumber, "notifications.journeyEta"),
+            value = etaText(journey.requesterNumber, distance, journeyConfig().averageSpeedKmh),
+            icon = "timer",
+        }
+    end
+
+    local rate = tariffText(journey)
+    if rate then
+        details[#details + 1] = {
+            label = LForNumber(journey.requesterNumber, "notifications.journeyRate"),
+            value = rate,
+            icon = "price",
+        }
+    end
+
+    return {
+        requestId = journey.requestId,
+        title = LForNumber(journey.requesterNumber,
+            arrived and "notifications.serviceArrived" or "notifications.serviceEnRoute",
+            { service = journey.companyName }),
+        subtitle = localizedRequestType(journey.requesterNumber, journey.typeIdentifier, journey.typeName),
+        description = arrived and nil or LForNumber(journey.requesterNumber, "notifications.requestAccepted"),
+        companyIcon = journey.companyIcon,
+        category = journey.category,
+        details = details,
+        arrived = arrived == true,
+    }
+end
+
+local function sendJourney(journey, eventName, payload)
+    local requesterSource = sourceFromNumber(journey and journey.requesterNumber)
+    if requesterSource then TriggerClientEvent(eventName, requesterSource, payload) end
+end
+
+local function startCustomerJourney(requestId, employeeSource)
+    if not journeyConfig().enabled then return end
+    local journey = loadJourney(requestId)
+    if not journey then return end
+    journey.employeeSource = tonumber(employeeSource) or journey.employeeSource
+    activeJourneys[journey.requestId] = journey
+    sendJourney(journey, "services-plus:client:requestJourneyStarted", journeyPayload(journey))
+end
+
+endCustomerJourney = function(requestId, requesterNumber, reason)
+    local id = tonumber(requestId)
+    if not id then return end
+    local journey = id and activeJourneys[id] or nil
+    local phoneNumber = journey and journey.requesterNumber or requesterNumber
+    activeJourneys[id] = nil
+    local requesterSource = sourceFromNumber(phoneNumber)
+    if requesterSource then
+        TriggerClientEvent("services-plus:client:requestJourneyEnded", requesterSource, id, reason)
+    end
+end
+
+RegisterNetEvent("services-plus:server:requestJourneyProgress", function(requestId, reportedDistance)
+    local employeeSource = source
+    local id = tonumber(requestId)
+    local assignment = activeAssignments[employeeSource]
+    if not id or not assignment or tonumber(assignment.requestId) ~= id then return end
+
+    local config = journeyConfig()
+    if not config.enabled then return end
+
+    local journey = activeJourneys[id]
+    if not journey then
+        journey = loadJourney(id)
+        if not journey then return end
+        activeJourneys[id] = journey
+    end
+    if journey.arrived then return end
+
+    local now = GetGameTimer()
+    if journey.lastReportAt and now - journey.lastReportAt < config.updateInterval - 1000 then return end
+    journey.lastReportAt = now
+    journey.employeeSource = employeeSource
+
+    if not journey.x or not journey.y then return end
+    local ped = GetPlayerPed(employeeSource)
+    if not ped or ped == 0 then return end
+    local coords = GetEntityCoords(ped)
+    local dx, dy = coords.x - journey.x, coords.y - journey.y
+    local airDistance = math.sqrt(dx * dx + dy * dy)
+
+    if airDistance <= config.arrivalRadius then
+        journey.arrived = true
+        sendJourney(journey, "services-plus:client:requestJourneyProgress", journeyPayload(journey, nil, true))
+        TriggerClientEvent("services-plus:client:requestJourneyReporterStopped", employeeSource, id)
+        return
+    end
+
+    local distance = tonumber(reportedDistance)
+    local maximumPlausible = math.max(airDistance * 4, airDistance + 2000)
+    if not distance or distance ~= distance or distance < airDistance * 0.8
+        or distance > maximumPlausible or distance > 100000 then
+        distance = airDistance
+    end
+    distance = math.max(distance, airDistance)
+
+    local displayDistance = distanceText(distance)
+    local displayEta = etaText(journey.requesterNumber, distance, config.averageSpeedKmh)
+    if journey.lastDistanceText == displayDistance and journey.lastEtaText == displayEta then return end
+    journey.lastDistanceText = displayDistance
+    journey.lastEtaText = displayEta
+    journey.lastDistance = distance
+    sendJourney(journey, "services-plus:client:requestJourneyProgress", journeyPayload(journey, distance))
+end)
+
+RegisterCallback("getCustomerRequestJourneys", function(source, reply)
+    if not journeyConfig().enabled then return reply({}) end
+    local phoneNumber = Framework.GetPhoneNumber(source)
+    if not phoneNumber then return reply({}) end
+
+    local rows = MySQL.query.await([[
+        SELECT id FROM phone_services_plus_requests
+        WHERE requester_number = ? AND status = 'active'
+        ORDER BY updated_at DESC LIMIT 10
+    ]], { phoneNumber }) or {}
+    local payloads = {}
+    for i = 1, #rows do
+        local id = tonumber(rows[i].id)
+        local journey = id and (activeJourneys[id] or loadJourney(id)) or nil
+        if journey then
+            activeJourneys[id] = journey
+            payloads[#payloads + 1] = journeyPayload(journey, journey.lastDistance, journey.arrived)
+        end
+    end
+    reply(payloads)
+end)
 
 local function chooseCompany(requestType, options)
     local requested
@@ -738,6 +982,7 @@ function Requests.Accept(source, requestId)
         -- (e.g. accepted_at/pickup_distance) targets a row that's genuinely
         -- 'active' under this employee.
         Features.OnAccept(requestId, source)
+        startCustomerJourney(requestId, source)
 
         clearNotifications(requestId, source)
 
@@ -874,6 +1119,8 @@ function Requests.Complete(requestId, actorSource)
         TriggerClientEvent("services-plus:client:requestEnded", actorSource, id)
     end
 
+    endCustomerJourney(id, before.requesterNumber, "completed")
+
     if before.requesterNumber then
         local content = LForNumber(before.requesterNumber, "notifications.requestCompleted")
         local rawFeatureData = MySQL.scalar.await(
@@ -928,6 +1175,8 @@ function Requests.Cancel(requestId, actorSource)
     if actorSource and actorSource ~= before.employeeSource then
         TriggerClientEvent("services-plus:client:requestEnded", actorSource, id)
     end
+
+    endCustomerJourney(id, before.requesterNumber, "cancelled")
 
     return emitLifecycle("requestCancelled", id) or false
 end

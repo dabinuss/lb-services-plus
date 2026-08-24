@@ -33,6 +33,12 @@ See `ui/src/screens/company/`, `server/requests.lua`, `server/calls.lua`,
 - **PeekPlus Notifications app**: a separate LB Phone app shows the bounded
   local session history. It has no server API or database storage; consumer
   resources own transport, gameplay validation and any persistent state.
+- **Customer journey notification**: after a request is accepted, the
+  requester gets one updating PeekPlus card with a coarse road distance and
+  ETA. Taxi requests also show the tariff frozen at acceptance. Tracking uses
+  a coordinate-to-coordinate path query and never reads or changes the
+  employee's personal GTA waypoint; server-owned assignment and proximity
+  checks decide when it stops.
 - **Scalable LB Phone settings sync**: PeekPlus reads current settings and
   phone state through LB Phone's client exports. The server event is retained
   only as a fallback for older LB Phone versions, avoiding a restart burst of
@@ -146,6 +152,11 @@ of smaller correctness/perf items):
 
 `Config.Framework` defaults to `"auto"` - set it explicitly if detection ever
 picks the wrong framework.
+
+Customer request tracking is configured through
+`Config.RequestJourneyTracking` in `shared/config.lua`. Its defaults sample
+every 15 seconds, mark arrival within 50 metres of the original request
+position, and derive a deliberately coarse ETA from 35 km/h.
 
 PeekPlus-specific app and safety-limit settings are grouped in
 `peekplus/shared/config.lua`.

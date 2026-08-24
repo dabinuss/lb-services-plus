@@ -49,6 +49,7 @@ local ACTION_LIMITS = {
     setStatus = { capacity = 5, refill = 0.5 },
     toggleDuty = { capacity = 5, refill = 0.2 },
     updateTaxiPricingSettings = { capacity = 5, refill = 0.2 },
+    getCustomerRequestJourneys = { capacity = 2, refill = 0.1 },
 }
 
 local globalBuckets = {} -- source -> { tokens, last }
