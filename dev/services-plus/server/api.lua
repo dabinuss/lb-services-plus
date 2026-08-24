@@ -71,6 +71,24 @@ exports("GetCompanyNumbers", function(jobName)
     return numbers
 end)
 
+-- Rebuild the read-only lookup caches after an integration has changed the
+-- underlying company/request-type tables. This is server-only; clients
+-- cannot invoke resource exports directly.
+exports("ReloadData", function()
+    Companies.Reload()
+    Requests.Reload()
+    return true
+end)
+
+-- Rebuild the read-only lookup caches after an integration has changed the
+-- underlying company/request-type tables. This is server-only; clients
+-- cannot invoke resource exports directly.
+exports("ReloadData", function()
+    Companies.Reload()
+    Requests.Reload()
+    return true
+end)
+
 exports("GetEmployeeState", function(source)
     source = tonumber(source)
     if not source or GetPlayerName(source) == nil then return nil end
