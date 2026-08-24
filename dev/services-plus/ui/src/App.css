@@ -30,7 +30,7 @@
   flex-direction: column;
   /* lb-phone's own notch pill sits at top:1.2rem, height:2.25rem (ends at
      3.45rem) - 3.6rem clears it with a little room to spare. */
-  padding: 3.6rem 1rem 0.5rem;
+  padding: var(--sp-safe-top) var(--sp-content-edge) 0.5rem;
 }
 
 .screen-header {
@@ -104,7 +104,7 @@
   display: flex;
   border-top: 1px solid var(--sp-separator);
   background: var(--sp-bg-secondary);
-  padding-bottom: max(1.2rem, env(safe-area-inset-bottom));
+  padding-bottom: var(--sp-safe-bottom);
   box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05);
 }
 
@@ -565,7 +565,7 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 3rem 1rem 0.7rem;
+  padding: var(--sp-safe-top) var(--sp-content-edge) 0.7rem;
   border-bottom: 1px solid var(--sp-separator);
 }
 
@@ -591,7 +591,7 @@
 .conversation-messages {
   flex: 1;
   overflow-y: auto;
-  padding: 0.8rem 1rem;
+  padding: 0.8rem var(--sp-content-edge);
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
@@ -624,7 +624,7 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.6rem 1rem calc(0.6rem + env(safe-area-inset-bottom, 0px));
+  padding: 0.6rem var(--sp-content-edge) var(--sp-chat-safe-bottom);
   border-top: 1px solid var(--sp-separator);
 }
 
@@ -667,7 +667,7 @@
 .login-screen {
   align-items: center;
   justify-content: center;
-  padding: 1.2rem;
+  padding: var(--sp-safe-top) var(--sp-content-edge) var(--sp-safe-bottom);
 }
 
 .activity-row.unread .company-name {
@@ -879,8 +879,8 @@
    padding and re-covers the notch clearance itself since it's no longer
    inside that padding. */
 .dashboard-header.has-bg {
-  margin: -3.6rem -1rem -3.4rem;
-  padding: 3.6rem 1.9rem 5.6rem;
+  margin: calc(-1 * var(--sp-safe-top)) calc(-1 * var(--sp-content-edge)) -3.4rem;
+  padding: var(--sp-safe-top) calc(var(--sp-content-edge) + 0.9rem) 5.6rem;
   border-radius: 0;
   box-shadow: none;
 }
@@ -1124,7 +1124,7 @@
   overflow-y: auto;
   background: var(--sp-bg-secondary);
   border-radius: 1.1rem 1.1rem 0 0;
-  padding: 0.9rem 1rem calc(0.9rem + env(safe-area-inset-bottom, 0px));
+  padding: 0.9rem var(--sp-content-edge) var(--sp-safe-bottom);
   display: flex;
   flex-direction: column;
   gap: 0.5rem;

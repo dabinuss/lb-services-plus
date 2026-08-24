@@ -5,6 +5,13 @@
   -webkit-tap-highlight-color: transparent;
 }
 
+:root {
+  --sp-content-edge: 1rem;
+  --sp-safe-top: max(3.6rem, calc(0.6rem + env(safe-area-inset-top, 0px)));
+  --sp-safe-bottom: max(1.2rem, env(safe-area-inset-bottom, 0px));
+  --sp-chat-safe-bottom: max(1.6rem, calc(0.6rem + env(safe-area-inset-bottom, 0px)));
+}
+
 html,
 body,
 #root {
