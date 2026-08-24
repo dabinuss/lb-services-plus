@@ -56,6 +56,15 @@ function Companies.Reload()
     categories = MySQL.query.await("SELECT * FROM phone_services_plus_categories ORDER BY sort_order ASC") or {}
 
     local companyRows = MySQL.query.await("SELECT * FROM phone_services_plus_companies WHERE enabled = 1") or {}
+    -- The main number is the guaranteed offline mailbox for a company. Old
+    -- rows may still contain disabled flags from versions where the boss UI
+    -- allowed this switch, so repair them before rebuilding the cache. Extra
+    -- numbers remain independently configurable.
+    MySQL.update.await([[
+        UPDATE phone_services_plus_numbers
+        SET messages_enabled = 1, mailbox_enabled = 1
+        WHERE is_main = 1 AND (messages_enabled <> 1 OR mailbox_enabled <> 1)
+    ]])
     -- Soft-deleted numbers (plan review round 5 §1) drop out of this cache
     -- the same way a disabled company does - everything that reads a
     -- company's numbers through Companies.GetNumbers() (calls, hotlines,

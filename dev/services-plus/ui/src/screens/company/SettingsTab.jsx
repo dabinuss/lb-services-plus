@@ -104,9 +104,10 @@ export default function SettingsTab() {
               {n.label} {n.isMain && <span className="hint">({t('main')})</span>}
             </div>
             <div className="number-toggles">
-              {/* Calls stays forced on for Main - a company must always be
-                  reachable by call. Messages is freely toggleable even for
-                  Main. One switch, not a separate Messages/Mailbox pair -
+              {/* Calls and Messages stay forced on for Main - it is the
+                  guaranteed contact endpoint and offline mailbox. Extra
+                  numbers remain independently configurable. One switch,
+                  not a separate Messages/Mailbox pair -
                   both still exist as separate DB columns (mailbox controls
                   whether an incoming chat shows up in the company inbox,
                   messages controls whether a customer can send at all) but
@@ -123,7 +124,8 @@ export default function SettingsTab() {
               <div className="hotline-row">
                 <span>{t('Messages')}</span>
                 <Switch
-                  checked={n.messagesEnabled}
+                  checked={n.isMain || n.messagesEnabled}
+                  disabled={n.isMain}
                   onChange={(next) => saveNumber(n.id, { callsEnabled: n.callsEnabled, messagesEnabled: next, mailboxEnabled: next })}
                 />
               </div>

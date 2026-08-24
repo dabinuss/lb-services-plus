@@ -448,6 +448,16 @@ end)
 
 local ROUTING_MODES = { all = true, random = true, hotline = true }
 
+-- Company/number settings are part of the public Services directory cached
+-- by every open app. Push the refreshed snapshot immediately so a disabled
+-- action disappears without requiring every customer to close/reopen the
+-- phone first.
+local function broadcastCompanyDirectoryChanged()
+    TriggerClientEvent("services-plus:client:companiesChanged", -1, {
+        companies = Companies.GetPublicList(),
+    })
+end
+
 RegisterCallback("updateCompanySettings", function(source, reply, settings)
     local job = Framework.GetJob(source)
     local company = job and Companies.GetByJob(job.name)
@@ -480,6 +490,7 @@ RegisterCallback("updateCompanySettings", function(source, reply, settings)
     )
 
     Companies.Reload()
+    broadcastCompanyDirectoryChanged()
     reply(true)
 end)
 
@@ -499,10 +510,10 @@ RegisterCallback("updateNumberSettings", function(source, reply, numberId, setti
     end
     if not number then return reply(false) end
 
-    -- Only Calls stays forced on for the main number (plan review round 6
-    -- follow-up) - a company must always be reachable by call. Messages is
-    -- a real boss choice even for Main, same as any other number.
-    local callsEnabled = DatabaseBoolean(number.is_main) or (settings.callsEnabled == true)
+    -- The main number is the company's guaranteed call endpoint and offline
+    -- mailbox. Only additional numbers may disable either capability.
+    local isMain = DatabaseBoolean(number.is_main)
+    local callsEnabled = isMain or (settings.callsEnabled == true)
 
     -- One boss-facing toggle, not a separate Messages/Mailbox pair (plan
     -- review round 6 follow-up) - mailbox_enabled and messages_enabled are
@@ -514,7 +525,7 @@ RegisterCallback("updateNumberSettings", function(source, reply, numberId, setti
     -- needs "can customers message this number or not", so this always
     -- sets both to the same value instead of exposing that split as two
     -- switches that visibly (and confusingly) moved each other.
-    local messagesEnabled = settings.messagesEnabled == true
+    local messagesEnabled = isMain or settings.messagesEnabled == true
     local mailboxEnabled = messagesEnabled
 
     if callsEnabled == DatabaseBoolean(number.calls_enabled)
@@ -527,6 +538,7 @@ RegisterCallback("updateNumberSettings", function(source, reply, numberId, setti
     )
 
     Companies.Reload()
+    broadcastCompanyDirectoryChanged()
     reply(true)
 end)
 
@@ -592,13 +604,18 @@ RegisterCallback("openConversation", function(source, reply, numberId, page)
     -- rejected the same way - it's already gone from Companies.GetNumbers's
     -- cache everywhere else, but this queries the row directly by id, so it
     -- needs its own check.
-    if not number or not DatabaseBoolean(number.enabled) or not DatabaseBoolean(number.messages_enabled)
-        or not DatabaseBoolean(number.mailbox_enabled) then return reply(false) end
+    if not number then return reply(false) end
+    if not DatabaseBoolean(number.enabled) or not DatabaseBoolean(number.messages_enabled)
+        or not DatabaseBoolean(number.mailbox_enabled) then
+        return reply({ error = "messages_disabled" })
+    end
 
     -- Companies.GetById only ever holds enabled=1 companies, so this also
     -- covers a disabled company rejecting new conversations (plan review).
     local company = Companies.GetById(number.company_id)
-    if not company or not DatabaseBoolean(company.messages_enabled) then return reply(false) end
+    if not company or not DatabaseBoolean(company.messages_enabled) then
+        return reply({ error = "messages_disabled" })
+    end
 
     -- Config.MessageOffline actually did nothing here before - true or
     -- false made no difference to this callback (plan review round 4 §6).
@@ -629,7 +646,13 @@ RegisterCallback("openConversation", function(source, reply, numberId, page)
     -- starts from openConversation(numberId) on the customer's own side,
     -- the employee-side equivalent is getMessages(channelId) below (plan
     -- review round 4 §3).
-    reply({ channelId = channel.id, contactNumber = contactNumber, viewerRole = "customer", messages = messages or {} })
+    reply({
+        channelId = channel.id,
+        contactNumber = contactNumber,
+        viewerRole = "customer",
+        messagesEnabled = true,
+        messages = messages or {},
+    })
 end)
 
 RegisterCallback("sendMessage", function(source, reply, channelId, content)
@@ -641,11 +664,16 @@ RegisterCallback("sendMessage", function(source, reply, channelId, content)
     if not channel then return reply(false) end
 
     local number = MySQL.single.await("SELECT * FROM phone_services_plus_numbers WHERE id = ?", { channel.number_id })
-    if not number or not DatabaseBoolean(number.enabled) or not DatabaseBoolean(number.messages_enabled)
-        or not DatabaseBoolean(number.mailbox_enabled) then return reply(false) end
+    if not number then return reply(false) end
+    if not DatabaseBoolean(number.enabled) or not DatabaseBoolean(number.messages_enabled)
+        or not DatabaseBoolean(number.mailbox_enabled) then
+        return reply({ error = "messages_disabled" })
+    end
 
     local company = Companies.GetById(number.company_id)
-    if not company or not DatabaseBoolean(company.messages_enabled) then return reply(false) end
+    if not company or not DatabaseBoolean(company.messages_enabled) then
+        return reply({ error = "messages_disabled" })
+    end
 
     local senderNumber = Framework.GetPhoneNumber(source)
     -- `sender` is NOT NULL in SQL (plan review round 6 §7) - without this,
@@ -724,8 +752,19 @@ RegisterCallback("getMessages", function(source, reply, channelId, beforeId)
     -- than the one who actually sent it opened the same company chat (plan
     -- review round 4 §3).
     local viewerRole = myNum == channel.contact_number and "customer" or "employee"
+    local messagesEnabled = number ~= nil and company ~= nil
+        and DatabaseBoolean(number.enabled)
+        and DatabaseBoolean(number.messages_enabled)
+        and DatabaseBoolean(number.mailbox_enabled)
+        and DatabaseBoolean(company.messages_enabled)
 
-    reply({ channelId = channelId, contactNumber = channel.contact_number, viewerRole = viewerRole, messages = messages or {} })
+    reply({
+        channelId = channelId,
+        contactNumber = channel.contact_number,
+        viewerRole = viewerRole,
+        messagesEnabled = messagesEnabled,
+        messages = messages or {},
+    })
 end)
 
 -- ---------------------------------------------------------------------------

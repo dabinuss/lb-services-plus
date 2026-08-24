@@ -13,6 +13,7 @@ import AdminScreen from './screens/AdminScreen.jsx'
 import ConversationScreen from './screens/ConversationScreen.jsx'
 import { fetchNui, getSettings, onSettingsChange, onNuiEvent, createCall, devMode } from './lib/nui.js'
 import { useI18n } from './lib/i18n.jsx'
+import { showToast } from './lib/toast.js'
 
 import './App.css'
 
@@ -130,6 +131,13 @@ export default function App() {
     return onNuiEvent('employeeStateChanged', (data) => setTeamUpdate(data))
   }, [])
 
+  useEffect(() => {
+    return onNuiEvent('companiesChanged', (data) => {
+      if (!Array.isArray(data.companies)) return
+      setBootstrap((current) => (current ? { ...current, companies: data.companies } : current))
+    })
+  }, [])
+
   // External framework duty/job changes bypass the app's toggle callback.
   // Keep the employee bootstrap/session current from the server push; the
   // client-side Lua handler separately applies the same snapshot to native
@@ -151,6 +159,10 @@ export default function App() {
 
   const openMessage = (company) => {
     const numbers = company.numbers.filter((n) => n.messagesEnabled)
+    if (numbers.length === 0) {
+      showToast(t('Messages are disabled for this phone number.'), 'error')
+      return
+    }
     if (numbers.length <= 1) {
       openConversationFor(company, numbers[0])
     } else {

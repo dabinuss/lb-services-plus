@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { fetchNui } from '../lib/nui.js'
 import Icon from '../components/Icon.jsx'
 import { useI18n } from '../lib/i18n.jsx'
+import { showToast } from '../lib/toast.js'
 
 // Mirrors Config.PageSize.messages in shared/config.lua - a page shorter
 // than this means there's nothing older left to load (plan review round 4 §5).
@@ -19,6 +20,8 @@ export default function ConversationScreen({ target, incoming, onClose }) {
   const [sending, setSending] = useState(false)
   const [hasOlder, setHasOlder] = useState(false)
   const [loadingOlder, setLoadingOlder] = useState(false)
+  const [messagesEnabled, setMessagesEnabled] = useState(true)
+  const [loadError, setLoadError] = useState('')
   // 'customer' or 'employee' - which sender_type this viewer's own messages
   // carry. The server decides this (it already knows which side `source`
   // is), not a raw phone-number comparison - that broke as soon as a
@@ -35,13 +38,33 @@ export default function ConversationScreen({ target, incoming, onClose }) {
     const action = target.channelId ? 'getMessages' : 'openConversation'
     const payload = target.channelId ? { channelId: target.channelId } : { numberId: target.numberId }
 
+    setMessages(null)
+    setLoadError('')
+    setMessagesEnabled(true)
+
     fetchNui(action, payload).then((result) => {
-      if (!result) return
+      if (result?.error === 'messages_disabled') {
+        setMessages([])
+        setMessagesEnabled(false)
+        setLoadError('Messages are disabled for this phone number.')
+        return
+      }
+      if (!result) {
+        setMessages([])
+        setMessagesEnabled(false)
+        setLoadError('This conversation is currently unavailable.')
+        return
+      }
       setChannelId(result.channelId)
       setViewerRole(result.viewerRole)
       setMessages([...result.messages].reverse())
+      setMessagesEnabled(result.messagesEnabled !== false)
       setHasOlder(result.messages.length === PAGE_SIZE)
       fetchNui('markConversationRead', { channelId: result.channelId }).catch(() => {})
+    }).catch(() => {
+      setMessages([])
+      setMessagesEnabled(false)
+      setLoadError('This conversation is currently unavailable.')
     })
   }, [target])
 
@@ -90,6 +113,8 @@ export default function ConversationScreen({ target, incoming, onClose }) {
     setLoadingOlder(false)
     if (!result) return
 
+    setMessagesEnabled(result.messagesEnabled !== false)
+
     const older = [...result.messages].reverse()
     const el = listRef.current
     const prevScrollHeight = el?.scrollHeight || 0
@@ -116,10 +141,17 @@ export default function ConversationScreen({ target, incoming, onClose }) {
     setSending(true)
     try {
       const message = await fetchNui('sendMessage', { channelId, content })
-      if (message) {
+      if (message?.error === 'messages_disabled') {
+        setMessagesEnabled(false)
+        showToast(t('Messages are disabled for this phone number.'), 'error')
+      } else if (message) {
         setText('')
         setMessages((prev) => [...(prev || []), message])
+      } else {
+        showToast(t('Message could not be sent.'), 'error')
       }
+    } catch {
+      showToast(t('Message could not be sent.'), 'error')
     } finally {
       setSending(false)
     }
@@ -137,6 +169,10 @@ export default function ConversationScreen({ target, incoming, onClose }) {
 
       <div className="conversation-messages" ref={listRef} onScroll={onScroll}>
         {messages === null && <div className="empty-state">{t('Loading messages…')}</div>}
+        {loadError && <div className="empty-state">{t(loadError)}</div>}
+        {!loadError && messages !== null && !messagesEnabled && (
+          <div className="empty-state">{t('Messages are disabled for this phone number.')}</div>
+        )}
         {loadingOlder && <div className="empty-state">{t('Loading older messages…')}</div>}
         {messages?.map((m) => {
           const mine = viewerRole === 'employee' ? m.sender_type === 'company' : m.sender_type === 'customer'
@@ -150,13 +186,13 @@ export default function ConversationScreen({ target, incoming, onClose }) {
 
       <div className="conversation-input">
         <input
-          placeholder={t('Message')}
+          placeholder={t(messagesEnabled ? 'Message' : 'Messages are disabled for this phone number.')}
           value={text}
-          disabled={sending}
+          disabled={sending || !messagesEnabled}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && send()}
         />
-        <button className="send-button" onClick={send} disabled={sending || !text.trim()} aria-label={t('Send')} aria-busy={sending}>
+        <button className="send-button" onClick={send} disabled={sending || !messagesEnabled || !text.trim()} aria-label={t('Send')} aria-busy={sending}>
           <Icon name="send" size={16} />
         </button>
       </div>

@@ -78,7 +78,7 @@ export default function CompanyDashboard({
             initialStatus={employee.status}
             employeeMemberId={employee.memberId}
             employeeName={session.employee.name}
-            employeeGrade={session.employee.gradeLabel}
+            employeeRankTitle={session.employee.gradeLabel || employee.jobLabel || session.company.name}
             onLogout={onLogout}
             teamUpdate={teamUpdate}
           />

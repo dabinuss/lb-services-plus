@@ -193,6 +193,17 @@ RegisterNUICallback("companyLogin", function(data, cb)
     cb(bridge("companyLogin", data.companyId))
 end)
 
+-- A boss changing company/number capabilities updates every currently-open
+-- Services directory. Otherwise stale clients can still offer a Message
+-- button until the app is reopened, even though the server already rejects
+-- the action.
+RegisterNetEvent("services-plus:client:companiesChanged", function(payload)
+    exports["lb-phone"]:SendCustomAppMessage(Config.App.identifier, {
+        type = "companiesChanged",
+        companies = payload and payload.companies or {},
+    })
+end)
+
 RegisterNUICallback("companyLogout", function(_, cb)
     cb(bridge("companyLogout"))
 end)

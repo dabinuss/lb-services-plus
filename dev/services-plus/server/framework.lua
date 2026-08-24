@@ -133,7 +133,10 @@ function Framework.GetJob(source)
                 name = job.name,
                 label = job.label,
                 grade = job.grade,
-                gradeLabel = job.grade_label or job.grade_name or tostring(job.grade),
+                -- ESX exposes the configured rank title as grade_label (or
+                -- grade_name on some versions). Never fall back to the raw
+                -- number in the UI when the job title is still available.
+                gradeLabel = job.grade_label or job.grade_name or job.label or job.name,
                 isBoss = job.grade_name == "boss" or job.grade == 100 or (type(job.grade) == "number" and job.grade >= 100),
             }
         end
@@ -147,7 +150,7 @@ function Framework.GetJob(source)
                 name = job.name,
                 label = job.label,
                 grade = job.grade.level,
-                gradeLabel = job.grade.name,
+                gradeLabel = (job.grade and job.grade.name) or job.label or job.name,
                 isBoss = job.isboss == true,
             }
         end
@@ -161,7 +164,7 @@ function Framework.GetJob(source)
                 name = job.name,
                 label = job.label,
                 grade = job.grade.level,
-                gradeLabel = job.grade.name,
+                gradeLabel = (job.grade and job.grade.name) or job.label or job.name,
                 isBoss = job.isboss == true,
             }
         end
@@ -350,7 +353,10 @@ function Standalone.GetJob(source)
         name = job.name,
         label = company and company.name or job.name,
         grade = job.grade,
-        gradeLabel = "Grade " .. job.grade,
+        -- Standalone has no framework-owned rank catalogue. Use the
+        -- configured job/company title as a stable display fallback while
+        -- keeping the numeric grade exclusively for permission checks.
+        gradeLabel = company and company.name or job.name,
         isBoss = company ~= nil and job.grade >= (company.boss_grade or 999),
     }
 end

@@ -15,7 +15,7 @@ const STATUSES = [
 ]
 
 // Duty, status and hotlines (plan §19-23).
-export default function DashboardHome({ initialOnDuty, initialStatus, employeeMemberId, employeeName, employeeGrade, onLogout, teamUpdate }) {
+export default function DashboardHome({ initialOnDuty, initialStatus, employeeMemberId, employeeName, employeeRankTitle, onLogout, teamUpdate }) {
   const { t } = useI18n()
   const [onDuty, setOnDuty] = useState(initialOnDuty)
   const [status, setStatus] = useState(initialStatus)
@@ -150,7 +150,7 @@ export default function DashboardHome({ initialOnDuty, initialStatus, employeeMe
             <div className="dashboard-label">{t('On duty')}</div>
             <div className="dashboard-row-sub">
               {employeeName}
-              {employeeGrade && ` · ${employeeGrade}`}
+              {employeeRankTitle && ` · ${employeeRankTitle}`}
             </div>
           </div>
           <Switch checked={onDuty} onChange={toggleDuty} disabled={dutySaving} small={false} />
