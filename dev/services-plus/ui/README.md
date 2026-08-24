@@ -10,8 +10,9 @@ npm run build   # writes dist/, which fxmanifest.lua ships as the app's ui_page
 
 Use `http://localhost:5173/notifications.html` to preview the local PeekPlus
 Notifications app with fixture history. Its source lives in
-`../peekplus/ui/notification-app/`; `notifications.html` is only the shared
-Vite entrypoint.
+`../peekplus/ui/notification-app/`; `notifications.html` starts it through
+the dedicated `src/peekplus-main.jsx` entrypoint. Services+ starts separately
+through `src/services-main.jsx`.
 
 `npm run dev` renders without a running FiveM client (`window.invokeNative` is
 absent, so `src/lib/nui.js` serves fixture data instead of talking to the
