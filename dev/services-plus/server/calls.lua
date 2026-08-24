@@ -33,6 +33,48 @@
 -- (`pendingByCallId` used to be here) - see lb_call_id on the calls table
 -- instead, which survives a Services+ restart mid-call (plan review round 2 §2).
 local pendingByNumber = {}
+local answeredByCallId = {}
+
+local function notifyCallChanged(source, scope, referenceId, unreadDelta)
+    if not source or GetPlayerName(source) == nil then return end
+    TriggerClientEvent("services-plus:client:callChanged", source, {
+        scope = scope,
+        unreadDelta = tonumber(unreadDelta) or 0,
+        referenceId = referenceId,
+    })
+end
+
+local function notifyCompanyStaff(callRow, unreadDelta)
+    local company = Companies.GetById(callRow.company_id)
+    if not company then return end
+
+    local staff = Framework.GetPlayersByJob(company.job)
+    for i = 1, #staff do
+        if Employees.IsLoggedIn(staff[i], company.id) and Framework.GetOnDuty(staff[i]) then
+            notifyCallChanged(staff[i], "company_calls", callRow.id, unreadDelta)
+        end
+    end
+end
+
+local function publishMissedCall(callRow)
+    if not callRow or not callRow.id then return end
+    local eventKey = ("call:%s:missed"):format(callRow.id)
+
+    if callRow.customer_number
+        and Unread.Push("activity_calls", callRow.customer_number, 0, eventKey) then
+        notifyCallChanged(ResolvePhoneSource(callRow.customer_number), "activity_calls", callRow.id, 1)
+    end
+
+    local company = Companies.GetById(callRow.company_id)
+    if not company or not Unread.Push("company_calls", "", company.id, eventKey) then return end
+    notifyCompanyStaff(callRow, 1)
+end
+
+local function publishAnsweredCall(callRow)
+    if not callRow or not callRow.id then return end
+    notifyCallChanged(ResolvePhoneSource(callRow.customer_number), "activity_calls", callRow.id, 0)
+    notifyCompanyStaff(callRow, 0)
+end
 
 ---@param companyId number
 ---@param numberId number
@@ -129,17 +171,43 @@ end)
 -- the row at 'ringing' forever (plan review round 2 §2).
 
 AddEventHandler("lb-phone:callAnswered", function(call)
-    MySQL.update("UPDATE phone_services_plus_calls SET state = 'answered', employee_number = ? WHERE lb_call_id = ?", {
-        call.callee.number or json.null, call.callId,
+    -- Record synchronously before yielding to MySQL. callEnded can otherwise
+    -- run while this UPDATE is still in flight and briefly persist/publish a
+    -- false missed call even though lb-phone emitted Answered first.
+    answeredByCallId[tostring(call.callId)] = {
+        number = call.callee and call.callee.number or nil,
+        expires = GetGameTimer() + (2 * 60 * 60000),
+    }
+    MySQL.update.await("UPDATE phone_services_plus_calls SET state = 'answered', employee_number = ? WHERE lb_call_id = ?", {
+        call.callee and call.callee.number or json.null, call.callId,
     })
+    publishAnsweredCall(MySQL.single.await([[
+        SELECT id, company_id, customer_number
+        FROM phone_services_plus_calls
+        WHERE lb_call_id = ?
+    ]], { call.callId }))
 end)
 
 AddEventHandler("lb-phone:callEnded", function(call)
+    local answered = answeredByCallId[tostring(call.callId)]
+    answeredByCallId[tostring(call.callId)] = nil
     -- Only downgrade to 'missed' if it never got marked 'answered' above.
-    MySQL.update(
-        "UPDATE phone_services_plus_calls SET state = IF(state = 'answered', 'answered', 'missed'), ended_at = NOW() WHERE lb_call_id = ? AND ended_at IS NULL",
-        { call.callId }
+    local affected = MySQL.update.await(
+        "UPDATE phone_services_plus_calls SET state = IF(? = 1 OR state = 'answered', 'answered', 'missed'), employee_number = COALESCE(employee_number, ?), ended_at = NOW() WHERE lb_call_id = ? AND ended_at IS NULL",
+        { answered and 1 or 0, answered and answered.number or json.null, call.callId }
     )
+    if affected == 0 then return end
+
+    local row = MySQL.single.await([[
+        SELECT id, company_id, customer_number, state
+        FROM phone_services_plus_calls
+        WHERE lb_call_id = ?
+    ]], { call.callId })
+    if row and row.state == "missed" then
+        publishMissedCall(row)
+    elseif row and row.state == "answered" then
+        publishAnsweredCall(row)
+    end
 end)
 
 -- Resolved-but-never-placed calls (client dropped the app before dialing,
@@ -156,6 +224,9 @@ CreateThread(function()
                 pendingByNumber[number] = nil
             end
         end
+        for callId, answered in pairs(answeredByCallId) do
+            if answered.expires < now then answeredByCallId[callId] = nil end
+        end
     end
 end)
 
@@ -166,9 +237,30 @@ CreateThread(function()
     while true do
         Wait(10 * 60000)
 
-        MySQL.update(
-            "UPDATE phone_services_plus_calls SET state = 'missed', ended_at = NOW() WHERE state = 'ringing' AND created_at < NOW() - INTERVAL 1 HOUR"
-        )
+        local stale = MySQL.query.await([[
+            SELECT id, company_id, customer_number
+            FROM phone_services_plus_calls
+            WHERE state = 'ringing' AND ended_at IS NULL
+              AND created_at < NOW() - INTERVAL 1 HOUR
+            ORDER BY id
+            LIMIT 500
+        ]]) or {}
+        if #stale > 0 then
+            local ids = {}
+            for i = 1, #stale do ids[#ids + 1] = tonumber(stale[i].id) end
+            MySQL.update.await(([[
+                UPDATE phone_services_plus_calls
+                SET state = 'missed', ended_at = NOW()
+                WHERE state = 'ringing' AND ended_at IS NULL AND id IN (%s)
+            ]]):format(table.concat(ids, ",")))
+
+            local missed = MySQL.query.await(([[
+                SELECT id, company_id, customer_number
+                FROM phone_services_plus_calls
+                WHERE state = 'missed' AND id IN (%s)
+            ]]):format(table.concat(ids, ","))) or {}
+            for i = 1, #missed do publishMissedCall(missed[i]) end
+        end
     end
 end)
 

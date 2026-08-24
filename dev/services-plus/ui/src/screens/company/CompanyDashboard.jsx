@@ -23,7 +23,9 @@ const TABS = [
 // Everything past the fake-login (plan §19, §35-38, §20-24, §33-34).
 export default function CompanyDashboard({
   session, employee, company, onLogout, onOpenConversation, teamUpdate,
-  messageBadge = 0, requestBadge = 0, messageRefreshToken, requestRefresh, onReadConversation, onReadRequests,
+  messageBadge = 0, requestBadge = 0, callBadge = 0,
+  messageRefreshToken, requestRefresh, callRefreshToken,
+  onReadConversation, onReadRequests, onReadCalls,
 }) {
   const { t } = useI18n()
   const [tab, setTab] = useState('home')
@@ -37,7 +39,11 @@ export default function CompanyDashboard({
 
   useEffect(() => {
     if (tab === 'requests') onReadRequests?.()
-  }, [tab, onReadRequests])
+  }, [tab, requestRefresh, onReadRequests])
+
+  useEffect(() => {
+    if (tab === 'calls') onReadCalls?.()
+  }, [tab, callRefreshToken, onReadCalls])
 
   // `company` (from the public companies list, incl. background) can be
   // missing if it's currently hidden from that list (e.g. unavailable and
@@ -72,6 +78,7 @@ export default function CompanyDashboard({
             {t(item.label)}
             {item.key === 'messages' && <Badge count={messageBadge} className="tab-badge" />}
             {item.key === 'requests' && <Badge count={requestBadge} className="tab-badge" />}
+            {item.key === 'calls' && <Badge count={callBadge} className="tab-badge" />}
           </button>
         ))}
       </div>
@@ -91,7 +98,7 @@ export default function CompanyDashboard({
         )}
         {visitedTabs.has('requests') && <div className={`subtab-view${tab === 'requests' ? ' active' : ''}`}><RequestsTab refresh={requestRefresh} /></div>}
         {visitedTabs.has('messages') && <div className={`subtab-view${tab === 'messages' ? ' active' : ''}`}><MessagesTab refreshToken={messageRefreshToken} onOpenConversation={onOpenConversation} onReadConversation={onReadConversation} /></div>}
-        {visitedTabs.has('calls') && <div className={`subtab-view${tab === 'calls' ? ' active' : ''}`}><CallsTab /></div>}
+        {visitedTabs.has('calls') && <div className={`subtab-view${tab === 'calls' ? ' active' : ''}`}><CallsTab refreshToken={callRefreshToken} /></div>}
         {visitedTabs.has('settings') && session.employee.isBoss && <div className={`subtab-view${tab === 'settings' ? ' active' : ''}`}><SettingsTab /></div>}
       </div>
     </div>

@@ -14,9 +14,9 @@ const PAGE_SIZE = 25
 
 // Own call history (plan §38-41) - read-only, logged passively from
 // lb-phone's own call events (see server/calls.lua).
-export default function CallsTab() {
+export default function CallsTab({ refreshToken }) {
   const { t, formatRelativeTime } = useI18n()
-  const { items: entries, hasMore, loadingMore, error, loadMore, reload } = useCursorList('getMyCalls', { pageSize: PAGE_SIZE })
+  const { items: entries, hasMore, loadingMore, error, loadMore, reload } = useCursorList('getMyCalls', { pageSize: PAGE_SIZE, refreshToken })
   useMinuteTick()
 
   // Re-resolves and places a fresh call the same way ServicesScreen's own

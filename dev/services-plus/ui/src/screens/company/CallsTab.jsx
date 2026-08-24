@@ -12,9 +12,9 @@ const PAGE_SIZE = 25
 
 // Call history (plan §38): a plain log, populated passively from lb-phone's
 // own call events (see server/calls.lua) - Services+ never places calls.
-export default function CallsTab() {
+export default function CallsTab({ refreshToken }) {
   const { t } = useI18n()
-  const { items: calls, hasMore, loadingMore, error, loadMore, reload } = useCursorList('getCallHistory', { pageSize: PAGE_SIZE })
+  const { items: calls, hasMore, loadingMore, error, loadMore, reload } = useCursorList('getCallHistory', { pageSize: PAGE_SIZE, refreshToken })
 
   return (
     <div className="tab-panel">

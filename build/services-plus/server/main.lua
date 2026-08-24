@@ -124,6 +124,9 @@ end
 -- ---------------------------------------------------------------------------
 local READ_SCOPES = {
     company_requests = true,
+    activity_requests = true,
+    activity_calls = true,
+    company_calls = true,
 }
 
 local function buildCompanySession(source, company, job)
@@ -162,7 +165,14 @@ end
 
 local function getUnreadCounts(source)
     local phoneNumber = Framework.GetPhoneNumber(source)
-    local result = { activityMessages = 0, companyMessages = 0, companyRequests = 0 }
+    local result = {
+        activityMessages = 0,
+        activityRequests = 0,
+        activityCalls = 0,
+        companyMessages = 0,
+        companyRequests = 0,
+        companyCalls = 0,
+    }
 
     if phoneNumber then
         result.activityMessages = tonumber(MySQL.scalar.await([[
@@ -175,6 +185,9 @@ local function getUnreadCounts(source)
               AND m.sender_type = 'company'
               AND m.id > COALESCE(cr.last_read_id, 0)
         ]], { phoneNumber, phoneNumber })) or 0
+
+        result.activityRequests = Unread.CountForReader("activity_requests", phoneNumber, 0, phoneNumber)
+        result.activityCalls = Unread.CountForReader("activity_calls", phoneNumber, 0, phoneNumber)
     end
 
     local company = Companies.GetForPlayer(source)
@@ -203,6 +216,8 @@ local function getUnreadCounts(source)
             (r.company_id IS NULL AND t.category_id = ?)
         )
     ]], { requestMarker, company.id, company.category_id })) or 0
+
+    result.companyCalls = Unread.CountForReader("company_calls", "", company.id, ownerKey)
 
     return result
 end
@@ -255,17 +270,26 @@ end
 local function markRead(source, scope)
     if not READ_SCOPES[scope] then return false end
 
-    local ownerKey, companyId = Framework.GetPhoneNumber(source), 0
-    if scope ~= "activity_messages" then
+    local isCompanyScope = scope == "company_requests" or scope == "company_calls"
+    local ownerKey, eventOwnerKey, companyId = Framework.GetPhoneNumber(source), nil, 0
+    if isCompanyScope then
         local company = Companies.GetForPlayer(source)
-        if not company then return false end
+        if not company or not Employees.IsLoggedIn(source, company.id) then return false end
         ownerKey, companyId = Framework.GetIdentifier(source), company.id
     end
     if not ownerKey then return false end
 
-    local tableName = scope == "company_requests"
-        and "phone_services_plus_requests" or "phone_services_plus_messages"
-    local latestId = tonumber(MySQL.scalar.await("SELECT COALESCE(MAX(id), 0) FROM " .. tableName)) or 0
+    local latestId
+    if Unread.IsScope(scope) then
+        eventOwnerKey = isCompanyScope and "" or ownerKey
+        latestId = Unread.LatestId(scope, eventOwnerKey, companyId)
+    elseif scope == "company_requests" then
+        latestId = tonumber(MySQL.scalar.await(
+            "SELECT COALESCE(MAX(id), 0) FROM phone_services_plus_requests"
+        )) or 0
+    else
+        return false
+    end
 
     MySQL.update.await([[
         INSERT INTO phone_services_plus_read_state (owner_key, scope, company_id, last_read_id)

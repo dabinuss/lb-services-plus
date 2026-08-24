@@ -302,6 +302,10 @@ RegisterNUICallback("markRead", function(data, cb)
     cb(bridge("markRead", data.scope))
 end)
 
+RegisterNUICallback("getUnreadCounts", function(_, cb)
+    cb(bridge("getUnreadCounts"))
+end)
+
 RegisterNUICallback("markConversationRead", function(data, cb)
     cb(bridge("markConversationRead", data.channelId))
 end)
@@ -331,9 +335,21 @@ RegisterNetEvent("services-plus:client:requestEnded", function(requestId)
 end)
 
 RegisterNetEvent("services-plus:client:requestUpdated", function(payload)
+    local unreadDelta = tonumber(payload and payload.unreadDelta) or 0
+    if payload then payload.unreadDelta = nil end
     exports["lb-phone"]:SendCustomAppMessage(Config.App.identifier, {
         type = "requestUpdated",
         request = payload,
+        unreadDelta = unreadDelta,
+    })
+end)
+
+RegisterNetEvent("services-plus:client:callChanged", function(payload)
+    exports["lb-phone"]:SendCustomAppMessage(Config.App.identifier, {
+        type = "callChanged",
+        scope = payload and payload.scope or nil,
+        unreadDelta = payload and tonumber(payload.unreadDelta) or 0,
+        referenceId = payload and tonumber(payload.referenceId) or nil,
     })
 end)
 

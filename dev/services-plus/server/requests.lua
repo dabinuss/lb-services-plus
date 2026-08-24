@@ -22,6 +22,7 @@ local typesByCategory = {} -- categoryId -> ordered list
 local typesById = {}
 local typesByIdentifier = {}
 local pushRequestUpdate
+local recordCustomerUpdate
 local activeJourneys = {} -- requestId -> server-owned customer tracking state
 local endCustomerJourney
 
@@ -258,7 +259,8 @@ local function cancelExpiredDisconnectedRequests(identifier)
 
         local publicRequests = Requests.GetMany(cancelledIds)
         for i = 1, #publicRequests do
-            if pushRequestUpdate then pushRequestUpdate(publicRequests[i]) end
+            local unreadDelta = recordCustomerUpdate and recordCustomerUpdate(publicRequests[i]) or 0
+            if pushRequestUpdate then pushRequestUpdate(publicRequests[i], unreadDelta) end
             TriggerEvent("services-plus:requestCancelled", publicRequests[i])
         end
     end)
@@ -411,10 +413,18 @@ function Requests.GetMany(requestIds)
     return requests
 end
 
+recordCustomerUpdate = function(request)
+    if not request or not request.requesterNumber or not request.status then return 0 end
+    local eventKey = ("request:%s:%s"):format(request.id, request.status)
+    return Unread.Push("activity_requests", request.requesterNumber, 0, eventKey) and 1 or 0
+end
+
 local function emitLifecycle(eventName, requestId)
     local request = Requests.Get(requestId)
     if request then
-        if eventName ~= "requestCreated" and pushRequestUpdate then pushRequestUpdate(request) end
+        if eventName ~= "requestCreated" and pushRequestUpdate then
+            pushRequestUpdate(request, recordCustomerUpdate(request))
+        end
         TriggerEvent("services-plus:" .. eventName, request)
     end
     return request
@@ -463,7 +473,7 @@ function Requests.SuspendActiveForSource(source)
     ]], { identifier })
 end
 
-pushRequestUpdate = function(request)
+pushRequestUpdate = function(request, unreadDelta)
     if not request or not request.requesterNumber then return end
     local requesterSource = ResolvePhoneSource(request.requesterNumber)
     if not requesterSource then return end
@@ -475,6 +485,7 @@ pushRequestUpdate = function(request)
         company_name = request.company and request.company.name or nil,
         company_icon = request.company and request.company.icon or nil,
         updated_at = request.updatedAt,
+        unreadDelta = tonumber(unreadDelta) or 0,
     })
 end
 
@@ -1372,7 +1383,8 @@ CreateThread(function()
             for i = 1, #requests do
                 if requests[i].status == "cancelled" then
                     clearNotifications(requests[i].id)
-                    if pushRequestUpdate then pushRequestUpdate(requests[i]) end
+                    local unreadDelta = recordCustomerUpdate(requests[i])
+                    if pushRequestUpdate then pushRequestUpdate(requests[i], unreadDelta) end
                     TriggerEvent("services-plus:requestExpired", requests[i])
                     TriggerEvent("services-plus:requestCancelled", requests[i])
                 end

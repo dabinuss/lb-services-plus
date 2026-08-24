@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import MessagesTab from './activity/MessagesTab.jsx'
 import RequestsTab from './activity/RequestsTab.jsx'
 import CallsTab from './activity/CallsTab.jsx'
@@ -13,7 +13,11 @@ const TABS = [
 
 // Personal history (plan §39-41), split into its three kinds instead of one
 // merged feed - deliberately still compact, not a CRM-style history.
-export default function ActivityScreen({ onOpen, messageBadge = 0, messageRefreshToken, requestUpdate, onReadConversation }) {
+export default function ActivityScreen({
+  onOpen, messageBadge = 0, requestBadge = 0, callBadge = 0,
+  messageRefreshToken, requestUpdate, callRefreshToken,
+  onReadConversation, onReadRequests, onReadCalls,
+}) {
   const { t } = useI18n()
   const [tab, setTab] = useState('messages')
   const [visitedTabs, setVisitedTabs] = useState(() => new Set(['messages']))
@@ -22,6 +26,14 @@ export default function ActivityScreen({ onOpen, messageBadge = 0, messageRefres
     setVisitedTabs((current) => current.has(next) ? current : new Set([...current, next]))
     setTab(next)
   }
+
+  useEffect(() => {
+    if (tab === 'requests') onReadRequests?.()
+  }, [tab, requestUpdate, onReadRequests])
+
+  useEffect(() => {
+    if (tab === 'calls') onReadCalls?.()
+  }, [tab, callRefreshToken, onReadCalls])
 
   return (
     <div className="screen activity-screen">
@@ -32,6 +44,8 @@ export default function ActivityScreen({ onOpen, messageBadge = 0, messageRefres
           <button key={item.key} className={`category-chip${tab === item.key ? ' active' : ''}`} onClick={() => openTab(item.key)}>
             {t(item.label)}
             {item.key === 'messages' && <Badge count={messageBadge} className="tab-badge" />}
+            {item.key === 'requests' && <Badge count={requestBadge} className="tab-badge" />}
+            {item.key === 'calls' && <Badge count={callBadge} className="tab-badge" />}
           </button>
         ))}
       </div>
@@ -39,7 +53,7 @@ export default function ActivityScreen({ onOpen, messageBadge = 0, messageRefres
       <div className="dashboard-body">
         {visitedTabs.has('messages') && <div className={`subtab-view${tab === 'messages' ? ' active' : ''}`}><MessagesTab refreshToken={messageRefreshToken} onOpen={onOpen} onReadConversation={onReadConversation} /></div>}
         {visitedTabs.has('requests') && <div className={`subtab-view${tab === 'requests' ? ' active' : ''}`}><RequestsTab update={requestUpdate} /></div>}
-        {visitedTabs.has('calls') && <div className={`subtab-view${tab === 'calls' ? ' active' : ''}`}><CallsTab /></div>}
+        {visitedTabs.has('calls') && <div className={`subtab-view${tab === 'calls' ? ' active' : ''}`}><CallsTab refreshToken={callRefreshToken} /></div>}
       </div>
     </div>
   )

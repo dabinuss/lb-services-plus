@@ -13,6 +13,8 @@ that has not yet been applied:
    persistent read markers for every conversation.
 4. `004_request_abuse_hardening.sql` adds indexes for bounded open-request
    creation and expiry cleanup.
+5. `005_unread_activity_events.sql` adds persistent, race-safe badge events
+   for request status changes and missed calls.
 
 All migrations are idempotent and can safely be re-run. Migration 001 checks
 `information_schema` before each schema change and supports both MySQL and

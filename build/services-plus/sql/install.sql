@@ -208,6 +208,23 @@ CREATE TABLE IF NOT EXISTS `phone_services_plus_read_state` (
     PRIMARY KEY (`owner_key`, `scope`, `company_id`)
 ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
+-- State transitions need their own monotonic ids: request rows retain their
+-- id while changing status, and call rows can become missed after their id
+-- was already marked as seen. event_key makes repeated lifecycle delivery
+-- idempotent while every player keeps an independent marker in read_state.
+CREATE TABLE IF NOT EXISTS `phone_services_plus_unread_events` (
+    `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `scope` VARCHAR(32) NOT NULL,
+    `owner_key` VARCHAR(100) NOT NULL DEFAULT '',
+    `company_id` INT UNSIGNED NOT NULL DEFAULT 0,
+    `event_key` VARCHAR(100) NOT NULL,
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `event_once` (`scope`, `owner_key`, `company_id`, `event_key`),
+    KEY `badge_lookup` (`scope`, `owner_key`, `company_id`, `id`)
+) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
 -- Per-conversation read markers. Unlike the aggregate area markers above,
 -- these allow every chat row to expose its own unread counter. Customers
 -- are keyed by phone number; employees by their stable framework identifier.

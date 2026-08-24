@@ -12,7 +12,8 @@ import Icon from '../components/Icon.jsx'
 // logout, going off-duty, or a real reload/phone switch.
 export default function CompanyScreen({
   employee, companies, session, onLogin, onLogout, onOpenConversation, teamUpdate,
-  messageBadge, requestBadge, messageRefreshToken, requestRefresh, onReadConversation, onReadRequests,
+  messageBadge, requestBadge, callBadge, messageRefreshToken, requestRefresh, callRefreshToken,
+  onReadConversation, onReadRequests, onReadCalls,
 }) {
   const { t } = useI18n()
   const [loggingIn, setLoggingIn] = useState(false)
@@ -82,10 +83,13 @@ export default function CompanyScreen({
       teamUpdate={teamUpdate}
       messageBadge={messageBadge}
       requestBadge={requestBadge}
+      callBadge={callBadge}
       messageRefreshToken={messageRefreshToken}
       requestRefresh={requestRefresh}
+      callRefreshToken={callRefreshToken}
       onReadConversation={onReadConversation}
       onReadRequests={onReadRequests}
+      onReadCalls={onReadCalls}
     />
   )
 }

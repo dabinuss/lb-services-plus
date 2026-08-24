@@ -60,8 +60,12 @@ export default function App() {
   const [incomingMessage, setIncomingMessage] = useState(null)
   const [requestUpdate, setRequestUpdate] = useState(null)
   const [requestRefresh, setRequestRefresh] = useState(null)
+  const [callRefresh, setCallRefresh] = useState({ activity: 0, company: 0 })
   const [teamUpdate, setTeamUpdate] = useState(null)
-  const [unread, setUnread] = useState({ activityMessages: 0, companyMessages: 0, companyRequests: 0 })
+  const [unread, setUnread] = useState({
+    activityMessages: 0, activityRequests: 0, activityCalls: 0,
+    companyMessages: 0, companyRequests: 0, companyCalls: 0,
+  })
 
   useEffect(() => {
     if (devMode) {
@@ -98,6 +102,9 @@ export default function App() {
     fetchNui('markRead', { scope }).catch(() => {})
   }, [])
   const readCompanyRequests = useCallback(() => markRead('company_requests', 'companyRequests'), [markRead])
+  const readActivityRequests = useCallback(() => markRead('activity_requests', 'activityRequests'), [markRead])
+  const readActivityCalls = useCallback(() => markRead('activity_calls', 'activityCalls'), [markRead])
+  const readCompanyCalls = useCallback(() => markRead('company_calls', 'companyCalls'), [markRead])
 
   const readConversation = useCallback((channelId, count, key) => {
     const unreadCount = Number(count) || 0
@@ -109,16 +116,27 @@ export default function App() {
 
   const logoutCompany = useCallback(() => {
     setCompanySession(null)
+    setUnread((current) => ({
+      ...current,
+      companyMessages: 0,
+      companyRequests: 0,
+      companyCalls: 0,
+    }))
     fetchNui('companyLogout').catch(() => {})
   }, [])
 
   const loginCompany = useCallback((session) => {
     setCompanySession(session)
-    if (!session || !('directoryCompany' in session)) return
-    setBootstrap((current) => applyCompanyDirectoryChange(current, {
-      companyId: session.company.id,
-      company: session.directoryCompany,
-    }))
+    if (!session) return
+    if ('directoryCompany' in session) {
+      setBootstrap((current) => applyCompanyDirectoryChange(current, {
+        companyId: session.company.id,
+        company: session.directoryCompany,
+      }))
+    }
+    fetchNui('getUnreadCounts').then((counts) => {
+      if (counts) setUnread((current) => ({ ...current, ...counts }))
+    }).catch(() => {})
   }, [])
 
   // Realtime delta for an already-open conversation (plan review §15) -
@@ -158,7 +176,25 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    return onNuiEvent('requestUpdated', (data) => setRequestUpdate(data.request))
+    return onNuiEvent('requestUpdated', (data) => {
+      setRequestUpdate(data.request)
+      const delta = Number(data.unreadDelta) || 0
+      if (delta) setUnread((current) => ({ ...current, activityRequests: current.activityRequests + delta }))
+    })
+  }, [])
+
+  useEffect(() => {
+    return onNuiEvent('callChanged', (data) => {
+      const mapping = {
+        activity_calls: { unreadKey: 'activityCalls', refreshKey: 'activity' },
+        company_calls: { unreadKey: 'companyCalls', refreshKey: 'company' },
+      }
+      const target = mapping[data.scope]
+      if (!target) return
+      const delta = Number(data.unreadDelta) || 0
+      if (delta) setUnread((current) => ({ ...current, [target.unreadKey]: Math.max(0, current[target.unreadKey] + delta) }))
+      setCallRefresh((current) => ({ ...current, [target.refreshKey]: current[target.refreshKey] + 1 }))
+    })
   }, [])
 
   // Same idea, for a colleague's status/hotline change (plan review round 5
@@ -181,7 +217,15 @@ export default function App() {
     return onNuiEvent('employeeDutyChanged', (data) => {
       const employee = data.employee || null
       setBootstrap((prev) => (prev ? { ...prev, employee } : prev))
-      if (data.jobChanged || !employee?.onDuty) setCompanySession(null)
+      if (data.jobChanged || !employee?.onDuty) {
+        setCompanySession(null)
+        setUnread((current) => ({
+          ...current,
+          companyMessages: 0,
+          companyRequests: 0,
+          companyCalls: 0,
+        }))
+      }
     })
   }, [])
 
@@ -262,9 +306,14 @@ export default function App() {
           <ActivityScreen
             onOpen={setConversation}
             messageBadge={unread.activityMessages}
+            requestBadge={unread.activityRequests}
+            callBadge={unread.activityCalls}
             messageRefreshToken={incomingMessage?.message?.id}
             requestUpdate={requestUpdate}
+            callRefreshToken={callRefresh.activity}
             onReadConversation={(channelId, count) => readConversation(channelId, count, 'activityMessages')}
+            onReadRequests={readActivityRequests}
+            onReadCalls={readActivityCalls}
           />
         </div>
       )}
@@ -280,10 +329,13 @@ export default function App() {
             teamUpdate={teamUpdate}
             messageBadge={unread.companyMessages}
             requestBadge={unread.companyRequests}
+            callBadge={unread.companyCalls}
             messageRefreshToken={incomingMessage?.message?.id}
             requestRefresh={requestRefresh}
+            callRefreshToken={callRefresh.company}
             onReadConversation={(channelId, count) => readConversation(channelId, count, 'companyMessages')}
             onReadRequests={readCompanyRequests}
+            onReadCalls={readCompanyCalls}
           />
         </div>
       )}
@@ -303,8 +355,8 @@ export default function App() {
             <button key={item.key} className={`nav-item${tab === item.key ? ' active' : ''}`} onClick={() => openTab(item.key)}>
               <Icon name={item.icon} size={22} className="nav-icon" />
               <span className="nav-label">{t(item.label)}</span>
-              {item.key === 'activity' && <Badge count={unread.activityMessages} className="nav-badge" />}
-              {item.key === 'company' && <Badge count={unread.companyMessages + unread.companyRequests} className="nav-badge" />}
+              {item.key === 'activity' && <Badge count={unread.activityMessages + unread.activityRequests + unread.activityCalls} className="nav-badge" />}
+              {item.key === 'company' && <Badge count={unread.companyMessages + unread.companyRequests + unread.companyCalls} className="nav-badge" />}
             </button>
           ))}
         </div>

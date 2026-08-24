@@ -65,7 +65,10 @@ const requestTypeIdentifier = (name) => name.trim().toLowerCase().replace(/[^a-z
 const fixtures = {
   bootstrap: {
     locale: 'en',
-    unread: { activityMessages: 3, companyMessages: 4, companyRequests: 3 },
+    unread: {
+      activityMessages: 3, activityRequests: 2, activityCalls: 1,
+      companyMessages: 4, companyRequests: 3, companyCalls: 2,
+    },
     companySession: null,
     categories: [
       { id: 1, key: 'police', name: 'Police', icon: 'police', sort_order: 10 },
@@ -451,6 +454,8 @@ async function fetchNuiFixture(action, data) {
   switch (action) {
     case 'bootstrap':
       return fixtures.bootstrap
+    case 'getUnreadCounts':
+      return fixtures.bootstrap.unread
     case 'setLocale':
     case 'markRead':
       return true

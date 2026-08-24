@@ -38,6 +38,7 @@ server_scripts {
     'server/callback.lua',
     'server/util.lua',
     'server/framework.lua',
+    'server/unread.lua',
     'peekplus/server/settings.lua',
     'server/companies.lua',
     'server/employees.lua',
