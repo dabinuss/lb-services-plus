@@ -10,9 +10,16 @@ export default function CompanyCard({ company, categoryName, onCall, onMessage, 
   // Messages remain usable while the company is offline, matching the
   // server-side offline mailbox. Calls stay visible so the available
   // contact methods do not jump around, but are disabled until somebody
-  // is available again. Request behaviour remains unchanged.
-  const canMessage = company.messagesEnabled && company.numbers.some((n) => n.messagesEnabled)
-  const hasCall = company.callsEnabled && company.numbers.some((n) => n.callsEnabled)
+  // is available again. Requests follow the same stable-button behaviour.
+  const numbers = company.numbers ?? []
+  // Admin ceilings decide which actions exist in the public directory.
+  // Company and number settings only decide whether an existing action is
+  // currently usable. The fallback keeps older bootstrap payloads working.
+  const hasCall = company.callsAllowed ?? company.callsEnabled
+  const hasMessage = company.messagesAllowed ?? company.messagesEnabled
+  const hasRequest = company.requestsAllowed ?? company.requestsEnabled
+  const canCall = company.available && company.callsEnabled && numbers.some((n) => n.callsEnabled)
+  const canMessage = hasMessage && numbers.some((n) => n.messagesEnabled)
   const canRequest = company.available && company.requestsEnabled
   const mainNumber = company.numbers?.find((n) => n.isMain) ?? null
 
@@ -48,19 +55,19 @@ export default function CompanyCard({ company, categoryName, onCall, onMessage, 
 
       <div className="company-actions-row">
         {hasCall && (
-          <button className="company-action call" onClick={onCall} disabled={!company.available}>
+          <button className="company-action call" onClick={onCall} disabled={!canCall}>
             <Icon name="phone" size={15} className="company-action-icon" />
             {t('Call')}
           </button>
         )}
-        {canRequest && (
-          <button className="company-action request" onClick={onRequest}>
+        {hasRequest && (
+          <button className="company-action request" onClick={onRequest} disabled={!canRequest}>
             <Icon name="clipboard" size={15} className="company-action-icon" />
             {t('Request')}
           </button>
         )}
-        {canMessage && (
-          <button className="company-action message" onClick={onMessage}>
+        {hasMessage && (
+          <button className="company-action message" onClick={onMessage} disabled={!canMessage}>
             <Icon name="message" size={15} className="company-action-icon" />
             {t('Message')}
           </button>

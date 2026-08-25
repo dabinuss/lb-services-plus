@@ -28,11 +28,19 @@ export default function ServicesScreen({ companies, categories, onCall, onMessag
     categories.forEach((cat) => map.set(cat.id, cat.name))
     return map
   }, [categories])
+  const visibleCategories = useMemo(() => {
+    const usedCategoryIds = new Set(companies.map((company) => company.categoryId))
+    return categories.filter((category) => usedCategoryIds.has(category.id))
+  }, [categories, companies])
+  const visibleCategoryIds = useMemo(
+    () => new Set(visibleCategories.map((category) => category.id)),
+    [visibleCategories],
+  )
   const activeCategoryName = activeCategory === null ? null : categoryNames.get(activeCategory)
 
   useEffect(() => {
-    if (activeCategory !== null && !categoryNames.has(activeCategory)) setActiveCategory(null)
-  }, [activeCategory, categoryNames])
+    if (activeCategory !== null && !visibleCategoryIds.has(activeCategory)) setActiveCategory(null)
+  }, [activeCategory, visibleCategoryIds])
 
   return (
     <div className="screen services-screen">
@@ -66,9 +74,9 @@ export default function ServicesScreen({ companies, categories, onCall, onMessag
             <Icon name="list" size={20} strokeWidth={2.5} />
           </button>
 
-          <div className="category-divider" />
+          {visibleCategories.length > 0 && <div className="category-divider" />}
 
-          {categories.map((cat) => (
+          {visibleCategories.map((cat) => (
             <button
               key={cat.id}
               className={`category-chip${activeCategory === cat.id ? ' active' : ''}`}

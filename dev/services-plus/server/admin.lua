@@ -312,12 +312,14 @@ adminCallback("admin:deleteCompany", function(_, reply, data)
 end)
 
 adminCallback("admin:setCompanyCeiling", function(_, reply, data)
-    -- A ceiling turned off also pulls the company's own toggle down with it
-    -- (plan §34) - a boss can't stay opted into something the admin just banned.
+    -- Calls and messages have no company-wide boss toggle: the main number
+    -- remains the guaranteed call endpoint/offline mailbox. Their effective
+    -- values therefore follow the admin ceiling exactly. Requests do have a
+    -- company toggle and only get forced off when the admin forbids them.
     MySQL.update.await([[
         UPDATE phone_services_plus_companies SET
-            admin_calls_allowed = ?, calls_enabled = calls_enabled AND ?,
-            admin_messages_allowed = ?, messages_enabled = messages_enabled AND ?,
+            admin_calls_allowed = ?, calls_enabled = ?,
+            admin_messages_allowed = ?, messages_enabled = ?,
             admin_requests_allowed = ?, requests_enabled = requests_enabled AND ?
         WHERE id = ?
     ]], {

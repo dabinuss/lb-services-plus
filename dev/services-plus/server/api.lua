@@ -17,6 +17,9 @@ local function publicCompany(company)
         callsEnabled = DatabaseBoolean(company.calls_enabled),
         messagesEnabled = DatabaseBoolean(company.messages_enabled),
         requestsEnabled = DatabaseBoolean(company.requests_enabled),
+        callsAllowed = DatabaseBoolean(company.admin_calls_allowed),
+        messagesAllowed = DatabaseBoolean(company.admin_messages_allowed),
+        requestsAllowed = DatabaseBoolean(company.admin_requests_allowed),
     }
 end
 

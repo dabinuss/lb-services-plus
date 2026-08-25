@@ -106,7 +106,7 @@ function Messages.SendCompanyMessage(companyJob, targetNumber, content)
     if targetNumber == "" then return false end
 
     local company = Companies.GetByJob(companyJob)
-    if not company or not DatabaseBoolean(company.messages_enabled) then return false end
+    if not company or not DatabaseBoolean(company.admin_messages_allowed) then return false end
 
     local number = Companies.GetMainNumber(company.id)
     if not number or not DatabaseBoolean(number.messages_enabled)
@@ -506,8 +506,10 @@ RegisterCallback("updateCompanySettings", function(source, reply, settings)
 
     -- Admin ceilings always win (plan §34): a boss can only ever request
     -- less than what's allowed, never more.
-    local callsEnabled = settings.callsEnabled == true and DatabaseBoolean(company.admin_calls_allowed)
-    local messagesEnabled = settings.messagesEnabled == true and DatabaseBoolean(company.admin_messages_allowed)
+    -- Calls and messages are guaranteed through the main number and are not
+    -- company-wide boss toggles. Only the admin ceilings can disable them.
+    local callsEnabled = DatabaseBoolean(company.admin_calls_allowed)
+    local messagesEnabled = DatabaseBoolean(company.admin_messages_allowed)
     local requestsEnabled = settings.requestsEnabled == true and DatabaseBoolean(company.admin_requests_allowed)
 
     if callsEnabled == DatabaseBoolean(company.calls_enabled)
@@ -671,7 +673,7 @@ RegisterCallback("openConversation", function(source, reply, numberId, page)
     -- Companies.GetById only ever holds enabled=1 companies, so this also
     -- covers a disabled company rejecting new conversations (plan review).
     local company = Companies.GetById(number.company_id)
-    if not company or not DatabaseBoolean(company.messages_enabled) then
+    if not company or not DatabaseBoolean(company.admin_messages_allowed) then
         return reply({ error = "messages_disabled" })
     end
 
@@ -729,7 +731,7 @@ RegisterCallback("sendMessage", function(source, reply, channelId, content)
     end
 
     local company = Companies.GetById(number.company_id)
-    if not company or not DatabaseBoolean(company.messages_enabled) then
+    if not company or not DatabaseBoolean(company.admin_messages_allowed) then
         return reply({ error = "messages_disabled" })
     end
 
@@ -814,7 +816,7 @@ RegisterCallback("getMessages", function(source, reply, channelId, beforeId)
         and DatabaseBoolean(number.enabled)
         and DatabaseBoolean(number.messages_enabled)
         and DatabaseBoolean(number.mailbox_enabled)
-        and DatabaseBoolean(company.messages_enabled)
+        and DatabaseBoolean(company.admin_messages_allowed)
 
     reply({
         channelId = channelId,
