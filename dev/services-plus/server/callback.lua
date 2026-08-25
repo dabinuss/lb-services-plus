@@ -50,6 +50,7 @@ local ACTION_LIMITS = {
     toggleDuty = { capacity = 5, refill = 0.2 },
     updateTaxiPricingSettings = { capacity = 5, refill = 0.2 },
     getCustomerRequestJourneys = { capacity = 2, refill = 0.1 },
+    getTeam = { capacity = 2, refill = 0.2 },
     getEmployeeDailyStats = { capacity = 3, refill = 0.1 },
 }
 

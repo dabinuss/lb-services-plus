@@ -15,6 +15,11 @@ that has not yet been applied:
    creation and expiry cleanup.
 5. `005_unread_activity_events.sql` adds persistent, race-safe badge events
    for request status changes and missed calls.
+6. `006_stable_employee_stats.sql` stores stable employee identities for
+   calls/messages and adds the indexes used by daily employee statistics.
+
+Unread activity events deliberately have no age-only cleanup; see
+`UNREAD_RETENTION.md` before adding a retention job.
 
 All migrations are idempotent and can safely be re-run. Migration 001 checks
 `information_schema` before each schema change and supports both MySQL and

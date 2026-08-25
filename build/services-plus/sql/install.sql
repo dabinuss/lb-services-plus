@@ -105,8 +105,14 @@ CREATE TABLE IF NOT EXISTS `phone_services_plus_channels` (
 CREATE TABLE IF NOT EXISTS `phone_services_plus_messages` (
     `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
     `channel_id` INT UNSIGNED NOT NULL,
+    -- Denormalized for bounded company analytics. The channel/number FKs
+    -- remain the authoritative conversation relationship.
+    `company_id` INT UNSIGNED NOT NULL,
 
     `sender` VARCHAR(15) NOT NULL,
+    -- Stable employee identity for company messages. NULL for customers and
+    -- trusted company-level exports that do not impersonate an employee.
+    `sender_identifier` VARCHAR(100) DEFAULT NULL,
     -- Which *side* sent this - the UI aligns chat bubbles by this, not by
     -- comparing `sender` against the viewer's own number (that only ever
     -- worked for the one employee who actually sent it, plan review round
@@ -127,6 +133,7 @@ CREATE TABLE IF NOT EXISTS `phone_services_plus_messages` (
     -- 6 §5): built around the column it filters and orders by, not created_at.
     KEY `channel_created` (`channel_id`, `created_at`),
     KEY `channel_id_id` (`channel_id`, `id`),
+    KEY `company_sender_daily` (`company_id`, `sender_type`, `created_at`, `sender_identifier`),
     FOREIGN KEY (`channel_id`) REFERENCES `phone_services_plus_channels`(`id`) ON DELETE CASCADE
 ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -147,6 +154,7 @@ CREATE TABLE IF NOT EXISTS `phone_services_plus_calls` (
 
     `customer_number` VARCHAR(15) NOT NULL,
     `employee_number` VARCHAR(15) DEFAULT NULL,
+    `employee_identifier` VARCHAR(100) DEFAULT NULL,
     `state` VARCHAR(10) NOT NULL DEFAULT 'ringing', -- ringing | answered | missed
 
     `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -154,6 +162,7 @@ CREATE TABLE IF NOT EXISTS `phone_services_plus_calls` (
 
     PRIMARY KEY (`id`),
     KEY `company_created` (`company_id`, `created_at`),
+    KEY `company_state_daily` (`company_id`, `state`, `created_at`, `employee_identifier`),
     KEY `customer_created` (`customer_number`, `created_at`),
     KEY `lb_call_id` (`lb_call_id`),
     FOREIGN KEY (`company_id`) REFERENCES `phone_services_plus_companies`(`id`) ON DELETE CASCADE,
@@ -347,6 +356,7 @@ CREATE TABLE IF NOT EXISTS `phone_services_plus_requests` (
     KEY `requester_status_created` (`requester_number`, `status`, `created_at`),
     KEY `status_created_id` (`status`, `created_at`, `id`),
     KEY `employee_status` (`employee_identifier`, `status`),
+    KEY `company_status_daily` (`company_id`, `status`, `updated_at`, `employee_identifier`),
     KEY `disconnected_status` (`status`, `employee_disconnected_at`),
     FOREIGN KEY (`request_type_id`) REFERENCES `phone_services_plus_request_types`(`id`) ON DELETE CASCADE,
     FOREIGN KEY (`company_id`) REFERENCES `phone_services_plus_companies`(`id`) ON DELETE SET NULL

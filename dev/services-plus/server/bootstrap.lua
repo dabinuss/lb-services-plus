@@ -4,6 +4,8 @@
 ]]
 
 CreateThread(function()
+    while not Framework.ready do Wait(0) end
+
     local ok, err = pcall(function()
         -- Categories must exist before request types resolve their category
         -- keys. Companies.Initialize owns that seed and its first cache load.

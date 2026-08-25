@@ -15,7 +15,7 @@
     }
 ]]
 
-Framework = { name = "standalone" }
+Framework = { name = "standalone", ready = false }
 
 local esxObject = nil
 local qbObject = nil
@@ -39,12 +39,24 @@ end
 Framework.name = detect()
 
 CreateThread(function()
+    -- Resource start order is not guaranteed. In auto mode, give an
+    -- explicitly configured framework a short startup window before
+    -- committing to standalone for this resource run.
+    if Config.Framework == "auto" and Framework.name == "standalone" then
+        for _ = 1, 100 do
+            Wait(100)
+            Framework.name = detect()
+            if Framework.name ~= "standalone" then break end
+        end
+    end
+
     if Framework.name == "esx" then
         esxObject = exports["es_extended"]:getSharedObject()
     elseif Framework.name == "qb" then
         qbObject = exports["qb-core"]:GetCoreObject()
     end
 
+    Framework.ready = true
     print(("[services-plus] framework adapter: %s"):format(Framework.name))
 end)
 
@@ -378,6 +390,7 @@ function Standalone.SetJob(source, job, grade)
 end
 
 CreateThread(function()
+    while not Framework.ready do Wait(0) end
     if Framework.name ~= "standalone" then return end
 
     local rows = MySQL.query.await("SELECT identifier, job, grade FROM phone_services_plus_standalone_jobs") or {}
@@ -459,6 +472,7 @@ end)
 -- for anyone it missed within at most 2 minutes - a 600-player GetPlayers()
 -- scan every 2 minutes is negligible, it's just not a per-transaction cost.
 CreateThread(function()
+    while not Framework.ready do Wait(0) end
     Wait(2000) -- let the framework finish starting up first
 
     while true do

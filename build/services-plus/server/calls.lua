@@ -127,7 +127,7 @@ RegisterCallback("resolveCall", function(source, reply, companyId, numberId)
         local employeeNumber = Framework.GetPhoneNumber(chosen)
         if not employeeNumber then return reply(false) end
 
-        target = { number = employeeNumber }
+        target = { number = employeeNumber, employeeIdentifier = Framework.GetIdentifier(chosen) }
     end
 
     pendingByNumber[customerNumber] = {
@@ -135,6 +135,7 @@ RegisterCallback("resolveCall", function(source, reply, companyId, numberId)
         numberId = numberId,
         expectedCompany = target.company,
         expectedNumber = target.number,
+        employeeIdentifier = target.employeeIdentifier,
         expires = GetGameTimer() + 20000,
     }
 
@@ -161,8 +162,8 @@ AddEventHandler("lb-phone:newCall", function(call)
     pendingByNumber[call.caller.number] = nil
 
     MySQL.insert.await(
-        "INSERT INTO phone_services_plus_calls (company_id, number_id, customer_number, lb_call_id, state) VALUES (?, ?, ?, ?, 'ringing')",
-        { pending.companyId, pending.numberId, call.caller.number, call.callId }
+        "INSERT INTO phone_services_plus_calls (company_id, number_id, customer_number, employee_identifier, lb_call_id, state) VALUES (?, ?, ?, ?, ?, 'ringing')",
+        { pending.companyId, pending.numberId, call.caller.number, pending.employeeIdentifier or json.null, call.callId }
     )
 end)
 
@@ -171,15 +172,21 @@ end)
 -- the row at 'ringing' forever (plan review round 2 §2).
 
 AddEventHandler("lb-phone:callAnswered", function(call)
+    local employeeNumber = call.callee and call.callee.number or nil
+    local employeeSource = call.callee and tonumber(call.callee.source or call.callee.serverId or call.callee.playerId)
+        or ResolvePhoneSource(employeeNumber)
+    local employeeIdentifier = employeeSource and Framework.GetIdentifier(employeeSource) or nil
+
     -- Record synchronously before yielding to MySQL. callEnded can otherwise
     -- run while this UPDATE is still in flight and briefly persist/publish a
     -- false missed call even though lb-phone emitted Answered first.
     answeredByCallId[tostring(call.callId)] = {
-        number = call.callee and call.callee.number or nil,
+        number = employeeNumber,
+        identifier = employeeIdentifier,
         expires = GetGameTimer() + (2 * 60 * 60000),
     }
-    MySQL.update.await("UPDATE phone_services_plus_calls SET state = 'answered', employee_number = ? WHERE lb_call_id = ?", {
-        call.callee and call.callee.number or json.null, call.callId,
+    MySQL.update.await("UPDATE phone_services_plus_calls SET state = 'answered', employee_number = ?, employee_identifier = COALESCE(?, employee_identifier) WHERE lb_call_id = ?", {
+        employeeNumber or json.null, employeeIdentifier or json.null, call.callId,
     })
     publishAnsweredCall(MySQL.single.await([[
         SELECT id, company_id, customer_number
@@ -193,8 +200,13 @@ AddEventHandler("lb-phone:callEnded", function(call)
     answeredByCallId[tostring(call.callId)] = nil
     -- Only downgrade to 'missed' if it never got marked 'answered' above.
     local affected = MySQL.update.await(
-        "UPDATE phone_services_plus_calls SET state = IF(? = 1 OR state = 'answered', 'answered', 'missed'), employee_number = COALESCE(employee_number, ?), ended_at = NOW() WHERE lb_call_id = ? AND ended_at IS NULL",
-        { answered and 1 or 0, answered and answered.number or json.null, call.callId }
+        "UPDATE phone_services_plus_calls SET state = IF(? = 1 OR state = 'answered', 'answered', 'missed'), employee_number = COALESCE(employee_number, ?), employee_identifier = COALESCE(employee_identifier, ?), ended_at = NOW() WHERE lb_call_id = ? AND ended_at IS NULL",
+        {
+            answered and 1 or 0,
+            answered and answered.number or json.null,
+            answered and answered.identifier or json.null,
+            call.callId,
+        }
     )
     if affected == 0 then return end
 

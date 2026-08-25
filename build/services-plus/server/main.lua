@@ -44,14 +44,15 @@ end
 ---@param senderNumber string
 ---@param senderType "company"|"customer"
 ---@param content string
+---@param senderIdentifier string? Stable employee identity; nil for customers/company-level exports
 ---@return table|false
-function Messages.Send(company, number, channel, senderNumber, senderType, content)
+function Messages.Send(company, number, channel, senderNumber, senderType, content, senderIdentifier)
     if type(content) ~= "string" or content == "" or #content > 1000 then return false end
     if not company or not number or not channel or not senderNumber then return false end
 
     local messageId = MySQL.insert.await(
-        "INSERT INTO phone_services_plus_messages (channel_id, sender, sender_type, content) VALUES (?, ?, ?, ?)",
-        { channel.id, senderNumber, senderType, content }
+        "INSERT INTO phone_services_plus_messages (channel_id, company_id, sender, sender_identifier, sender_type, content) VALUES (?, ?, ?, ?, ?, ?)",
+        { channel.id, company.id, senderNumber, senderIdentifier or json.null, senderType, content }
     )
     if not messageId then return false end
 
@@ -378,30 +379,32 @@ RegisterCallback("toggleHotline", function(source, reply, numberId, active)
     reply({ ok = true, hotlines = Employees.GetHotlineOptions(source, company.id) })
 end)
 
-local function attachTeamDailyStats(team, companyId)
-    local byIdentifier = {}
-    local byPhone = {}
+local DAILY_STATS_CACHE_TTL = 10000
+local dailyStatsCache = {}
 
-    for i = 1, #team do
-        local member = team[i]
-        member.dailyStats = {
-            completedRequests = 0,
-            yesterdayCompletedRequests = 0,
-            answeredCalls = 0,
-            yesterdayAnsweredCalls = 0,
-            sentMessages = 0,
-            yesterdaySentMessages = 0,
-        }
-        byIdentifier[Framework.GetIdentifier(member.memberId)] = member
-        if member.phoneNumber then byPhone[member.phoneNumber] = member end
-    end
+local function emptyDailyStats()
+    return {
+        completedRequests = 0,
+        yesterdayCompletedRequests = 0,
+        answeredCalls = 0,
+        yesterdayAnsweredCalls = 0,
+        sentMessages = 0,
+        yesterdaySentMessages = 0,
+    }
+end
 
-    if #team == 0 then return team end
+local function getCompanyDailyStatRows(companyId)
+    local now = GetGameTimer()
+    local cached = dailyStatsCache[companyId]
+    if cached and now >= cached.createdAt
+        and now - cached.createdAt < DAILY_STATS_CACHE_TTL then return cached.rows end
 
-    -- One grouped query for the whole roster, not three queries per member.
-    -- Rows for former/off-duty employees are harmlessly ignored by the maps.
+    -- A single bounded aggregate serves both the personal card and the team
+    -- list. New records use stable identifiers; legacy rows remain visible
+    -- through their original phone-number attribution.
     local rows = MySQL.query.await([[
-        SELECT 'requests' AS metric, r.employee_identifier AS owner_key,
+        SELECT 'requests' AS metric, 'identifier' AS owner_kind,
+               r.employee_identifier AS owner_key,
                SUM(r.updated_at >= CURDATE()) AS today_count,
                SUM(r.updated_at >= CURDATE() - INTERVAL 1 DAY AND r.updated_at < CURDATE()) AS yesterday_count
         FROM phone_services_plus_requests r
@@ -412,44 +415,72 @@ local function attachTeamDailyStats(team, companyId)
 
         UNION ALL
 
-        SELECT 'calls' AS metric, c.employee_number AS owner_key,
+        SELECT 'calls' AS metric,
+               IF(c.employee_identifier IS NULL, 'phone', 'identifier') AS owner_kind,
+               COALESCE(c.employee_identifier, c.employee_number) AS owner_key,
                SUM(c.created_at >= CURDATE()) AS today_count,
                SUM(c.created_at >= CURDATE() - INTERVAL 1 DAY AND c.created_at < CURDATE()) AS yesterday_count
         FROM phone_services_plus_calls c
         WHERE c.company_id = ? AND c.state = 'answered'
           AND c.created_at >= CURDATE() - INTERVAL 1 DAY
-          AND c.employee_number IS NOT NULL
-        GROUP BY c.employee_number
+          AND (c.employee_identifier IS NOT NULL OR c.employee_number IS NOT NULL)
+        GROUP BY IF(c.employee_identifier IS NULL, 'phone', 'identifier'),
+                 COALESCE(c.employee_identifier, c.employee_number)
 
         UNION ALL
 
-        SELECT 'messages' AS metric, m.sender AS owner_key,
+        SELECT 'messages' AS metric,
+               IF(m.sender_identifier IS NULL, 'phone', 'identifier') AS owner_kind,
+               COALESCE(m.sender_identifier, m.sender) AS owner_key,
                SUM(m.created_at >= CURDATE()) AS today_count,
                SUM(m.created_at >= CURDATE() - INTERVAL 1 DAY AND m.created_at < CURDATE()) AS yesterday_count
         FROM phone_services_plus_messages m
-        JOIN phone_services_plus_channels ch ON ch.id = m.channel_id
-        JOIN phone_services_plus_numbers n ON n.id = ch.number_id
-        WHERE n.company_id = ? AND m.sender_type = 'company'
+        WHERE m.company_id = ? AND m.sender_type = 'company'
           AND m.created_at >= CURDATE() - INTERVAL 1 DAY
-        GROUP BY m.sender
+          AND (m.sender_identifier IS NOT NULL OR m.sender IS NOT NULL)
+        GROUP BY IF(m.sender_identifier IS NULL, 'phone', 'identifier'),
+                 COALESCE(m.sender_identifier, m.sender)
     ]], { companyId, companyId, companyId }) or {}
+
+    dailyStatsCache[companyId] = { createdAt = now, rows = rows }
+    return rows
+end
+
+local function addDailyStat(stats, row)
+    local today = tonumber(row.today_count) or 0
+    local yesterday = tonumber(row.yesterday_count) or 0
+    if row.metric == "requests" then
+        stats.completedRequests = stats.completedRequests + today
+        stats.yesterdayCompletedRequests = stats.yesterdayCompletedRequests + yesterday
+    elseif row.metric == "calls" then
+        stats.answeredCalls = stats.answeredCalls + today
+        stats.yesterdayAnsweredCalls = stats.yesterdayAnsweredCalls + yesterday
+    elseif row.metric == "messages" then
+        stats.sentMessages = stats.sentMessages + today
+        stats.yesterdaySentMessages = stats.yesterdaySentMessages + yesterday
+    end
+end
+
+local function attachTeamDailyStats(team, companyId)
+    local byIdentifier = {}
+    local byPhone = {}
+
+    for i = 1, #team do
+        local member = team[i]
+        member.dailyStats = emptyDailyStats()
+        byIdentifier[Framework.GetIdentifier(member.memberId)] = member
+        if member.phoneNumber then byPhone[member.phoneNumber] = member end
+    end
+
+    if #team == 0 then return team end
+
+    local rows = getCompanyDailyStatRows(companyId)
 
     for i = 1, #rows do
         local row = rows[i]
-        local member = row.metric == "requests" and byIdentifier[row.owner_key] or byPhone[row.owner_key]
+        local member = row.owner_kind == "identifier" and byIdentifier[row.owner_key] or byPhone[row.owner_key]
         if member then
-            local today = tonumber(row.today_count) or 0
-            local yesterday = tonumber(row.yesterday_count) or 0
-            if row.metric == "requests" then
-                member.dailyStats.completedRequests = today
-                member.dailyStats.yesterdayCompletedRequests = yesterday
-            elseif row.metric == "calls" then
-                member.dailyStats.answeredCalls = today
-                member.dailyStats.yesterdayAnsweredCalls = yesterday
-            elseif row.metric == "messages" then
-                member.dailyStats.sentMessages = today
-                member.dailyStats.yesterdaySentMessages = yesterday
-            end
+            addDailyStat(member.dailyStats, row)
         end
     end
 
@@ -701,71 +732,17 @@ RegisterCallback("getEmployeeDailyStats", function(source, reply)
     local phoneNumber = Framework.GetPhoneNumber(source)
     if not identifier or not phoneNumber then return reply(false) end
 
-    local row = MySQL.single.await([[
-        SELECT
-            (
-                SELECT COUNT(*)
-                FROM phone_services_plus_requests r
-                WHERE r.company_id = ? AND r.employee_identifier = ?
-                  AND r.status = 'completed' AND r.updated_at >= CURDATE()
-            ) AS completed_requests,
-            (
-                SELECT COUNT(*)
-                FROM phone_services_plus_requests r
-                WHERE r.company_id = ? AND r.employee_identifier = ?
-                  AND r.status = 'completed'
-                  AND r.updated_at >= CURDATE() - INTERVAL 1 DAY
-                  AND r.updated_at < CURDATE()
-            ) AS yesterday_completed_requests,
-            (
-                SELECT COUNT(*)
-                FROM phone_services_plus_calls c
-                WHERE c.company_id = ? AND c.employee_number = ?
-                  AND c.state = 'answered' AND c.created_at >= CURDATE()
-            ) AS answered_calls,
-            (
-                SELECT COUNT(*)
-                FROM phone_services_plus_calls c
-                WHERE c.company_id = ? AND c.employee_number = ?
-                  AND c.state = 'answered'
-                  AND c.created_at >= CURDATE() - INTERVAL 1 DAY
-                  AND c.created_at < CURDATE()
-            ) AS yesterday_answered_calls,
-            (
-                SELECT COUNT(*)
-                FROM phone_services_plus_messages m
-                JOIN phone_services_plus_channels ch ON ch.id = m.channel_id
-                JOIN phone_services_plus_numbers n ON n.id = ch.number_id
-                WHERE n.company_id = ? AND m.sender_type = 'company'
-                  AND m.sender = ? AND m.created_at >= CURDATE()
-            ) AS sent_messages,
-            (
-                SELECT COUNT(*)
-                FROM phone_services_plus_messages m
-                JOIN phone_services_plus_channels ch ON ch.id = m.channel_id
-                JOIN phone_services_plus_numbers n ON n.id = ch.number_id
-                WHERE n.company_id = ? AND m.sender_type = 'company'
-                  AND m.sender = ?
-                  AND m.created_at >= CURDATE() - INTERVAL 1 DAY
-                  AND m.created_at < CURDATE()
-            ) AS yesterday_sent_messages
-    ]], {
-        company.id, identifier,
-        company.id, identifier,
-        company.id, phoneNumber,
-        company.id, phoneNumber,
-        company.id, phoneNumber,
-        company.id, phoneNumber,
-    }) or {}
+    local stats = emptyDailyStats()
+    local rows = getCompanyDailyStatRows(company.id)
+    for i = 1, #rows do
+        local row = rows[i]
+        if (row.owner_kind == "identifier" and row.owner_key == identifier)
+            or (row.owner_kind == "phone" and row.owner_key == phoneNumber) then
+            addDailyStat(stats, row)
+        end
+    end
 
-    reply({
-        completedRequests = tonumber(row.completed_requests) or 0,
-        yesterdayCompletedRequests = tonumber(row.yesterday_completed_requests) or 0,
-        answeredCalls = tonumber(row.answered_calls) or 0,
-        yesterdayAnsweredCalls = tonumber(row.yesterday_answered_calls) or 0,
-        sentMessages = tonumber(row.sent_messages) or 0,
-        yesterdaySentMessages = tonumber(row.yesterday_sent_messages) or 0,
-    })
+    reply(stats)
 end)
 
 RegisterCallback("companyLogout", function(source, reply)
@@ -935,7 +912,8 @@ RegisterCallback("sendMessage", function(source, reply, channelId, content)
     -- kept for logging/debugging, sender_type is what the UI actually uses.
     local senderType = isEmployee and "company" or "customer"
 
-    reply(Messages.Send(company, number, channel, senderNumber, senderType, content))
+    local senderIdentifier = isEmployee and Framework.GetIdentifier(source) or nil
+    reply(Messages.Send(company, number, channel, senderNumber, senderType, content, senderIdentifier))
 end)
 
 -- `beforeId`, not a page number (plan review round 5 §6): OFFSET-based
