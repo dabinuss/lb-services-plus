@@ -11,6 +11,8 @@
   --sp-bg-secondary: #121214;
   --sp-bg-highlight: rgb(28, 28, 30);
   --sp-separator: rgba(84, 84, 88, 0.4);
+  --sp-border-color: #000000;
+  --sp-border-default: 1px solid var(--sp-border-color);
 
   --sp-text-primary: #f2f2f7;
   --sp-text-secondary: #9a9a9e;
@@ -20,7 +22,7 @@
 [data-theme='light'] {
   --sp-bg-primary: #f2f2f7;
   --sp-bg-secondary: #ffffff;
-  --sp-bg-highlight: rgb(220, 220, 220);
+  --sp-bg-highlight: #e9e9ee;
   --sp-separator: rgba(60, 60, 67, 0.15);
 
   --sp-text-primary: #000000;

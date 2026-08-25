@@ -12,8 +12,8 @@
      reads fine on both light and dark surfaces). Used on cards instead of
      a flat filled rectangle being the only thing separating them from the
      screen background. */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
-  --shadow-md: 0 1px 2px rgba(0, 0, 0, 0.05), 0 4px 14px rgba(0, 0, 0, 0.08);
+  --shadow-sm: var(--sp-shadow-sm);
+  --shadow-md: var(--sp-shadow-md);
 }
 
 .app-body {
@@ -30,14 +30,14 @@
   flex-direction: column;
   /* lb-phone's own notch pill sits at top:1.2rem, height:2.25rem (ends at
      3.45rem) - 3.6rem clears it with a little room to spare. */
-  padding: var(--sp-safe-top) var(--sp-content-edge) 0.5rem;
+  padding: var(--sp-safe-top) var(--sp-content-edge) var(--sp-screen-bottom);
 }
 
 .screen-header {
   font-size: 1.7rem;
   font-weight: 700;
   letter-spacing: -0.02em;
-  margin-bottom: 0.8rem;
+  margin-bottom: var(--sp-space-3);
 }
 
 .main-tab-view,
@@ -69,7 +69,7 @@
   align-items: center;
   gap: 0.2rem;
   padding: 0.18rem;
-  border: 1px solid var(--sp-separator);
+  border: var(--sp-border-default);
   border-radius: 0.65rem;
   background: var(--sp-bg-highlight);
 }
@@ -119,10 +119,10 @@
 
 .nav-bar {
   display: flex;
-  border-top: 1px solid var(--sp-separator);
+  border-top: var(--sp-border-default);
   background: var(--sp-bg-secondary);
   padding-bottom: var(--sp-safe-bottom);
-  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05);
+  box-shadow: none;
 }
 
 .nav-item {
@@ -131,8 +131,9 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.15rem;
-  padding: 0.5rem 0 0.3rem;
+  min-height: var(--sp-nav-item-height);
+  gap: var(--sp-space-1);
+  padding: var(--sp-space-2) 0 var(--sp-space-1);
   color: var(--sp-text-secondary);
   transition: color 0.15s ease;
 }
@@ -770,7 +771,7 @@
   width: 100%;
   max-width: 18rem;
   padding: 1.35rem 1.15rem 1.05rem;
-  border: 1px solid var(--sp-separator);
+  border: var(--sp-border-default);
   border-radius: 1.25rem;
   background: var(--sp-bg-secondary);
   box-shadow: var(--shadow-md);
@@ -874,7 +875,7 @@
   width: 100%;
   margin-top: 0.25rem;
   padding: 0.7rem;
-  border: 1px solid var(--sp-separator);
+  border: var(--sp-border-default);
   border-radius: 0.8rem;
   background: var(--sp-bg-primary);
   text-align: left;
@@ -1921,6 +1922,233 @@
   flex-shrink: 0;
 }
 
+/* ------------------------------------------------------ shared visual system
+   Common surfaces deliberately live together here. This keeps semantically
+   equivalent rows from drifting into different radii, shadows and padding
+   as their individual screens evolve. Hero imagery, chat bubbles and status
+   pills remain intentional exceptions. */
+
+.search-input,
+.conversation-input input {
+  height: var(--sp-control-height);
+  border: var(--sp-border-default);
+  border-radius: var(--sp-radius-md);
+}
+
+.search-input:focus,
+.conversation-input input:focus {
+  border-color: var(--sp-border-color);
+  outline: 2px solid var(--sp-accent);
+  outline-offset: -2px;
+}
+
+.language-switcher,
+.category-group,
+.category-row.subtab-row {
+  border: var(--sp-border-default);
+  border-radius: var(--sp-radius-md);
+}
+
+.language-switcher button,
+.category-group .category-chip,
+.category-row.subtab-row .category-chip,
+.category-row.icon-only .category-chip,
+.category-row.icon-only .category-chip.all-btn {
+  border-radius: var(--sp-radius-sm);
+}
+
+.count-badge,
+.toggle,
+.toggle-knob,
+.message-day span {
+  border-radius: var(--sp-radius-pill);
+}
+
+.category-divider {
+  background: var(--sp-separator);
+}
+
+.company-card {
+  border: var(--sp-border-default);
+  border-radius: var(--sp-radius-lg);
+  box-shadow: var(--sp-shadow-sm);
+}
+
+.activity-row-open:focus-visible,
+.request-row-open:focus-visible,
+.activity-row:where(button):focus-visible {
+  border-radius: var(--sp-radius-md);
+}
+
+.request-row.status-active {
+  border-color: var(--sp-border-color);
+  outline: 2px solid var(--sp-accent);
+  outline-offset: -2px;
+}
+
+.company-banner {
+  padding: var(--sp-space-3);
+  gap: var(--sp-space-2);
+}
+
+.company-logo,
+.company-icon,
+.company-icon.small,
+.dashboard-logo {
+  border-radius: var(--sp-radius-md);
+}
+
+.company-action,
+.duty-card-actions .status-pill {
+  min-height: var(--sp-compact-control-height);
+  padding-block: var(--sp-space-2);
+}
+
+.activity-list,
+.company-list,
+.hotline-list,
+.request-list,
+.team-list,
+.number-list,
+.admin-list,
+.tab-panel {
+  gap: var(--sp-space-2);
+}
+
+.company-list,
+.activity-list,
+.settings-tab {
+  padding-bottom: var(--sp-screen-bottom);
+}
+
+.activity-row,
+.dashboard-row,
+.hotline-row,
+.request-row,
+.team-row,
+.number-row,
+.admin-row,
+.ceiling-item {
+  background: var(--sp-bg-secondary);
+  border: var(--sp-border-default);
+  border-radius: var(--sp-radius-md);
+  box-shadow: none;
+}
+
+.activity-row,
+.dashboard-row,
+.hotline-row,
+.request-row,
+.team-row,
+.number-row,
+.admin-row {
+  padding: var(--sp-space-3);
+  gap: var(--sp-space-2);
+}
+
+.activity-row {
+  border-bottom: var(--sp-border-default);
+}
+
+.dashboard-header:not(.has-bg),
+.duty-card,
+.login-card {
+  border: var(--sp-border-default);
+  border-radius: var(--sp-radius-lg);
+}
+
+.dashboard-header:not(.has-bg),
+.duty-card {
+  box-shadow: none;
+}
+
+.dashboard-header.has-bg {
+  border: 0;
+  border-radius: 0;
+}
+
+.duty-card-top {
+  padding: var(--sp-space-3);
+}
+
+.number-toggles .hotline-row {
+  background: var(--sp-bg-highlight);
+  border: 0;
+  border-radius: var(--sp-radius-sm);
+}
+
+.icon-button,
+.send-button {
+  width: var(--sp-compact-control-height);
+  height: var(--sp-compact-control-height);
+  border-radius: var(--sp-radius-sm);
+  box-shadow: none;
+}
+
+.login-button,
+.sheet-option,
+.sheet-cancel {
+  min-height: var(--sp-control-height);
+  border-radius: var(--sp-radius-md);
+}
+
+.login-button {
+  padding: var(--sp-space-2) var(--sp-space-4);
+  box-shadow: none;
+}
+
+.login-card {
+  gap: var(--sp-space-3);
+  padding: var(--sp-space-6) var(--sp-space-4) var(--sp-space-4);
+}
+
+.login-identity {
+  padding: var(--sp-space-3);
+  border-radius: var(--sp-radius-md);
+}
+
+.sheet {
+  gap: var(--sp-space-2);
+  padding: var(--sp-space-4) var(--sp-content-edge) var(--sp-safe-bottom);
+  border-radius: var(--sp-radius-lg) var(--sp-radius-lg) 0 0;
+}
+
+.sheet-section {
+  padding-top: var(--sp-space-3);
+  margin-top: var(--sp-space-1);
+  gap: var(--sp-space-2);
+}
+
+.sheet-option {
+  padding: var(--sp-space-2) var(--sp-space-3);
+  gap: var(--sp-space-2);
+}
+
+.request-action {
+  min-height: var(--sp-compact-control-height);
+  padding: var(--sp-space-1) var(--sp-space-3);
+  border-radius: var(--sp-radius-sm);
+}
+
+.message-day span {
+  border: var(--sp-border-default);
+  box-shadow: none;
+}
+
+.conversation-header {
+  padding: var(--sp-safe-top) var(--sp-content-edge) var(--sp-space-3);
+}
+
+.conversation-messages {
+  padding: var(--sp-space-3) var(--sp-content-edge);
+  gap: var(--sp-space-2);
+}
+
+.conversation-input {
+  gap: var(--sp-space-2);
+  padding: var(--sp-space-3) var(--sp-content-edge) var(--sp-chat-safe-bottom);
+}
+
 /* --------------------------------------------------------------- toast */
 
 /* A deliberate Save/Create/Delete used to just close its Sheet with no
@@ -1931,7 +2159,7 @@
 .toast {
   position: absolute;
   left: 50%;
-  bottom: 5rem;
+  bottom: calc(var(--sp-nav-item-height) + var(--sp-safe-bottom) + var(--sp-space-3));
   transform: translateX(-50%);
   z-index: 20;
 

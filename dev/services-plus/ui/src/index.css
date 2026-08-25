@@ -5,11 +5,43 @@
   -webkit-tap-highlight-color: transparent;
 }
 
+/* Product-wide invariant: every rendered border is pure black in both
+   themes. Components may still choose width/style or omit a border, but
+   they cannot introduce grey, white or semantic border colors. */
+*,
+*::before,
+*::after {
+  border-color: var(--sp-border-color, #000000) !important;
+}
+
 :root {
+  /* Shared 4px-based design scale. Components should use these instead of
+     introducing near-identical one-off spacing and radius values. */
+  --sp-space-1: 0.25rem;
+  --sp-space-2: 0.5rem;
+  --sp-space-3: 0.75rem;
+  --sp-space-4: 1rem;
+  --sp-space-6: 1.5rem;
+
+  --sp-radius-sm: 0.5rem;
+  --sp-radius-md: 0.75rem;
+  --sp-radius-lg: 1rem;
+  --sp-radius-pill: 999px;
+
+  --sp-control-height: 2.5rem;
+  --sp-compact-control-height: 2rem;
   --sp-content-edge: 1rem;
-  --sp-safe-top: max(3.6rem, calc(0.6rem + env(safe-area-inset-top, 0px)));
-  --sp-safe-bottom: max(1.2rem, env(safe-area-inset-bottom, 0px));
-  --sp-chat-safe-bottom: max(1.6rem, calc(0.6rem + env(safe-area-inset-bottom, 0px)));
+  --sp-screen-bottom: var(--sp-space-3);
+  --sp-safe-top: max(3.75rem, calc(0.75rem + env(safe-area-inset-top, 0px)));
+  /* LB Phone's home control occupies the bottom edge. Navigation, sheets,
+     login and chat controls all use the same clearance instead of each
+     guessing a different bottom padding. */
+  --sp-safe-bottom: max(1.65rem, calc(0.65rem + env(safe-area-inset-bottom, 0px)));
+  --sp-chat-safe-bottom: var(--sp-safe-bottom);
+  --sp-nav-item-height: 3.15rem;
+
+  --sp-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
+  --sp-shadow-md: 0 1px 2px rgba(0, 0, 0, 0.05), 0 4px 14px rgba(0, 0, 0, 0.08);
 }
 
 html,
