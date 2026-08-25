@@ -378,6 +378,84 @@ RegisterCallback("toggleHotline", function(source, reply, numberId, active)
     reply({ ok = true, hotlines = Employees.GetHotlineOptions(source, company.id) })
 end)
 
+local function attachTeamDailyStats(team, companyId)
+    local byIdentifier = {}
+    local byPhone = {}
+
+    for i = 1, #team do
+        local member = team[i]
+        member.dailyStats = {
+            completedRequests = 0,
+            yesterdayCompletedRequests = 0,
+            answeredCalls = 0,
+            yesterdayAnsweredCalls = 0,
+            sentMessages = 0,
+            yesterdaySentMessages = 0,
+        }
+        byIdentifier[Framework.GetIdentifier(member.memberId)] = member
+        if member.phoneNumber then byPhone[member.phoneNumber] = member end
+    end
+
+    if #team == 0 then return team end
+
+    -- One grouped query for the whole roster, not three queries per member.
+    -- Rows for former/off-duty employees are harmlessly ignored by the maps.
+    local rows = MySQL.query.await([[
+        SELECT 'requests' AS metric, r.employee_identifier AS owner_key,
+               SUM(r.updated_at >= CURDATE()) AS today_count,
+               SUM(r.updated_at >= CURDATE() - INTERVAL 1 DAY AND r.updated_at < CURDATE()) AS yesterday_count
+        FROM phone_services_plus_requests r
+        WHERE r.company_id = ? AND r.status = 'completed'
+          AND r.updated_at >= CURDATE() - INTERVAL 1 DAY
+          AND r.employee_identifier IS NOT NULL
+        GROUP BY r.employee_identifier
+
+        UNION ALL
+
+        SELECT 'calls' AS metric, c.employee_number AS owner_key,
+               SUM(c.created_at >= CURDATE()) AS today_count,
+               SUM(c.created_at >= CURDATE() - INTERVAL 1 DAY AND c.created_at < CURDATE()) AS yesterday_count
+        FROM phone_services_plus_calls c
+        WHERE c.company_id = ? AND c.state = 'answered'
+          AND c.created_at >= CURDATE() - INTERVAL 1 DAY
+          AND c.employee_number IS NOT NULL
+        GROUP BY c.employee_number
+
+        UNION ALL
+
+        SELECT 'messages' AS metric, m.sender AS owner_key,
+               SUM(m.created_at >= CURDATE()) AS today_count,
+               SUM(m.created_at >= CURDATE() - INTERVAL 1 DAY AND m.created_at < CURDATE()) AS yesterday_count
+        FROM phone_services_plus_messages m
+        JOIN phone_services_plus_channels ch ON ch.id = m.channel_id
+        JOIN phone_services_plus_numbers n ON n.id = ch.number_id
+        WHERE n.company_id = ? AND m.sender_type = 'company'
+          AND m.created_at >= CURDATE() - INTERVAL 1 DAY
+        GROUP BY m.sender
+    ]], { companyId, companyId, companyId }) or {}
+
+    for i = 1, #rows do
+        local row = rows[i]
+        local member = row.metric == "requests" and byIdentifier[row.owner_key] or byPhone[row.owner_key]
+        if member then
+            local today = tonumber(row.today_count) or 0
+            local yesterday = tonumber(row.yesterday_count) or 0
+            if row.metric == "requests" then
+                member.dailyStats.completedRequests = today
+                member.dailyStats.yesterdayCompletedRequests = yesterday
+            elseif row.metric == "calls" then
+                member.dailyStats.answeredCalls = today
+                member.dailyStats.yesterdayAnsweredCalls = yesterday
+            elseif row.metric == "messages" then
+                member.dailyStats.sentMessages = today
+                member.dailyStats.yesterdaySentMessages = yesterday
+            end
+        end
+    end
+
+    return team
+end
+
 RegisterCallback("getTeam", function(source, reply, companyId)
     local visibility = Config.SeeEmployees
     if visibility == "none" then return reply({}) end
@@ -407,7 +485,7 @@ RegisterCallback("getTeam", function(source, reply, companyId)
         return reply(publicTeam)
     end
 
-    reply(team)
+    reply(attachTeamDailyStats(team, company.id))
 end)
 
 -- ---------------------------------------------------------------------------
@@ -610,6 +688,84 @@ RegisterCallback("companyLogin", function(source, reply, companyId)
     -- with the NUI callback response.
     session.directoryCompany = Companies.GetPublicCompany(company.id) or false
     reply(session)
+end)
+
+-- Compact, personal "today" summary for the employee home card. Every
+-- value is derived from persistent operational data and scoped to both the
+-- authenticated employee and their current company.
+RegisterCallback("getEmployeeDailyStats", function(source, reply)
+    local company = Companies.GetForPlayer(source)
+    if not company or not Employees.IsLoggedIn(source, company.id) then return reply(false) end
+
+    local identifier = Framework.GetIdentifier(source)
+    local phoneNumber = Framework.GetPhoneNumber(source)
+    if not identifier or not phoneNumber then return reply(false) end
+
+    local row = MySQL.single.await([[
+        SELECT
+            (
+                SELECT COUNT(*)
+                FROM phone_services_plus_requests r
+                WHERE r.company_id = ? AND r.employee_identifier = ?
+                  AND r.status = 'completed' AND r.updated_at >= CURDATE()
+            ) AS completed_requests,
+            (
+                SELECT COUNT(*)
+                FROM phone_services_plus_requests r
+                WHERE r.company_id = ? AND r.employee_identifier = ?
+                  AND r.status = 'completed'
+                  AND r.updated_at >= CURDATE() - INTERVAL 1 DAY
+                  AND r.updated_at < CURDATE()
+            ) AS yesterday_completed_requests,
+            (
+                SELECT COUNT(*)
+                FROM phone_services_plus_calls c
+                WHERE c.company_id = ? AND c.employee_number = ?
+                  AND c.state = 'answered' AND c.created_at >= CURDATE()
+            ) AS answered_calls,
+            (
+                SELECT COUNT(*)
+                FROM phone_services_plus_calls c
+                WHERE c.company_id = ? AND c.employee_number = ?
+                  AND c.state = 'answered'
+                  AND c.created_at >= CURDATE() - INTERVAL 1 DAY
+                  AND c.created_at < CURDATE()
+            ) AS yesterday_answered_calls,
+            (
+                SELECT COUNT(*)
+                FROM phone_services_plus_messages m
+                JOIN phone_services_plus_channels ch ON ch.id = m.channel_id
+                JOIN phone_services_plus_numbers n ON n.id = ch.number_id
+                WHERE n.company_id = ? AND m.sender_type = 'company'
+                  AND m.sender = ? AND m.created_at >= CURDATE()
+            ) AS sent_messages,
+            (
+                SELECT COUNT(*)
+                FROM phone_services_plus_messages m
+                JOIN phone_services_plus_channels ch ON ch.id = m.channel_id
+                JOIN phone_services_plus_numbers n ON n.id = ch.number_id
+                WHERE n.company_id = ? AND m.sender_type = 'company'
+                  AND m.sender = ?
+                  AND m.created_at >= CURDATE() - INTERVAL 1 DAY
+                  AND m.created_at < CURDATE()
+            ) AS yesterday_sent_messages
+    ]], {
+        company.id, identifier,
+        company.id, identifier,
+        company.id, phoneNumber,
+        company.id, phoneNumber,
+        company.id, phoneNumber,
+        company.id, phoneNumber,
+    }) or {}
+
+    reply({
+        completedRequests = tonumber(row.completed_requests) or 0,
+        yesterdayCompletedRequests = tonumber(row.yesterday_completed_requests) or 0,
+        answeredCalls = tonumber(row.answered_calls) or 0,
+        yesterdayAnsweredCalls = tonumber(row.yesterday_answered_calls) or 0,
+        sentMessages = tonumber(row.sent_messages) or 0,
+        yesterdaySentMessages = tonumber(row.yesterday_sent_messages) or 0,
+    })
 end)
 
 RegisterCallback("companyLogout", function(source, reply)

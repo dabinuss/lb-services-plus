@@ -56,7 +56,7 @@ export default function CallsTab({ refreshToken }) {
             <div className="activity-meta">
               <span className="activity-time">{formatRelativeTime(entry.created_at)}</span>
               <button
-                className="icon-button subtle"
+                className="icon-button call"
                 onClick={(e) => {
                   e.stopPropagation()
                   callBack(entry)

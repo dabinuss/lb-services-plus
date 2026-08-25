@@ -317,6 +317,10 @@ RegisterNUICallback("getTeam", function(data, cb)
     cb(bridge("getTeam", data and data.companyId))
 end)
 
+RegisterNUICallback("getEmployeeDailyStats", function(_, cb)
+    cb(bridge("getEmployeeDailyStats"))
+end)
+
 RegisterNUICallback("getCompanyConversations", function(data, cb)
     cb(bridge("getCompanyConversations", data.cursor))
 end)

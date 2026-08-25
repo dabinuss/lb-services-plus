@@ -16,7 +16,7 @@ const STATUSES = [
 ]
 
 // Duty, status and hotlines (plan §19-23).
-export default function DashboardHome({ initialOnDuty, initialStatus, employeeMemberId, employeeName, employeeRankTitle, onLogout, teamUpdate }) {
+export default function DashboardHome({ active, initialOnDuty, initialStatus, employeeMemberId, employeeName, employeeRankTitle, onLogout, teamUpdate }) {
   const { t } = useI18n()
   const [onDuty, setOnDuty] = useState(initialOnDuty)
   const [status, setStatus] = useState(initialStatus)
@@ -24,6 +24,7 @@ export default function DashboardHome({ initialOnDuty, initialStatus, employeeMe
   const [notice, setNotice] = useState('')
   const [team, setTeam] = useState(null)
   const [teamSearch, setTeamSearch] = useState('')
+  const [dailyStats, setDailyStats] = useState(null)
   const [statusSaving, setStatusSaving] = useState(false)
   const statusLock = useRef(false)
   const [dutySaving, setDutySaving] = useState(false)
@@ -33,8 +34,19 @@ export default function DashboardHome({ initialOnDuty, initialStatus, employeeMe
 
   useEffect(() => {
     fetchNui('getHotlines').then((result) => result && setHotlines(result))
-    fetchNui('getTeam').then((result) => result && setTeam(result))
   }, [])
+
+  useEffect(() => {
+    if (!active) return
+    let current = true
+    fetchNui('getEmployeeDailyStats')
+      .then((result) => current && result && setDailyStats(result))
+      .catch(() => {})
+    fetchNui('getTeam')
+      .then((result) => current && result && setTeam(result))
+      .catch(() => {})
+    return () => { current = false }
+  }, [active])
 
   // A colleague's own status/hotline/duty change, pushed in real time
   // instead of only ever reflecting what getTeam() returned at mount (plan
@@ -52,7 +64,7 @@ export default function DashboardHome({ initialOnDuty, initialStatus, employeeMe
     setTeam((prev) => {
       if (!prev) return prev
       if (teamUpdate.removed) return prev.filter((m) => !matches(m))
-      return prev.some(matches) ? prev.map((m) => (matches(m) ? teamUpdate : m)) : [...prev, teamUpdate]
+      return prev.some(matches) ? prev.map((m) => (matches(m) ? { ...m, ...teamUpdate } : m)) : [...prev, teamUpdate]
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [teamUpdate])
@@ -158,6 +170,31 @@ export default function DashboardHome({ initialOnDuty, initialStatus, employeeMe
         </div>
 
         {onDuty && (
+          <div className="duty-success" aria-label={`${t('Today')} (${t('Yesterday')})`}>
+            <div className="duty-success-title">
+              {t('Today')} <span>({t('Yesterday')})</span>
+            </div>
+            <div className="duty-success-stats">
+              <div className="duty-success-item" title={t('Requests')}>
+                <Icon name="check" size={13} />
+                <strong>{dailyStats?.completedRequests ?? '—'}</strong>
+                <small>({dailyStats?.yesterdayCompletedRequests ?? '—'})</small>
+              </div>
+              <div className="duty-success-item" title={t('Calls')}>
+                <Icon name="phone" size={13} />
+                <strong>{dailyStats?.answeredCalls ?? '—'}</strong>
+                <small>({dailyStats?.yesterdayAnsweredCalls ?? '—'})</small>
+              </div>
+              <div className="duty-success-item" title={t('Messages')}>
+                <Icon name="message" size={13} />
+                <strong>{dailyStats?.sentMessages ?? '—'}</strong>
+                <small>({dailyStats?.yesterdaySentMessages ?? '—'})</small>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {onDuty && (
           <div className="duty-card-actions">
             {STATUSES.map((s) => (
               <button
@@ -211,10 +248,32 @@ export default function DashboardHome({ initialOnDuty, initialStatus, employeeMe
             )}
             {visibleTeam?.map((member) => (
               <div key={member.memberId} className="team-row">
+                <div className="company-icon small team-avatar" aria-hidden="true">
+                  {member.name?.trim()?.[0]?.toUpperCase() || '?'}
+                </div>
                 <div className="team-row-main">
                   <div className="team-info">
                     <div className="team-name">{member.name}</div>
                     <div className="team-grade">{member.gradeLabel}</div>
+                    {member.dailyStats && (
+                      <div className="team-performance" aria-label={`${t('Today')} (${t('Yesterday')})`}>
+                        <span title={t('Requests')}>
+                          <Icon name="check" size={10} />
+                          <strong>{member.dailyStats.completedRequests}</strong>
+                          <small>({member.dailyStats.yesterdayCompletedRequests})</small>
+                        </span>
+                        <span title={t('Calls')}>
+                          <Icon name="phone" size={10} />
+                          <strong>{member.dailyStats.answeredCalls}</strong>
+                          <small>({member.dailyStats.yesterdayAnsweredCalls})</small>
+                        </span>
+                        <span title={t('Messages')}>
+                          <Icon name="message" size={10} />
+                          <strong>{member.dailyStats.sentMessages}</strong>
+                          <small>({member.dailyStats.yesterdaySentMessages})</small>
+                        </span>
+                      </div>
+                    )}
                   </div>
                   <div className="team-meta">
                     <span className={`status-pill ${member.status} static`}>{t(member.status)}</span>

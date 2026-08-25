@@ -86,6 +86,7 @@ export default function CompanyDashboard({
       <div className="dashboard-body">
         {visitedTabs.has('home') && (
           <div className={`subtab-view${tab === 'home' ? ' active' : ''}`}><DashboardHome
+            active={tab === 'home'}
             companyId={employee.companyId}
             initialOnDuty={employee.onDuty}
             initialStatus={employee.status}

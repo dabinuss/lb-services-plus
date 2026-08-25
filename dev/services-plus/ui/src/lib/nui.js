@@ -320,10 +320,10 @@ let fixtureHotlines = [
 // that needs filling out. A few members with varied grade/status/hotlines
 // to actually exercise the search bar and list.
 const fixtureTeam = [
-  { memberId: 1, name: 'Dabi', gradeLabel: 'Boss', status: 'available', hotlines: ['Main Hotline'], phoneNumber: '5559001' },
-  { memberId: 2, name: 'John', gradeLabel: 'Worker', status: 'busy', hotlines: ['Main Hotline', 'Workshop'], phoneNumber: '5559002' },
-  { memberId: 3, name: 'Mia Torres', gradeLabel: 'Senior Mechanic', status: 'pause', hotlines: ['Workshop'], phoneNumber: '5559003' },
-  { memberId: 4, name: 'Tom Reyes', gradeLabel: 'Mechanic', status: 'available', hotlines: ['Main Hotline'], phoneNumber: '5559004' },
+  { memberId: 1, name: 'Dabi', gradeLabel: 'Boss', status: 'available', hotlines: ['Main Hotline'], phoneNumber: '5559001', dailyStats: { completedRequests: 12, yesterdayCompletedRequests: 9, answeredCalls: 8, yesterdayAnsweredCalls: 11, sentMessages: 24, yesterdaySentMessages: 18 } },
+  { memberId: 2, name: 'John', gradeLabel: 'Worker', status: 'busy', hotlines: ['Main Hotline', 'Workshop'], phoneNumber: '5559002', dailyStats: { completedRequests: 8, yesterdayCompletedRequests: 10, answeredCalls: 5, yesterdayAnsweredCalls: 7, sentMessages: 16, yesterdaySentMessages: 12 } },
+  { memberId: 3, name: 'Mia Torres', gradeLabel: 'Senior Mechanic', status: 'pause', hotlines: ['Workshop'], phoneNumber: '5559003', dailyStats: { completedRequests: 15, yesterdayCompletedRequests: 13, answeredCalls: 9, yesterdayAnsweredCalls: 6, sentMessages: 20, yesterdaySentMessages: 22 } },
+  { memberId: 4, name: 'Tom Reyes', gradeLabel: 'Mechanic', status: 'available', hotlines: ['Main Hotline'], phoneNumber: '5559004', dailyStats: { completedRequests: 4, yesterdayCompletedRequests: 6, answeredCalls: 3, yesterdayAnsweredCalls: 2, sentMessages: 9, yesterdaySentMessages: 8 } },
 ]
 
 let fixtureServiceSettings = { activeRequestDisconnectGraceMinutes: 5 }
@@ -456,6 +456,12 @@ async function fetchNuiFixture(action, data) {
       return fixtures.bootstrap
     case 'getUnreadCounts':
       return fixtures.bootstrap.unread
+    case 'getEmployeeDailyStats':
+      return {
+        completedRequests: 12, yesterdayCompletedRequests: 9,
+        answeredCalls: 8, yesterdayAnsweredCalls: 11,
+        sentMessages: 24, yesterdaySentMessages: 18,
+      }
     case 'setLocale':
     case 'markRead':
       return true

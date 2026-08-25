@@ -1114,6 +1114,66 @@
   border-top: 1px solid var(--sp-separator);
 }
 
+.duty-success {
+  border-top: var(--sp-border-default);
+  background: var(--sp-bg-highlight);
+}
+
+.duty-success-title {
+  padding: 0.3rem var(--sp-space-3) 0.08rem;
+  color: var(--sp-text-secondary);
+  font-size: 0.58rem;
+  font-weight: var(--sp-weight-bold);
+  line-height: 1.2;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.duty-success-title span {
+  color: var(--sp-text-tertiary);
+  font-weight: var(--sp-weight-medium);
+}
+
+.duty-success-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  padding-bottom: 0.18rem;
+}
+
+.duty-success-item {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 0.34rem 0.2rem 0.48rem;
+  color: var(--sp-accent);
+}
+
+.duty-success-item + .duty-success-item {
+  border-left: var(--sp-border-default);
+}
+
+.duty-success-item strong {
+  min-width: 1rem;
+  color: var(--sp-text-primary);
+  font-size: 0.86rem;
+  font-weight: var(--sp-weight-bold);
+  line-height: 1;
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+}
+
+.duty-success-item small {
+  min-width: 1rem;
+  color: var(--sp-text-tertiary);
+  font-size: 0.64rem;
+  font-weight: var(--sp-weight-medium);
+  line-height: 1;
+  text-align: left;
+}
+
 .duty-card-actions .status-pill {
   flex: 1;
   display: flex;
@@ -1732,6 +1792,46 @@
 .team-grade {
   font-size: 0.72rem;
   color: var(--sp-text-secondary);
+}
+
+.team-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.team-performance {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.28rem;
+}
+
+.team-performance > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.16rem;
+  color: var(--sp-accent);
+  line-height: 1;
+}
+
+.team-performance strong {
+  color: var(--sp-text-primary);
+  font-size: 0.63rem;
+  font-weight: var(--sp-weight-bold);
+  font-variant-numeric: tabular-nums;
+}
+
+.team-performance small {
+  color: var(--sp-text-tertiary);
+  font-size: 0.55rem;
+  font-weight: var(--sp-weight-medium);
+  font-variant-numeric: tabular-nums;
+}
+
+.team-avatar {
+  color: var(--sp-text-primary);
+  font-size: var(--sp-text-body);
+  font-weight: var(--sp-weight-bold);
 }
 
 .team-meta {
@@ -2460,6 +2560,46 @@ button:disabled {
 .hotline-list,
 .number-list {
   padding-bottom: var(--sp-screen-bottom);
+}
+
+/* List-card normalization: optional actions must not make a row taller.
+   Calls use the same filled action everywhere; quieter destructive/archive
+   actions keep their tone but share the exact same control geometry. */
+.activity-row,
+.team-row {
+  min-height: 4.25rem;
+}
+
+.activity-meta {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--sp-space-2);
+  flex-shrink: 0;
+}
+
+.activity-time {
+  white-space: nowrap;
+}
+
+.icon-button.call,
+.icon-button.subtle {
+  width: var(--sp-compact-control-height);
+  height: var(--sp-compact-control-height);
+  min-width: var(--sp-compact-control-height);
+  min-height: var(--sp-compact-control-height);
+  border: var(--sp-border-default);
+  border-radius: var(--sp-radius-sm);
+  box-shadow: none;
+}
+
+.icon-button.call {
+  background: var(--sp-success);
+  color: #fff;
+}
+
+.icon-button.subtle {
+  background: var(--sp-bg-highlight);
+  color: var(--sp-text-secondary);
 }
 
 /* --------------------------------------------------------------- toast */
