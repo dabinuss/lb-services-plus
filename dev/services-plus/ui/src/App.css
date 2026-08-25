@@ -2149,6 +2149,319 @@
   padding: var(--sp-space-3) var(--sp-content-edge) var(--sp-chat-safe-bottom);
 }
 
+/* ------------------------------------------------ unified component language
+   The photo layers used by company cards and the company dashboard are not
+   part of this normalization. Their background, blur and scrim rules above
+   stay untouched; only the controls and content around them share this UI
+   language. */
+
+/* Five deliberate type levels replace component-specific near duplicates. */
+.screen-header {
+  font-size: var(--sp-text-page);
+  font-weight: var(--sp-weight-bold);
+  line-height: 1.15;
+}
+
+.dashboard-company,
+.login-title,
+.request-form-title {
+  font-size: var(--sp-text-title);
+  font-weight: var(--sp-weight-bold);
+  line-height: 1.3;
+}
+
+.company-name,
+.dashboard-label,
+.request-type,
+.team-name,
+.admin-row-title,
+.hotline-label {
+  font-size: var(--sp-text-body);
+  font-weight: var(--sp-weight-medium);
+  line-height: 1.35;
+}
+
+.category-chip,
+.company-action,
+.sheet-option,
+.sheet-cancel,
+.status-pill,
+.request-action,
+.form-field-label,
+.section-title {
+  font-size: var(--sp-text-label);
+  font-weight: var(--sp-weight-medium);
+  line-height: 1.25;
+}
+
+.company-subtitle,
+.last-message,
+.activity-time,
+.dashboard-row-sub,
+.form-field-hint,
+.hint,
+.request-meta,
+.request-status,
+.team-grade,
+.team-hotlines,
+.hotline-number,
+.admin-row-meta,
+.sheet-option-number {
+  font-size: var(--sp-text-caption);
+  line-height: 1.4;
+}
+
+.section-title {
+  margin: var(--sp-space-3) 0 0;
+  letter-spacing: 0.06em;
+  font-weight: var(--sp-weight-bold);
+}
+
+/* Equivalent cards and rows always use the same geometry. */
+.company-card,
+.dashboard-header:not(.has-bg),
+.duty-card,
+.login-card {
+  border: var(--sp-border-default);
+  border-radius: var(--sp-radius-lg);
+  box-shadow: none;
+}
+
+.activity-row,
+.dashboard-row,
+.hotline-row,
+.request-row,
+.team-row,
+.number-row,
+.admin-row,
+.ceiling-item,
+.notice,
+.empty-state {
+  border: var(--sp-border-default);
+  border-radius: var(--sp-radius-md);
+  background: var(--sp-bg-secondary);
+  box-shadow: none;
+}
+
+.activity-row,
+.dashboard-row,
+.hotline-row,
+.request-row,
+.team-row,
+.number-row,
+.admin-row {
+  min-height: var(--sp-control-height);
+  padding: var(--sp-space-3);
+  gap: var(--sp-space-2);
+}
+
+/* A consistent action hierarchy: filled primary, surfaced secondary,
+   red-text destructive. Every variant shares height, radius and border. */
+.login-button,
+.send-button,
+.request-action.accept {
+  border: var(--sp-border-default);
+  border-radius: var(--sp-radius-sm);
+  background: var(--sp-accent);
+  color: #fff;
+}
+
+.sheet-option,
+.load-more,
+.request-action.complete,
+.icon-button,
+.search-clear {
+  border: var(--sp-border-default);
+  border-radius: var(--sp-radius-sm);
+  background: var(--sp-bg-highlight);
+  color: var(--sp-text-primary);
+}
+
+.sheet-option {
+  color: var(--sp-accent);
+}
+
+.sheet-cancel,
+.request-action.cancel,
+.icon-button.logout {
+  border: var(--sp-border-default);
+  border-radius: var(--sp-radius-sm);
+  background: var(--sp-bg-highlight);
+  color: var(--sp-danger);
+}
+
+.login-button,
+.sheet-option,
+.sheet-cancel,
+.load-more {
+  min-height: var(--sp-control-height);
+  padding: var(--sp-space-2) var(--sp-space-3);
+}
+
+.company-action,
+.status-pill,
+.request-action,
+.icon-button,
+.send-button {
+  min-height: var(--sp-compact-control-height);
+}
+
+.company-action,
+.duty-card-actions .status-pill {
+  border-radius: 0;
+}
+
+button:disabled {
+  opacity: var(--sp-disabled-opacity);
+}
+
+/* Selected controls keep their black border and use fill/outline for state. */
+.category-chip.active,
+.language-switcher button.active,
+.nav-item.active {
+  font-weight: var(--sp-weight-bold);
+}
+
+.category-chip.active,
+.language-switcher button.active {
+  outline: 2px solid var(--sp-accent);
+  outline-offset: -2px;
+}
+
+.status-pill.active {
+  outline: 2px solid currentColor;
+  outline-offset: -2px;
+  font-weight: var(--sp-weight-bold);
+}
+
+/* Status colors are semantic and reused everywhere. */
+.company-status-dot.available,
+.toggle.on {
+  background: var(--sp-status-success);
+}
+
+.company-status-dot.unavailable {
+  background: var(--sp-status-muted);
+}
+
+.status-pill-icon.available,
+.status-pill.available.static,
+.call-state.answered {
+  color: var(--sp-status-success);
+}
+
+.status-pill-icon.pause,
+.status-pill.pause.static,
+.call-state.ringing,
+.notice {
+  color: var(--sp-status-warning);
+}
+
+.status-pill-icon.busy,
+.status-pill.busy.static,
+.call-state.missed {
+  color: var(--sp-status-danger);
+}
+
+/* Inputs, labels and help/error copy use one form rhythm. */
+.form-field {
+  gap: var(--sp-space-2);
+}
+
+.form-field-hint {
+  margin-top: calc(-1 * var(--sp-space-1));
+}
+
+.search-input,
+.conversation-input input {
+  margin-bottom: 0;
+  padding-inline: var(--sp-space-3);
+  font-size: var(--sp-text-body);
+}
+
+.search-field {
+  margin-bottom: var(--sp-space-3);
+}
+
+/* Empty, error and loading areas read as the same kind of state panel. */
+.empty-state {
+  width: 100%;
+  min-height: 5.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-space-4);
+  color: var(--sp-text-secondary);
+  font-size: var(--sp-text-body);
+  line-height: 1.5;
+}
+
+.empty-state.loading-state {
+  flex-direction: column;
+  gap: var(--sp-space-2);
+}
+
+.empty-state.loading-state::before {
+  content: '';
+  width: var(--sp-icon-lg);
+  height: var(--sp-icon-lg);
+  border: 2px solid #000;
+  border-radius: var(--sp-radius-pill);
+  background: var(--sp-accent);
+  box-shadow: inset 0 0 0 0.25rem var(--sp-bg-secondary);
+  animation: sp-pulse 0.8s ease-in-out infinite alternate;
+}
+
+.list-error {
+  min-height: var(--sp-control-height);
+  padding: var(--sp-space-3);
+  font-size: var(--sp-text-body);
+}
+
+.list-error button {
+  min-height: var(--sp-compact-control-height);
+  padding: var(--sp-space-1) var(--sp-space-2);
+  border: var(--sp-border-default);
+  border-radius: var(--sp-radius-sm);
+  background: var(--sp-bg-highlight);
+}
+
+@keyframes sp-pulse {
+  to { transform: scale(0.78); opacity: 0.55; }
+}
+
+/* Icons use three predictable visual sizes according to their context. */
+.company-action-icon,
+.sheet-option-icon,
+.request-action svg,
+.icon-button svg,
+.send-button svg {
+  width: var(--sp-icon-sm);
+  height: var(--sp-icon-sm);
+  flex-shrink: 0;
+}
+
+.nav-icon,
+.category-chip svg,
+.back-button svg {
+  width: var(--sp-icon-lg);
+  height: var(--sp-icon-lg);
+}
+
+/* Every scrollable page receives identical final clearance above the
+   phone home control/navigation, including admin and dashboard tabs. */
+.company-list,
+.activity-list,
+.settings-tab,
+.tab-panel,
+.admin-list,
+.request-list,
+.team-list,
+.hotline-list,
+.number-list {
+  padding-bottom: var(--sp-screen-bottom);
+}
+
 /* --------------------------------------------------------------- toast */
 
 /* A deliberate Save/Create/Delete used to just close its Sheet with no

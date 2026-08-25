@@ -77,7 +77,7 @@ export default function RequestSheet({ company, onClose }) {
 
   return (
     <Sheet title={t('Request · {company}', { company: company.name })} onClose={onClose}>
-      {types === null && <div className="empty-state">{t('Loading request options…')}</div>}
+      {types === null && <div className="empty-state loading-state" aria-busy="true">{t('Loading request options…')}</div>}
 
       {loadError && (
         <div className="request-recovery">
@@ -128,7 +128,7 @@ export default function RequestSheet({ company, onClose }) {
         </div>
       )}
 
-      {state === 'sending' && <div className="empty-state">{t('Sending…')}</div>}
+      {state === 'sending' && <div className="empty-state loading-state" aria-busy="true">{t('Sending…')}</div>}
       {state === 'sent' && <div className="empty-state">{t('Request sent!')}</div>}
       {state === 'queued' && <div className="empty-state">{t('Nobody available right now - request queued, check Activity later.')}</div>}
       {state === 'failed' && (

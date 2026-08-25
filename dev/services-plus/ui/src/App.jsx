@@ -287,7 +287,7 @@ export default function App() {
   }
 
   const content = !bootstrap ? (
-    <div className="empty-state">{t('Loading Services+…')}</div>
+    <div className="empty-state loading-state" aria-busy="true">{t('Loading Services+…')}</div>
   ) : (
     <>
       {visitedTabs.has('services') && (

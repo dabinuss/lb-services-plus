@@ -179,7 +179,7 @@ export default function DashboardHome({ initialOnDuty, initialStatus, employeeMe
         <>
           <div className="section-title">{t('Hotlines')}</div>
           <div className="hotline-list">
-            {hotlines === null && <div className="empty-state">{t('Loading hotlines…')}</div>}
+            {hotlines === null && <div className="empty-state loading-state" aria-busy="true">{t('Loading hotlines…')}</div>}
             {hotlines?.map((line) => (
               <div key={line.numberId} className="hotline-row">
                 <div className="hotline-info">
@@ -203,7 +203,7 @@ export default function DashboardHome({ initialOnDuty, initialStatus, employeeMe
             clearLabel={t('Clear team search')}
           />
           <div className="team-list">
-            {team === null && <div className="empty-state">{t('Loading team…')}</div>}
+            {team === null && <div className="empty-state loading-state" aria-busy="true">{t('Loading team…')}</div>}
             {team !== null && visibleTeam.length === 0 && (
               <div className="empty-state">
                 {t(teamSearch.trim() ? 'No colleague matches that search.' : 'No colleagues on duty right now.')}

@@ -87,7 +87,7 @@ export default function RequestTypesTab() {
         {t('+ New request type')}
       </button>
 
-      {types === null && <div className="empty-state">{t('Loading request types…')}</div>}
+      {types === null && <div className="empty-state loading-state" aria-busy="true">{t('Loading request types…')}</div>}
 
       <div className="admin-list">
         {types?.map((type) => (

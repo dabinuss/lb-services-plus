@@ -35,7 +35,7 @@ export default function CallsTab({ refreshToken }) {
 
   return (
     <div className="tab-panel">
-      {entries === null && <div className="empty-state">{t('Loading your calls…')}</div>}
+      {entries === null && <div className="empty-state loading-state" aria-busy="true">{t('Loading your calls…')}</div>}
       {error && <ListError onRetry={reload} />}
       {!error && entries !== null && entries.length === 0 && (
         <div className="empty-state">{t('No calls yet. Call a company from Services to see it here.')}</div>

@@ -5,6 +5,14 @@
   --sp-danger: #ff453a;
   --sp-success: #30d158;
   --sp-warning: #ff9f0a;
+  --sp-info: #0a84ff;
+
+  --sp-status-success: var(--sp-success);
+  --sp-status-warning: var(--sp-warning);
+  --sp-status-danger: var(--sp-danger);
+  --sp-status-info: var(--sp-info);
+  --sp-status-muted: var(--sp-text-tertiary);
+  --sp-disabled-opacity: 0.48;
 
   /* Default to dark mode tokens if LB Phone passes an unknown custom theme */
   --sp-bg-primary: #010101; /* Prevent FiveM CEF pure-black chroma-key transparency bug */

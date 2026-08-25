@@ -23,7 +23,7 @@ export default function SettingsTab() {
     fetchNui('getCompanySettings').then((r) => r && setSettings(r))
   }, [])
 
-  if (!settings) return <div className="tab-panel empty-state">{t('Loading settings…')}</div>
+  if (!settings) return <div className="tab-panel empty-state loading-state" aria-busy="true">{t('Loading settings…')}</div>
 
   // Every toggle/chip here saves itself immediately - the control's own
   // visual state is the feedback for a normal save. A failed save used to

@@ -92,7 +92,7 @@ export default function RequestsTab({ refresh }) {
 
   return (
     <div className="tab-panel">
-      {requests === null && <div className="empty-state">{t('Loading requests…')}</div>}
+      {requests === null && <div className="empty-state loading-state" aria-busy="true">{t('Loading requests…')}</div>}
       {error && <ListError onRetry={reload} />}
       {!error && requests !== null && requests.length === 0 && (
         <div className="empty-state">{t('No requests yet. New customer requests will show up here.')}</div>

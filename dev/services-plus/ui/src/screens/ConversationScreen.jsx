@@ -168,12 +168,12 @@ export default function ConversationScreen({ target, incoming, onClose }) {
       </div>
 
       <div className="conversation-messages" ref={listRef} onScroll={onScroll}>
-        {messages === null && <div className="empty-state">{t('Loading messages…')}</div>}
+        {messages === null && <div className="empty-state loading-state" aria-busy="true">{t('Loading messages…')}</div>}
         {loadError && <div className="empty-state">{t(loadError)}</div>}
         {!loadError && messages !== null && !messagesEnabled && (
           <div className="empty-state">{t('Messages are disabled for this phone number.')}</div>
         )}
-        {loadingOlder && <div className="empty-state">{t('Loading older messages…')}</div>}
+        {loadingOlder && <div className="empty-state loading-state" aria-busy="true">{t('Loading older messages…')}</div>}
         {messages?.map((m, index) => {
           const mine = viewerRole === 'employee' ? m.sender_type === 'company' : m.sender_type === 'customer'
           const day = formatMessageDay(m.created_at)

@@ -203,7 +203,7 @@ export default function CompaniesTab() {
         {t('+ New company')}
       </button>
 
-      {companies === null && <div className="empty-state">{t('Loading companies…')}</div>}
+      {companies === null && <div className="empty-state loading-state" aria-busy="true">{t('Loading companies…')}</div>}
 
       <div className="admin-list">
         {companies?.map((c) => (

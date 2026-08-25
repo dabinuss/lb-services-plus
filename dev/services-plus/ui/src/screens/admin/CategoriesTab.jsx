@@ -72,7 +72,7 @@ export default function CategoriesTab() {
         {t('+ New category')}
       </button>
 
-      {categories === null && <div className="empty-state">{t('Loading categories…')}</div>}
+      {categories === null && <div className="empty-state loading-state" aria-busy="true">{t('Loading categories…')}</div>}
       {notice && <div className="notice">{notice}</div>}
 
       <div className="admin-list">

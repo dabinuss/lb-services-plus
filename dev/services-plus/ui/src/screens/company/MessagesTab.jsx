@@ -24,7 +24,7 @@ export default function MessagesTab({ onOpenConversation, onReadConversation, re
 
   return (
     <div className="tab-panel">
-      {conversations === null && <div className="empty-state">{t('Loading conversations…')}</div>}
+      {conversations === null && <div className="empty-state loading-state" aria-busy="true">{t('Loading conversations…')}</div>}
       {error && <ListError onRetry={reload} />}
       {!error && conversations !== null && conversations.length === 0 && (
         <div className="empty-state">{t('No conversations yet. Customer messages will show up here.')}</div>

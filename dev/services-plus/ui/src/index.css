@@ -21,6 +21,7 @@
   --sp-space-2: 0.5rem;
   --sp-space-3: 0.75rem;
   --sp-space-4: 1rem;
+  --sp-space-5: 1.25rem;
   --sp-space-6: 1.5rem;
 
   --sp-radius-sm: 0.5rem;
@@ -29,7 +30,19 @@
   --sp-radius-pill: 999px;
 
   --sp-control-height: 2.5rem;
-  --sp-compact-control-height: 2rem;
+  --sp-compact-control-height: 2.25rem;
+  --sp-icon-sm: 1rem;
+  --sp-icon-md: 1.125rem;
+  --sp-icon-lg: 1.25rem;
+
+  --sp-text-caption: 0.68rem;
+  --sp-text-label: 0.75rem;
+  --sp-text-body: 0.82rem;
+  --sp-text-title: 0.95rem;
+  --sp-text-page: 1.7rem;
+  --sp-weight-regular: 400;
+  --sp-weight-medium: 600;
+  --sp-weight-bold: 700;
   --sp-content-edge: 1rem;
   --sp-screen-bottom: var(--sp-space-3);
   --sp-safe-top: max(3.75rem, calc(0.75rem + env(safe-area-inset-top, 0px)));
@@ -70,6 +83,11 @@ button {
   transition: transform 0.12s ease, opacity 0.12s ease, background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 
+button:focus-visible {
+  outline: 2px solid var(--sp-accent);
+  outline-offset: 2px;
+}
+
 /* A little tactile press feedback on every button in the app for free -
    one rule instead of hand-tuning it per component. */
 button:active:not(:disabled) {
@@ -78,6 +96,7 @@ button:active:not(:disabled) {
 
 button:disabled {
   cursor: default;
+  opacity: var(--sp-disabled-opacity, 0.48);
 }
 
 ::-webkit-scrollbar {
