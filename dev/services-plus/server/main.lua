@@ -587,6 +587,17 @@ RegisterCallback("companyLogin", function(source, reply, companyId)
         return reply(false)
     end
 
+    -- A successful portal login must also make the employee reachable.
+    -- Previously login could succeed while framework duty was still off or
+    -- the Services+ status was Busy/Pause, leaving the dashboard logged in
+    -- while the public company stayed unavailable.
+    if not Framework.GetOnDuty(source) then
+        if not Framework.SetDuty(source, true) then return reply(false) end
+        Framework.RefreshDuty(source)
+        if not Framework.GetOnDuty(source) then return reply(false) end
+    end
+
+    Employees.SetStatus(source, "available")
     Employees.SetCompanySession(source, company.id, phoneNumber)
     Employees.SyncMainHotline(job.name)
     Employees.BroadcastStateChanged(source)

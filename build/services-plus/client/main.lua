@@ -6,6 +6,19 @@
 ]]
 
 local resourceName = GetCurrentResourceName()
+local ACTIVE_COMPANY_KVP = "servicesPlusActiveCompany"
+
+local function getActiveCompanyId()
+    return tonumber(GetResourceKvpString(ACTIVE_COMPANY_KVP))
+end
+
+local function setActiveCompanyId(companyId)
+    SetResourceKvp(ACTIVE_COMPANY_KVP, tostring(companyId))
+end
+
+local function clearActiveCompanyId()
+    DeleteResourceKvp(ACTIVE_COMPANY_KVP)
+end
 
 local function registerApp()
     local added, errorMessage = exports["lb-phone"]:AddCustomApp({
@@ -149,12 +162,36 @@ local function syncNativeCompanyCalls(result)
     end)
 end
 
+-- The server-side employee session is intentionally short-lived, while an
+-- already-open LB Phone iframe can survive a Services+ resource restart.
+-- Restore the remembered session after restart through the normal,
+-- server-authoritative login checks so UI and routing cannot drift apart.
+CreateThread(function()
+    while GetResourceState("lb-phone") ~= "started" do Wait(500) end
+    Wait(1000)
+
+    local companyId = getActiveCompanyId()
+    if not companyId then return end
+
+    local result = bridge("companyLogin", companyId)
+    if result and result.employee then
+        syncNativeCompanyCalls(result.employee)
+    else
+        clearActiveCompanyId()
+    end
+end)
+
 -- Framework-side duty/job changes can happen without going through this
 -- app's NUI callbacks. The server pushes the resulting employee snapshot so
 -- native company calls and an already-open app both follow those external
 -- changes immediately, without polling.
 RegisterNetEvent("services-plus:client:employeeDutyChanged", function(payload)
     local employee = type(payload) == "table" and payload.employee or nil
+
+    if not employee or (payload and payload.jobChanged == true)
+        or employee.onDuty ~= true or employee.loggedIn ~= true then
+        clearActiveCompanyId()
+    end
 
     -- Leaving every Services+ company must release a native calls toggle
     -- that may still be held from the old job's Busy/Pause/off-duty state.
@@ -192,7 +229,10 @@ end)
 
 RegisterNUICallback("companyLogin", function(data, cb)
     local result = bridge("companyLogin", data.companyId)
-    if result and result.employee then syncNativeCompanyCalls(result.employee) end
+    if result and result.employee then
+        setActiveCompanyId(result.company.id)
+        syncNativeCompanyCalls(result.employee)
+    end
     cb(result)
 end)
 
@@ -212,6 +252,7 @@ end)
 
 RegisterNUICallback("companyLogout", function(_, cb)
     local result = bridge("companyLogout")
+    if result and result.ok == true then clearActiveCompanyId() end
     syncNativeCompanyCalls(result)
     cb(result and result.ok == true)
 end)
