@@ -36,12 +36,11 @@
             el('div', 'dispatch-title', card.title),
             el('div', 'dispatch-subtitle', card.subtitle),
         )
-        // Distance first, then passenger count, then the fare - highlighted,
-        // it's the number that actually decides whether to take the job.
+        // The dispatch card intentionally shows no fare estimate: the real
+        // meter begins only when the driver reaches the pickup point.
         header.append(badgeEl, heading, headerStats([
             { value: detail(card, 'distance', null), icon: 'distance' },
             { value: String(detail(card, 'people', '--')), icon: 'people' },
-            { value: detail(card, 'price', null), icon: 'price', highlight: true },
         ]))
 
         const body = el('div', 'dispatch-body')

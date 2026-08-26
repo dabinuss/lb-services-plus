@@ -27,6 +27,7 @@ export default function CallsTab({ refreshToken }) {
     try {
       const target = await fetchNui('resolveCall', { companyId: entry.company_id, numberId: entry.number_id })
       if (!target) throw new Error('unavailable')
+      showToast(t('Calling {company}…', { company: entry.company_name }))
       createCall(target.company ? { company: target.company } : { number: target.number })
     } catch {
       showToast(t('This company is currently unavailable by phone.'), 'error')

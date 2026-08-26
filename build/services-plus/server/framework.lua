@@ -375,17 +375,22 @@ end
 
 function Standalone.SetJob(source, job, grade)
     local identifier = GetPlayerIdentifierByType(source, "license") or ("source:" .. source)
-    Standalone.jobs[identifier] = job and { name = job, grade = grade or 0 } or nil
 
+    local affected
     if job then
-        MySQL.update(
+        affected = MySQL.update.await(
             "REPLACE INTO phone_services_plus_standalone_jobs (identifier, job, grade) VALUES (?, ?, ?)",
             { identifier, job, grade or 0 }
         )
     else
-        MySQL.update("DELETE FROM phone_services_plus_standalone_jobs WHERE identifier = ?", { identifier })
+        affected = MySQL.update.await(
+            "DELETE FROM phone_services_plus_standalone_jobs WHERE identifier = ?",
+            { identifier }
+        )
     end
 
+    if affected == nil then return false end
+    Standalone.jobs[identifier] = job and { name = job, grade = grade or 0 } or nil
     return true
 end
 

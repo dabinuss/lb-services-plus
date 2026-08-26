@@ -281,7 +281,7 @@ end)
 ---@param rawCursor table?
 RegisterCallback("getCallHistory", function(source, reply, rawCursor)
     local company = Companies.GetForPlayer(source)
-    if not company then return reply(false) end
+    if not company or not Employees.IsLoggedIn(source, company.id) or not Framework.GetOnDuty(source) then return reply(false) end
 
     local cursor = NormalizeListCursor(rawCursor)
     local query = [[

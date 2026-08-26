@@ -36,7 +36,8 @@ Parameters:
 - `source` (`number`): online player source. The phone number and current
   position are resolved internally.
 - `requestType` (`number|string`): request-type ID, technical identifier such
-  as `medical_emergency`, or category key such as `medical`.
+  as `medical_emergency`, or category key such as `medical`. Identifiers are
+  unique and remain unchanged when an admin renames a request type.
 - `options` (`table`, optional):
   - `description` (`string`, optional)
   - `passengerCount` (`number`, optional)

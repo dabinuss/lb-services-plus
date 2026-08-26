@@ -7,7 +7,7 @@ import FormField from './FormField.jsx'
 
 // Create a request (plan §11-14): only asks for what the chosen request type
 // actually needs. Location is automatic - never a field here (plan §14).
-export default function RequestSheet({ company, onClose }) {
+export default function RequestSheet({ company, maxPassengerCount = 20, onClose }) {
   const { t } = useI18n()
   const [types, setTypes] = useState(null)
   const [type, setType] = useState(null)
@@ -19,6 +19,10 @@ export default function RequestSheet({ company, onClose }) {
   const passengerMode = requestTypePassengerMode(type)
   const noteMode = requestTypeNoteMode(type)
   const countLabel = type?.count_label || t('Passenger count')
+  const passengerNumber = Number(passengerCount)
+  const passengerValid = passengerMode === 'disabled'
+    || (passengerMode === 'optional' && passengerCount === '')
+    || (passengerCount !== '' && Number.isInteger(passengerNumber) && passengerNumber >= 1 && passengerNumber <= maxPassengerCount)
 
   const loadTypes = async () => {
     setTypes(null)
@@ -43,7 +47,7 @@ export default function RequestSheet({ company, onClose }) {
 
   const submit = async () => {
     if (submittingRef.current || !type) return
-    if (passengerMode === 'required' && !passengerCount) return
+    if (!passengerValid) return
     if (noteMode === 'required' && !description.trim()) return
     submittingRef.current = true
     setState('sending')
@@ -52,7 +56,7 @@ export default function RequestSheet({ company, onClose }) {
       result = await fetchNui('createRequest', {
         companyId: company.id,
         requestTypeId: type.id,
-        passengerCount: passengerCount ? Number(passengerCount) : undefined,
+        passengerCount: passengerCount ? passengerNumber : undefined,
         description: description || undefined,
       })
     } catch {
@@ -104,19 +108,28 @@ export default function RequestSheet({ company, onClose }) {
 
           {passengerMode !== 'disabled' && (
             <FormField label={`${countLabel} (${t(passengerMode === 'optional' ? 'optional' : 'required')})`}>
-              <input className="search-input" type="number" min="1" value={passengerCount} onChange={(e) => setPassengerCount(e.target.value)} required={passengerMode === 'required'} />
+              <input
+                className="search-input"
+                type="number"
+                min={1}
+                max={maxPassengerCount}
+                step={1}
+                value={passengerCount}
+                onChange={(e) => setPassengerCount(e.target.value)}
+                required={passengerMode === 'required'}
+              />
             </FormField>
           )}
 
           {noteMode !== 'disabled' && (
             <FormField label={`${t('Additional note')} (${t(noteMode === 'required' ? 'required' : 'optional')})`}>
-              <input className="search-input" value={description} onChange={(e) => setDescription(e.target.value)} required={noteMode === 'required'} />
+              <input className="search-input" maxLength={255} value={description} onChange={(e) => setDescription(e.target.value)} required={noteMode === 'required'} />
             </FormField>
           )}
 
           <button
             className="login-button"
-            disabled={(passengerMode === 'required' && !passengerCount) || (noteMode === 'required' && !description.trim())}
+            disabled={!passengerValid || (noteMode === 'required' && !description.trim())}
             onClick={submit}
             aria-busy={state === 'sending'}
           >

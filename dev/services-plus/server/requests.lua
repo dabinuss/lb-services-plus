@@ -66,8 +66,8 @@ local function seedIfEmpty()
 
         MySQL.insert.await([[
             INSERT INTO phone_services_plus_request_types
-                (category_id, name, icon, description, location_mode, passenger_count, passenger_mode, count_label, description_enabled, note_mode, competition_enabled)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (category_id, name, identifier, icon, description, location_mode, passenger_count, passenger_mode, count_label, description_enabled, note_mode, competition_enabled)
+            VALUES (?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?)
         ]], {
             categoryId or json.null, t.name,
             t.identifier or t.name:lower():gsub("[^%w]+", "_"):gsub("^_+", ""):gsub("_+$", ""):sub(1, 100),
@@ -88,7 +88,7 @@ function Requests.Reload()
     for i = 1, #rows do
         local t = rows[i]
         typesById[t.id] = t
-        if t.icon then typesByIdentifier[t.icon:lower()] = t end
+        if t.identifier then typesByIdentifier[t.identifier:lower()] = t end
         if t.category_id ~= nil then
             typesByCategory[t.category_id] = typesByCategory[t.category_id] or {}
             table.insert(typesByCategory[t.category_id], t)
@@ -244,6 +244,7 @@ local function cancelExpiredDisconnectedRequests(identifier)
         for i = 1, #cancelled do
             local row = claimed[tonumber(cancelled[i].id)]
             cancelledIds[#cancelledIds + 1] = tonumber(cancelled[i].id)
+            Features.OnCancel(tonumber(cancelled[i].id))
             clearNotifications(tonumber(cancelled[i].id))
             endCustomerJourney(tonumber(cancelled[i].id), row and row.requester_number, "cancelled")
             if row and row.requester_number then
@@ -292,7 +293,7 @@ local function distribute(company, requestType, request)
     local category = Companies.GetCategory(requestType.category_id)
     local payload = {
         requestId = request.id,
-        requestType = requestType.icon,
+        requestType = requestType.identifier,
         typeName = requestType.name,
         typeIcon = requestType.icon,
         category = category and category.key or nil,
@@ -316,7 +317,7 @@ local function distribute(company, requestType, request)
         local recipientPayload = {}
         for key, value in pairs(payload) do recipientPayload[key] = value end
         recipientPayload.labels = overlayLabels(staffNumber)
-        recipientPayload.typeName = localizedRequestType(staffNumber, requestType.icon, requestType.name)
+        recipientPayload.typeName = localizedRequestType(staffNumber, requestType.identifier, requestType.name)
         recipientPayload.countLabel = localizedCountLabel(staffNumber, requestType.count_label)
         TriggerClientEvent("services-plus:client:requestNotification", eligible[i], recipientPayload)
         table.insert(entry.sources, eligible[i])
@@ -344,7 +345,7 @@ end
 local REQUEST_SELECT = [[
     SELECT r.id, r.request_type_id, r.company_id, r.requester_number, r.status,
            r.pos_x, r.pos_y, r.passenger_count, r.description, r.created_at, r.updated_at,
-           t.icon AS type_identifier, t.name AS type_name, t.category_id, t.count_label,
+           t.identifier AS type_identifier, t.name AS type_name, t.category_id, t.count_label,
            category.`key` AS category_key,
            company.job AS company_job, company.name AS company_name, company.icon AS company_icon,
            r.employee_identifier
@@ -506,8 +507,8 @@ end
 
 local function loadJourney(requestId)
     local row = MySQL.single.await([[
-        SELECT r.id, r.requester_number, r.pos_x, r.pos_y, r.feature_data,
-               t.icon AS type_identifier,
+        SELECT r.id, r.requester_number, r.pos_x, r.pos_y, r.feature_data, r.service_started_at,
+               t.identifier AS type_identifier,
                t.name AS type_name, category.`key` AS category_key,
                company.name AS company_name, company.icon AS company_icon
         FROM phone_services_plus_requests r
@@ -537,6 +538,7 @@ local function loadJourney(requestId)
         typeName = row.type_name,
         category = row.category_key,
         tariff = tariff,
+        arrived = row.service_started_at ~= nil,
     }
 end
 
@@ -654,8 +656,6 @@ RegisterNetEvent("services-plus:server:requestJourneyProgress", function(request
         if not journey then return end
         activeJourneys[id] = journey
     end
-    if journey.arrived then return end
-
     local now = GetGameTimer()
     if journey.lastReportAt and now - journey.lastReportAt < JOURNEY_CONFIG.updateInterval - 1000 then return end
     journey.lastReportAt = now
@@ -664,13 +664,18 @@ RegisterNetEvent("services-plus:server:requestJourneyProgress", function(request
     local ped = GetPlayerPed(employeeSource)
     if not ped or ped == 0 then return end
     local coords = GetEntityCoords(ped)
+
+    if journey.arrived then
+        Features.OnProgress(id, employeeSource, coords)
+        return
+    end
     local dx, dy = coords.x - journey.x, coords.y - journey.y
     local airDistance = math.sqrt(dx * dx + dy * dy)
 
     if airDistance <= JOURNEY_CONFIG.arrivalRadius then
         journey.arrived = true
+        Features.OnServiceStarted(id, employeeSource, coords)
         sendJourney(journey, "services-plus:client:requestJourneyProgress", journeyPayload(journey, true))
-        TriggerClientEvent("services-plus:client:requestJourneyReporterStopped", employeeSource, id)
         return
     end
 
@@ -969,8 +974,8 @@ function Requests.Accept(source, requestId)
         local staffNumber = Framework.GetPhoneNumber(source)
         local activePayload = {
             requestId = requestId,
-            requestType = requestType.icon,
-            typeName = localizedRequestType(staffNumber, requestType.icon, requestType.name),
+            requestType = requestType.identifier,
+            typeName = localizedRequestType(staffNumber, requestType.identifier, requestType.name),
             typeIcon = requestType.icon,
             category = category and category.key or nil,
             companyName = company.name,
@@ -1086,7 +1091,7 @@ function Requests.Complete(requestId, actorSource)
     -- type has a feature module registered for it. Runs before the
     -- customer notification below so a priced request can mention what it
     -- cost.
-    Features.OnComplete(id)
+    Features.OnComplete(id, actorSource or before.employeeSource)
 
     if before.employeeSource then
         activeAssignments[before.employeeSource] = nil
@@ -1145,6 +1150,8 @@ function Requests.Cancel(requestId, actorSource)
 
     if MySQL.update.await(sql, params) == 0 then return false end
 
+    Features.OnCancel(id)
+
     clearNotifications(id)
     if before.employeeSource then
         activeAssignments[before.employeeSource] = nil
@@ -1176,7 +1183,7 @@ end)
 
 RegisterCallback("getCompanyRequests", function(source, reply, rawCursor)
     local company = Companies.GetForPlayer(source)
-    if not company then return reply(false) end
+    if not company or not Employees.IsLoggedIn(source, company.id) or not Framework.GetOnDuty(source) then return reply(false) end
 
     local identifier = Framework.GetIdentifier(source)
 
@@ -1185,7 +1192,7 @@ RegisterCallback("getCompanyRequests", function(source, reply, rawCursor)
         SELECT r.id, r.company_id, r.status, r.pos_x AS x, r.pos_y AS y,
                r.passenger_count, r.description, r.created_at,
                UNIX_TIMESTAMP(r.created_at) AS cursor_time, r.feature_data,
-               t.name AS type_name, t.icon AS type_icon, t.count_label,
+               t.name AS type_name, t.identifier AS type_icon, t.count_label,
                (r.employee_identifier = ?) AS is_mine
         FROM phone_services_plus_requests r
         JOIN phone_services_plus_request_types t ON t.id = r.request_type_id
@@ -1239,7 +1246,7 @@ RegisterCallback("getMyRequests", function(source, reply, rawCursor)
     local query = [[
         SELECT r.id, r.status, r.created_at, UNIX_TIMESTAMP(r.created_at) AS cursor_time,
                r.description, r.passenger_count,
-               t.name AS type_name, t.icon AS type_icon, t.count_label,
+               t.name AS type_name, t.identifier AS type_icon, t.count_label,
                c.name AS company_name, c.icon AS company_icon
         FROM phone_services_plus_requests r
         JOIN phone_services_plus_request_types t ON t.id = r.request_type_id

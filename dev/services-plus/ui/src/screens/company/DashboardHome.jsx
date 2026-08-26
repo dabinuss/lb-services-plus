@@ -4,6 +4,7 @@ import Switch from '../../components/Switch.jsx'
 import Icon from '../../components/Icon.jsx'
 import { useI18n } from '../../lib/i18n.jsx'
 import SearchField from '../../components/SearchField.jsx'
+import { showToast } from '../../lib/toast.js'
 
 // A colored presence dot per option (same shared Icon set as the rest of
 // the app, colored via CSS below) plus its own label - never just a color
@@ -16,7 +17,7 @@ const STATUSES = [
 ]
 
 // Duty, status and hotlines (plan §19-23).
-export default function DashboardHome({ active, initialOnDuty, initialStatus, employeeMemberId, employeeName, employeeRankTitle, onLogout, teamUpdate }) {
+export default function DashboardHome({ active, initialOnDuty, initialStatus, employeeMemberId, employeeName, employeeRankTitle, onDutyChange, teamUpdate }) {
   const { t } = useI18n()
   const [onDuty, setOnDuty] = useState(initialOnDuty)
   const [status, setStatus] = useState(initialStatus)
@@ -33,11 +34,16 @@ export default function DashboardHome({ active, initialOnDuty, initialStatus, em
   const hotlineLock = useRef(false)
 
   useEffect(() => {
-    fetchNui('getHotlines').then((result) => result && setHotlines(result))
-  }, [])
+    setOnDuty(initialOnDuty)
+  }, [initialOnDuty])
 
   useEffect(() => {
-    if (!active) return
+    if (!onDuty) return
+    fetchNui('getHotlines').then((result) => result && setHotlines(result)).catch(() => {})
+  }, [onDuty])
+
+  useEffect(() => {
+    if (!active || !onDuty) return
     let current = true
     fetchNui('getEmployeeDailyStats')
       .then((result) => current && result && setDailyStats(result))
@@ -46,7 +52,7 @@ export default function DashboardHome({ active, initialOnDuty, initialStatus, em
       .then((result) => current && result && setTeam(result))
       .catch(() => {})
     return () => { current = false }
-  }, [active])
+  }, [active, onDuty])
 
   // A colleague's own status/hotline/duty change, pushed in real time
   // instead of only ever reflecting what getTeam() returned at mount (plan
@@ -80,10 +86,6 @@ export default function DashboardHome({ active, initialOnDuty, initialStatus, em
     return m.name.toLowerCase().includes(search) || m.gradeLabel?.toLowerCase().includes(search)
   })
 
-  // Going off-duty ends the fake-login session, not just the duty flag -
-  // "offline" is one of the only three things allowed to log the player
-  // out (explicit logout, going off-duty, switching to a different phone
-  // number).
   const toggleDuty = async (next) => {
     if (dutyLock.current) return
     dutyLock.current = true
@@ -95,18 +97,14 @@ export default function DashboardHome({ active, initialOnDuty, initialStatus, em
       dutyLock.current = false
       setDutySaving(false)
     }
-    if (!result) return
-
-    if (next) {
-      setOnDuty(true)
-      // The mount-time getTeam() fetch may predate this player actually
-      // being on duty (logged in while off, then flipped on) - refetch so
-      // their own row (and anyone else who joined meanwhile) is accurate
-      // instead of stale from before they existed in it.
-      fetchNui('getTeam').then((result) => result && setTeam(result))
-    } else {
-      onLogout()
+    if (!result?.ok) {
+      showToast(t('Could not save that change. Try again.'), 'error')
+      return
     }
+
+    setOnDuty(result.onDuty)
+    onDutyChange?.(result.onDuty)
+    if (!next) setTeam(null)
   }
 
   // Own status/hotline changes only ever patched `status`/`hotlines` state,
@@ -123,7 +121,9 @@ export default function DashboardHome({ active, initialOnDuty, initialStatus, em
       if (await fetchNui('setStatus', { status: next })) {
         setStatus(next)
         setTeam((prev) => prev?.map((m) => (m.memberId === employeeMemberId ? { ...m, status: next } : m)))
-      }
+      } else showToast(t('Could not save that change. Try again.'), 'error')
+    } catch {
+      showToast(t('Could not save that change. Try again.'), 'error')
     } finally {
       statusLock.current = false
       setStatusSaving(false)
@@ -143,7 +143,9 @@ export default function DashboardHome({ active, initialOnDuty, initialStatus, em
         setTeam((prev) => prev?.map((m) => (m.memberId === employeeMemberId ? { ...m, hotlines: activeLabels } : m)))
       } else if (result?.reason === 'sole_employee') {
         setNotice(t("Main hotline stays on while you're the only one on duty."))
-      }
+      } else showToast(t('Could not save that change. Try again.'), 'error')
+    } catch {
+      showToast(t('Could not save that change. Try again.'), 'error')
     } finally {
       hotlineLock.current = false
       setHotlineSaving(null)

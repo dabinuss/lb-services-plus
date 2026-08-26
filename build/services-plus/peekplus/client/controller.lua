@@ -971,7 +971,61 @@ RegisterNUICallback("peekplusReady", function(data, callback)
     callback(true)
 end)
 
+-- Key mappings are global FiveM commands and can still fire while another
+-- resource owns keyboard focus. Keep touch/click actions available through
+-- handleAction(), but only allow the keyboard shortcuts during normal
+-- gameplay. A visible Peek itself does not take NUI focus, so the intended
+-- phone-in-pocket quick action remains available.
+local blockedPlayerStates = {
+    "dead", "isDead", "laststand", "inLaststand", "unconscious", "isUnconscious",
+    "cuffed", "isCuffed", "handcuffed", "isHandcuffed", "restrained", "isRestrained",
+}
+
+local function playerStateBlocksQuickActions()
+    local state = LocalPlayer and LocalPlayer.state
+    if not state then return false end
+
+    for index = 1, #blockedPlayerStates do
+        local value = state[blockedPlayerStates[index]]
+        if value == true or value == 1 or value == "true" then return true end
+    end
+
+    return false
+end
+
+local function quickActionContextBlocked(control)
+    if callActive or phoneOpen or IsPauseMenuActive() or IsNuiFocused() then return true end
+    if not IsPlayerControlOn(PlayerId()) or not IsControlEnabled(0, control) then return true end
+    if IsScreenFadedOut() or IsScreenFadingOut() or IsScreenFadingIn()
+        or GetIsLoadingScreenActive() or IsPlayerSwitchInProgress() or IsCutsceneActive()
+        or IsWarningMessageActive() then
+        return true
+    end
+
+    local ped = PlayerPedId()
+    if not ped or ped == 0 or IsEntityDead(ped) or IsPedDeadOrDying(ped, true)
+        or IsPedInjured(ped) or IsPedCuffed(ped) or playerStateBlocksQuickActions() then
+        return true
+    end
+
+    return false
+end
+
+local function clearVisibleConfirmation()
+    local card = visibleId and cards[visibleId] or nil
+    if not card or not card.confirmAction then return end
+    card.confirmAction = nil
+    renderVisible(false)
+end
+
 local function runPrimaryHotkey()
+    -- INPUT_FRONTEND_ACCEPT: Enter / controller accept. Requiring the GTA
+    -- control to be enabled also suppresses the command in input-capturing
+    -- frontends such as the F8 console and well-behaved Scaleform menus.
+    if quickActionContextBlocked(201) then
+        clearVisibleConfirmation()
+        return
+    end
     local card = visibleId and cards[visibleId] or nil
     if not card then return end
     for index = 1, #card.actions do
@@ -988,6 +1042,11 @@ RegisterCommand("peekplus_accept", runPrimaryHotkey, false)
 RegisterKeyMapping("peekplus_accept", "PeekPlus: Primäraktion ausführen", "keyboard", "RETURN")
 
 local function runDestructiveHotkey()
+    -- INPUT_FRONTEND_CANCEL: Backspace / controller cancel.
+    if quickActionContextBlocked(202) then
+        clearVisibleConfirmation()
+        return
+    end
     local card = visibleId and cards[visibleId] or nil
     if not card then return end
     for index = 1, #card.actions do

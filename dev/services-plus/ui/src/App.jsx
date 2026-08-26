@@ -51,8 +51,8 @@ export default function App() {
   const [bootstrap, setBootstrap] = useState(null)
   // Lifted out of CompanyScreen so switching away to another tab and back
   // doesn't unmount-and-lose it - the fake-login should only ever end via
-  // an explicit logout, going off-duty, or a real reload (switching to a
-  // different phone number), never just from leaving the Company tab.
+  // an explicit logout or a real reload (switching to a different phone
+  // number), never just from leaving the Company tab or going off duty.
   const [companySession, setCompanySession] = useState(null)
   const [conversation, setConversation] = useState(null)
   const [numberPicker, setNumberPicker] = useState(null) // { mode: 'call'|'message', company, numbers }
@@ -114,20 +114,31 @@ export default function App() {
     fetchNui('markConversationRead', { channelId }).catch(() => {})
   }, [])
 
-  const logoutCompany = useCallback(() => {
+  const logoutCompany = useCallback(async () => {
+    await Promise.allSettled([
+      fetchNui('companyLogout'),
+      new Promise((resolve) => setTimeout(resolve, 400)),
+    ])
     setCompanySession(null)
+    setBootstrap((current) => current?.employee ? {
+      ...current,
+      employee: { ...current.employee, onDuty: false, loggedIn: false },
+    } : current)
     setUnread((current) => ({
       ...current,
       companyMessages: 0,
       companyRequests: 0,
       companyCalls: 0,
     }))
-    fetchNui('companyLogout').catch(() => {})
   }, [])
 
   const loginCompany = useCallback((session) => {
     setCompanySession(session)
     if (!session) return
+    setBootstrap((current) => current?.employee ? {
+      ...current,
+      employee: { ...current.employee, onDuty: true, status: 'available', loggedIn: true },
+    } : current)
     if ('directoryCompany' in session) {
       setBootstrap((current) => applyCompanyDirectoryChange(current, {
         companyId: session.company.id,
@@ -217,8 +228,10 @@ export default function App() {
     return onNuiEvent('employeeDutyChanged', (data) => {
       const employee = data.employee || null
       setBootstrap((prev) => (prev ? { ...prev, employee } : prev))
-      if (data.jobChanged || !employee?.onDuty) {
+      if (data.jobChanged || !employee?.loggedIn) {
         setCompanySession(null)
+      }
+      if (!employee?.onDuty) {
         setUnread((current) => ({
           ...current,
           companyMessages: 0,
@@ -280,6 +293,7 @@ export default function App() {
         showToast(t('This company is currently unavailable by phone.'), 'error')
         return
       }
+      showToast(t('Calling {company}…', { company: company.name }))
       createCall(target.company ? { company: target.company } : { number: target.number })
     } catch {
       showToast(t('This company is currently unavailable by phone.'), 'error')
@@ -387,7 +401,13 @@ export default function App() {
         </Sheet>
       )}
 
-      {requestSheet && <RequestSheet company={requestSheet.company} onClose={() => setRequestSheet(null)} />}
+      {requestSheet && (
+        <RequestSheet
+          company={requestSheet.company}
+          maxPassengerCount={bootstrap.maxPassengerCount}
+          onClose={() => setRequestSheet(null)}
+        />
+      )}
 
       <Toast />
     </div>

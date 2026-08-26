@@ -11,6 +11,8 @@
 
         Features.Register("taxi_pricing", {
             OnAccept = TaxiPricing.OnAccept,
+            OnServiceStarted = TaxiPricing.OnServiceStarted,
+            OnProgress = TaxiPricing.OnProgress,
             OnComplete = TaxiPricing.OnComplete,
         })
 
@@ -29,7 +31,7 @@
 Features = { registry = {} }
 
 ---@param name string  the request_types.feature value this module handles
----@param hooks { OnAccept: fun(requestId: number, employeeSource: number)?, OnComplete: fun(requestId: number)? }
+---@param hooks table<string, function>
 function Features.Register(name, hooks)
     Features.registry[name] = hooks
 end
@@ -55,6 +57,26 @@ function Features.OnAccept(requestId, employeeSource)
 end
 
 ---@param requestId number
-function Features.OnComplete(requestId)
-    runHook("OnComplete", requestId)
+---@param employeeSource number
+---@param coords table
+function Features.OnServiceStarted(requestId, employeeSource, coords)
+    runHook("OnServiceStarted", requestId, employeeSource, coords)
+end
+
+---@param requestId number
+---@param employeeSource number
+---@param coords table
+function Features.OnProgress(requestId, employeeSource, coords)
+    runHook("OnProgress", requestId, employeeSource, coords)
+end
+
+---@param requestId number
+---@param employeeSource? number
+function Features.OnComplete(requestId, employeeSource)
+    runHook("OnComplete", requestId, employeeSource)
+end
+
+---@param requestId number
+function Features.OnCancel(requestId)
+    runHook("OnCancel", requestId)
 end

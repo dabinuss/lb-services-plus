@@ -229,11 +229,11 @@ export default function CompaniesTab() {
           {saveError && <div className="notice">{saveError}</div>}
           {editingId === 'new' && (
             <FormField label={t('Framework job')}>
-              <input className="search-input" value={form.job} onChange={(e) => setForm({ ...form, job: e.target.value })} />
+              <input className="search-input" maxLength={50} value={form.job} onChange={(e) => setForm({ ...form, job: e.target.value })} />
             </FormField>
           )}
           <FormField label={t('Name')}>
-            <input className="search-input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+            <input className="search-input" maxLength={100} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
           </FormField>
           <FormField label={t('Category')}>
             <select className="search-input" value={form.categoryId} onChange={(e) => setForm({ ...form, categoryId: e.target.value ? Number(e.target.value) : '' })}>
@@ -258,7 +258,7 @@ export default function CompaniesTab() {
           </FormField>
           {editingId === 'new' && (
             <FormField label={t('Main phone number')}>
-              <input className="search-input" value={form.mainNumber} onChange={(e) => setForm({ ...form, mainNumber: e.target.value })} />
+              <input className="search-input" maxLength={15} value={form.mainNumber} onChange={(e) => setForm({ ...form, mainNumber: e.target.value })} />
             </FormField>
           )}
           {editingId !== 'new' && (
@@ -290,10 +290,10 @@ export default function CompaniesTab() {
                 editingNumber?.id === n.id ? (
                   <div key={n.id} className="admin-inline-form">
                     <FormField label={t('Label')}>
-                      <input className="search-input" value={editingNumber.label} onChange={(e) => setEditingNumber({ ...editingNumber, label: e.target.value })} />
+                      <input className="search-input" maxLength={50} value={editingNumber.label} onChange={(e) => setEditingNumber({ ...editingNumber, label: e.target.value })} />
                     </FormField>
                     <FormField label={t('Number')}>
-                      <input className="search-input" value={editingNumber.number} onChange={(e) => setEditingNumber({ ...editingNumber, number: e.target.value })} />
+                      <input className="search-input" maxLength={15} value={editingNumber.number} onChange={(e) => setEditingNumber({ ...editingNumber, number: e.target.value })} />
                     </FormField>
                     <button className="request-action accept" onClick={saveNumber} disabled={saving}>
                       {t('Save')}
@@ -331,8 +331,8 @@ export default function CompaniesTab() {
                 ),
               )}
               <div className="admin-inline-form">
-                <FormField label={t('Label')}><input className="search-input" value={newNumber.label} onChange={(e) => setNewNumber({ ...newNumber, label: e.target.value })} /></FormField>
-                <FormField label={t('Number')}><input className="search-input" value={newNumber.number} onChange={(e) => setNewNumber({ ...newNumber, number: e.target.value })} /></FormField>
+                <FormField label={t('Label')}><input className="search-input" maxLength={50} value={newNumber.label} onChange={(e) => setNewNumber({ ...newNumber, label: e.target.value })} /></FormField>
+                <FormField label={t('Number')}><input className="search-input" maxLength={15} value={newNumber.number} onChange={(e) => setNewNumber({ ...newNumber, number: e.target.value })} /></FormField>
                 <button className="request-action accept" onClick={addNumber} disabled={saving}>
                   {t('Add')}
                 </button>

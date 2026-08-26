@@ -17,6 +17,10 @@ that has not yet been applied:
    for request status changes and missed calls.
 6. `006_stable_employee_stats.sql` stores stable employee identities for
    calls/messages and adds the indexes used by daily employee statistics.
+7. `007_request_type_identifiers.sql` separates stable request API keys from
+   presentation icons and enforces their uniqueness.
+8. `008_billable_service_tracking.sql` starts fare calculation at the actual
+   service phase and stores sampled journey distance.
 
 Unread activity events deliberately have no age-only cleanup; see
 `UNREAD_RETENTION.md` before adding a retention job.

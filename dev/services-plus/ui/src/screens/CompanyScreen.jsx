@@ -9,7 +9,7 @@ import Icon from '../components/Icon.jsx'
 // independently as well. Everything past login is phase 2 -
 // CompanyDashboard and its tabs. `session` is owned by App.jsx, not here,
 // because login state belongs to the whole app and must only end through
-// logout, going off-duty, or a real reload/phone switch.
+// logout or a real reload/phone switch. Duty is independent of the session.
 export default function CompanyScreen({
   employee, companies, session, onLogin, onLogout, onOpenConversation, teamUpdate,
   messageBadge, requestBadge, callBadge, messageRefreshToken, requestRefresh, callRefreshToken,
@@ -22,7 +22,7 @@ export default function CompanyScreen({
 
   const login = async () => {
     setLoggingIn(true)
-    await new Promise((r) => setTimeout(r, 900))
+    await new Promise((r) => setTimeout(r, 400))
     let result = false
     try {
       result = await fetchNui('companyLogin', { companyId: employee.companyId })

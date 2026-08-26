@@ -189,7 +189,7 @@ RegisterNetEvent("services-plus:client:employeeDutyChanged", function(payload)
     local employee = type(payload) == "table" and payload.employee or nil
 
     if not employee or (payload and payload.jobChanged == true)
-        or employee.onDuty ~= true or employee.loggedIn ~= true then
+        or employee.loggedIn ~= true then
         clearActiveCompanyId()
     end
 

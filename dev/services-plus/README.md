@@ -184,7 +184,8 @@ The first `ENTER` (or Complete request click) arms completion; pressing it again
 within five seconds completes the ride and notifies the customer.
 
 Notification templates are selected by the request type's technical
-identifier. A default request type can declare independent `templates.pending`
+identifier. This is a dedicated unique database field and remains immutable
+when an admin changes the display name. A default request type can declare independent `templates.pending`
 and `templates.active` definitions directly where it's registered (either
 `shared/categories.lua` for a type with nothing type-specific to own, or its
 own `request-types/<identifier>/register.lua` - see below); database/admin-created
@@ -203,6 +204,12 @@ slot, lifecycle, hotkeys, confirmation state and validated action bridge, so
 every request type can get a fully individual design without adding
 Services+-specific templates or CSS rules to PeekPlus.
 
+Taxi tariffs are frozen when the driver accepts a request, but billing starts
+only when the driver reaches the pickup radius. Per-minute billing measures
+from that service start; per-100m billing accumulates plausible server-owned
+position samples from the same low-frequency journey reporter. The trip to the
+customer is not billed and later tariff changes do not affect an active ride.
+
 Every request type that needs more than the built-in fields (its own
 dispatch-card design, its own server-side logic like Taxameter billing)
 lives entirely under `request-types/<identifier>/`, including its own
@@ -214,7 +221,8 @@ system every full-card template reuses (`shared/categories.lua`'s own comment
 explains the height-ceiling contract), never anything specific to one type.
 A new request type's server-side feature (if
 any) registers itself into `server/features.lua`'s generic registry -
-`server/requests.lua` calls `Features.OnAccept`/`Features.OnComplete`
+`server/requests.lua` calls the generic accept/service-start/progress/complete
+hooks
 unconditionally on every accept/complete and never names a feature module by
 hand, so adding one never means editing `requests.lua`.
 

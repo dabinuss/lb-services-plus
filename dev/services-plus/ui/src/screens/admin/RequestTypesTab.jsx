@@ -9,7 +9,7 @@ import { databaseBoolean, requestTypeNoteMode, requestTypePassengerMode } from '
 import FormField from '../../components/FormField.jsx'
 
 const EMPTY = {
-  categoryId: '', name: '', description: '',
+  categoryId: '', identifier: '', name: '', description: '',
   passengerMode: 'disabled', countLabel: 'Passenger count', noteMode: 'disabled', competitionEnabled: false, enabled: true,
   feature: '',
 }
@@ -95,7 +95,7 @@ export default function RequestTypesTab() {
             <div className="admin-row-info">
               <div className="admin-row-title">{type.name}</div>
               <div className="admin-row-meta">
-                {categoryName(type.category_id)} · {t(databaseBoolean(type.competition_enabled) ? 'competition' : 'exclusive')}
+                {type.identifier} · {categoryName(type.category_id)} · {t(databaseBoolean(type.competition_enabled) ? 'competition' : 'exclusive')}
                 {requestTypePassengerMode(type) !== 'disabled' ? ` · ${t('passengers')}` : ''}
                 {type.feature ? ` · ${t(FEATURE_OPTIONS.find((f) => f.key === type.feature)?.label || type.feature)}` : ''}
                 {' · '}{t(databaseBoolean(type.enabled) ? 'enabled' : 'disabled')}
@@ -107,7 +107,7 @@ export default function RequestTypesTab() {
                 disabled={saving}
                 onClick={() =>
                   setEditing({
-                    id: type.id, categoryId: type.category_id || '', name: type.name,
+                    id: type.id, categoryId: type.category_id || '', identifier: type.identifier, name: type.name,
                     description: type.description || '',
                     passengerMode: requestTypePassengerMode(type),
                     countLabel: type.count_label || t('Passenger count'),
@@ -137,10 +137,24 @@ export default function RequestTypesTab() {
             </select>
           </FormField>
           <FormField label={t('Name')}>
-            <input className="search-input" value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} />
+            <input className="search-input" maxLength={50} value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} />
+          </FormField>
+          <FormField
+            label={t('Technical identifier')}
+            hint={t(editing.id ? 'The identifier is permanent after creation.' : 'Used by exports, API calls and custom templates. Leave blank to generate it from the name.')}
+          >
+            <input
+              className="search-input"
+              maxLength={100}
+              value={editing.identifier}
+              disabled={!!editing.id}
+              autoCapitalize="none"
+              spellCheck={false}
+              onChange={(e) => setEditing({ ...editing, identifier: e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') })}
+            />
           </FormField>
           <FormField label={t('Description shown to the requester')}>
-            <input className="search-input" value={editing.description} onChange={(e) => setEditing({ ...editing, description: e.target.value })} />
+            <input className="search-input" maxLength={255} value={editing.description} onChange={(e) => setEditing({ ...editing, description: e.target.value })} />
           </FormField>
           <div className="request-type-setting">
             <label htmlFor="request-type-passenger-mode">{t('Passenger count')}</label>
@@ -157,7 +171,7 @@ export default function RequestTypesTab() {
           </div>
           {editing.passengerMode !== 'disabled' && (
             <FormField label={t('Number field label')}>
-              <input className="search-input" value={editing.countLabel} onChange={(e) => setEditing({ ...editing, countLabel: e.target.value })} />
+              <input className="search-input" maxLength={50} value={editing.countLabel} onChange={(e) => setEditing({ ...editing, countLabel: e.target.value })} />
             </FormField>
           )}
           <div className="request-type-setting">

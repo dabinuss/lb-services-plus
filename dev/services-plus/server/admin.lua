@@ -33,6 +33,26 @@ local function isPositiveInteger(value)
     return type(value) == "number" and value == math.floor(value) and value > 0
 end
 
+--- Trims and validates a string against the database column's character
+--- limit. Optional values normalize to nil; required values must meet min.
+---@param value any
+---@param minLength number
+---@param maxLength number
+---@param optional? boolean
+---@return string? normalized
+---@return boolean valid
+local function validateString(value, minLength, maxLength, optional)
+    if value == nil and optional then return nil, true end
+    if type(value) ~= "string" then return nil, false end
+
+    local normalized = value:match("^%s*(.-)%s*$")
+    if normalized == "" and optional then return nil, true end
+
+    local ok, length = pcall(utf8.len, normalized)
+    if not ok or not length or length < minLength or length > maxLength then return nil, false end
+    return normalized, true
+end
+
 ---@param source number
 ---@return boolean
 function Admin.IsAdmin(source)
@@ -174,13 +194,14 @@ adminCallback("admin:getCategories", function(_, reply)
 end)
 
 adminCallback("admin:createCategory", function(_, reply, data)
-    if type(data.key) ~= "string" or data.key == "" or type(data.name) ~= "string" or data.name == "" then
-        return reply(false)
-    end
+    local key, keyValid = validateString(data.key, 1, 50)
+    local name, nameValid = validateString(data.name, 1, 50)
+    local icon, iconValid = validateString(data.icon, 0, 100, true)
+    if not keyValid or not nameValid or not iconValid then return reply(false) end
 
     local id = MySQL.insert.await(
         "INSERT INTO phone_services_plus_categories (`key`, name, icon, sort_order, competition_allowed) VALUES (?, ?, ?, ?, ?)",
-        { data.key, data.name, data.icon or json.null, tonumber(data.sort) or 0, data.competitionAllowed and 1 or 0 }
+        { key, name, icon or json.null, tonumber(data.sort) or 0, data.competitionAllowed and 1 or 0 }
     )
 
     Companies.ReloadAndNotify(nil, true)
@@ -188,9 +209,13 @@ adminCallback("admin:createCategory", function(_, reply, data)
 end)
 
 adminCallback("admin:updateCategory", function(_, reply, data)
+    local name, nameValid = validateString(data.name, 1, 50)
+    local icon, iconValid = validateString(data.icon, 0, 100, true)
+    if not nameValid or not iconValid then return reply(false) end
+
     MySQL.update.await(
         "UPDATE phone_services_plus_categories SET name = ?, icon = ?, sort_order = ?, competition_allowed = ? WHERE id = ?",
-        { data.name, data.icon or json.null, tonumber(data.sort) or 0, data.competitionAllowed and 1 or 0, data.id }
+        { name, icon or json.null, tonumber(data.sort) or 0, data.competitionAllowed and 1 or 0, data.id }
     )
 
     Companies.ReloadAndNotify(nil, true)
@@ -237,11 +262,12 @@ adminCallback("admin:getCompanies", function(_, reply)
 end)
 
 adminCallback("admin:createCompany", function(_, reply, data)
-    if type(data.job) ~= "string" or data.job == "" or type(data.name) ~= "string" or data.name == "" or type(data.mainNumber) ~= "string" or data.mainNumber == "" then
-        return reply(false)
-    end
+    local job, jobValid = validateString(data.job, 1, 50)
+    local name, nameValid = validateString(data.name, 1, 100)
+    local mainNumber, numberValid = validateString(data.mainNumber, 1, 15)
+    if not jobValid or not nameValid or not numberValid then return reply(false) end
 
-    local existing = MySQL.scalar.await("SELECT id FROM phone_services_plus_companies WHERE job = ?", { data.job })
+    local existing = MySQL.scalar.await("SELECT id FROM phone_services_plus_companies WHERE job = ?", { job })
     if existing then return reply(false) end
 
     local icon, iconValid = optionalHttpsUrl(data.icon)
@@ -263,33 +289,34 @@ adminCallback("admin:createCompany", function(_, reply, data)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ]],
             {
-                data.job, data.name, data.categoryId or json.null, icon or json.null, background or json.null,
+                job, name, data.categoryId or json.null, icon or json.null, background or json.null,
                 tonumber(data.bossGrade) or 100, Config.DefaultCallRouting, Config.DefaultRequestRouting,
             },
         },
         {
             "INSERT INTO phone_services_plus_numbers (company_id, label, number, is_main) VALUES (LAST_INSERT_ID(), 'Main', ?, 1)",
-            { data.mainNumber },
+            { mainNumber },
         },
     })
 
     if not success then return reply(false) end
 
-    local companyId = MySQL.scalar.await("SELECT id FROM phone_services_plus_companies WHERE job = ?", { data.job })
+    local companyId = MySQL.scalar.await("SELECT id FROM phone_services_plus_companies WHERE job = ?", { job })
 
     Companies.ReloadAndNotify(companyId)
     reply({ id = companyId })
 end)
 
 adminCallback("admin:updateCompany", function(_, reply, data)
+    local name, nameValid = validateString(data.name, 1, 100)
     local icon, iconValid = optionalHttpsUrl(data.icon)
     local background, backgroundValid = optionalHttpsUrl(data.background)
-    if not iconValid or not backgroundValid then return reply(false) end
+    if not nameValid or not iconValid or not backgroundValid then return reply(false) end
 
     MySQL.update.await(
         "UPDATE phone_services_plus_companies SET name = ?, category_id = ?, icon = ?, background = ?, boss_grade = ?, enabled = ? WHERE id = ?",
         {
-            data.name, data.categoryId or json.null, icon or json.null, background or json.null,
+            name, data.categoryId or json.null, icon or json.null, background or json.null,
             tonumber(data.bossGrade) or 100, data.enabled and 1 or 0, data.id,
         }
     )
@@ -350,16 +377,16 @@ end)
 -- ---------------------------------------------------------------------------
 
 adminCallback("admin:createNumber", function(_, reply, data)
-    if type(data.label) ~= "string" or data.label == "" or type(data.number) ~= "string" or data.number == "" then
-        return reply(false)
-    end
+    local label, labelValid = validateString(data.label, 1, 50)
+    local number, numberValid = validateString(data.number, 1, 15)
+    if not labelValid or not numberValid then return reply(false) end
 
-    local existing = MySQL.scalar.await("SELECT id FROM phone_services_plus_numbers WHERE number = ?", { data.number })
+    local existing = MySQL.scalar.await("SELECT id FROM phone_services_plus_numbers WHERE number = ?", { number })
     if existing then return reply(false) end
 
     local id = MySQL.insert.await(
         "INSERT INTO phone_services_plus_numbers (company_id, label, number, calls_enabled, messages_enabled, mailbox_enabled) VALUES (?, ?, ?, ?, ?, ?)",
-        { data.companyId, data.label, data.number, data.callsEnabled and 1 or 0, data.messagesEnabled and 1 or 0, data.mailboxEnabled and 1 or 0 }
+        { data.companyId, label, number, data.callsEnabled and 1 or 0, data.messagesEnabled and 1 or 0, data.mailboxEnabled and 1 or 0 }
     )
 
     if not id then return reply(false) end
@@ -374,13 +401,13 @@ end)
 -- uniqueness check as admin:createNumber above, just excluding this number's
 -- own row so saving it unchanged doesn't trip over itself.
 adminCallback("admin:updateNumber", function(_, reply, data)
-    if type(data.label) ~= "string" or data.label == "" or type(data.number) ~= "string" or data.number == "" then
-        return reply(false)
-    end
+    local label, labelValid = validateString(data.label, 1, 50)
+    local numberValue, numberValid = validateString(data.number, 1, 15)
+    if not labelValid or not numberValid then return reply(false) end
 
     local existing = MySQL.scalar.await(
         "SELECT id FROM phone_services_plus_numbers WHERE number = ? AND id != ?",
-        { data.number, data.id }
+        { numberValue, data.id }
     )
     if existing then return reply(false) end
 
@@ -392,7 +419,7 @@ adminCallback("admin:updateNumber", function(_, reply, data)
 
     MySQL.update.await(
         "UPDATE phone_services_plus_numbers SET label = ?, number = ? WHERE id = ?",
-        { data.label, data.number, data.id }
+        { label, numberValue, data.id }
     )
 
     Companies.ReloadAndNotify(number.company_id)
@@ -438,55 +465,65 @@ end)
 -- 'taxi_pricing').
 local VALID_FEATURES = { taxi_pricing = true }
 
+local function normalizeRequestTypeIdentifier(value)
+    if type(value) ~= "string" then return nil end
+    local identifier = value:lower():match("^%s*(.-)%s*$")
+    identifier = identifier:gsub("[^a-z0-9]+", "_"):gsub("^_+", ""):gsub("_+$", "")
+    if identifier == "" or #identifier > 100 then return nil end
+    return identifier
+end
+
 local function requestTypeParams(data)
-    local name = type(data.name) == "string" and data.name:match("^%s*(.-)%s*$") or ""
-    local identifier = name:lower():gsub("[^%w]+", "_"):gsub("^_+", ""):gsub("_+$", "")
-    if identifier == "" then identifier = "request_type" end
+    local name, nameValid = validateString(data.name, 1, 50)
+    local description, descriptionValid = validateString(data.description, 0, 255, true)
+    if not nameValid or not descriptionValid then return nil end
 
     local noteMode = ({ disabled = true, optional = true, required = true })[data.noteMode]
         and data.noteMode or "disabled"
     local passengerMode = ({ disabled = true, optional = true, required = true })[data.passengerMode]
         and data.passengerMode or "disabled"
-    local countLabel = type(data.countLabel) == "string" and data.countLabel:match("^%s*(.-)%s*$") or ""
-    if countLabel == "" then countLabel = "Passenger count" end
+    local countLabel, countLabelValid = validateString(data.countLabel, 0, 50, true)
+    if not countLabelValid then return nil end
+    countLabel = countLabel or "Passenger count"
     local feature = VALID_FEATURES[data.feature] and data.feature or json.null
 
     return {
-        data.categoryId or json.null, name, identifier:sub(1, 100), data.description or json.null,
-        data.locationMode or "auto", passengerMode ~= "disabled" and 1 or 0, passengerMode, countLabel:sub(1, 50),
+        data.categoryId or json.null, name, description or json.null,
+        data.locationMode or "auto", passengerMode ~= "disabled" and 1 or 0, passengerMode, countLabel,
         noteMode ~= "disabled" and 1 or 0, noteMode,
         data.competitionEnabled and 1 or 0, feature,
     }
 end
 
-local function hasRequestTypeName(data)
-    return type(data) == "table"
-        and type(data.name) == "string"
-        and data.name:match("^%s*(.-)%s*$") ~= ""
-end
-
 adminCallback("admin:createRequestType", function(_, reply, data)
-    if not hasRequestTypeName(data) then return reply(false) end
+    local params = requestTypeParams(data)
+    local requestedIdentifier = type(data.identifier) == "string" and data.identifier:match("^%s*(.-)%s*$") or ""
+    local identifier = normalizeRequestTypeIdentifier(requestedIdentifier ~= "" and requestedIdentifier or data.name)
+    if not params or not identifier then return reply(false) end
+    if MySQL.scalar.await("SELECT id FROM phone_services_plus_request_types WHERE identifier = ?", { identifier }) then
+        return reply(false)
+    end
+    table.insert(params, 3, identifier)
 
     local id = MySQL.insert.await([[
         INSERT INTO phone_services_plus_request_types
-            (category_id, name, icon, description, location_mode, passenger_count, passenger_mode, count_label, description_enabled, note_mode, competition_enabled, feature)
+            (category_id, name, identifier, description, location_mode, passenger_count, passenger_mode, count_label, description_enabled, note_mode, competition_enabled, feature)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ]], requestTypeParams(data))
+    ]], params)
 
     Requests.Reload()
     reply(id ~= nil)
 end)
 
 adminCallback("admin:updateRequestType", function(_, reply, data)
-    if not hasRequestTypeName(data) then return reply(false) end
     local params = requestTypeParams(data)
+    if not params then return reply(false) end
     params[#params + 1] = data.enabled ~= false and 1 or 0
     params[#params + 1] = data.id
 
     MySQL.update.await([[
         UPDATE phone_services_plus_request_types SET
-            category_id = ?, name = ?, icon = ?, description = ?, location_mode = ?,
+            category_id = ?, name = ?, description = ?, location_mode = ?,
             passenger_count = ?, passenger_mode = ?, count_label = ?, description_enabled = ?, note_mode = ?, competition_enabled = ?, feature = ?, enabled = ?
         WHERE id = ?
     ]], params)

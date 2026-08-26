@@ -109,9 +109,19 @@ export default function ConversationScreen({ target, incoming, onClose }) {
     if (oldestId == null) return
 
     setLoadingOlder(true)
-    const result = await fetchNui('getMessages', { channelId, beforeId: oldestId })
-    setLoadingOlder(false)
-    if (!result) return
+    let result
+    try {
+      result = await fetchNui('getMessages', { channelId, beforeId: oldestId })
+    } catch {
+      showToast(t('Older messages could not be loaded.'), 'error')
+      return
+    } finally {
+      setLoadingOlder(false)
+    }
+    if (!result) {
+      showToast(t('Older messages could not be loaded.'), 'error')
+      return
+    }
 
     setMessagesEnabled(result.messagesEnabled !== false)
 
@@ -194,6 +204,7 @@ export default function ConversationScreen({ target, incoming, onClose }) {
         <input
           placeholder={t(messagesEnabled ? 'Message' : 'Messages are disabled for this phone number.')}
           value={text}
+          maxLength={1000}
           disabled={sending || !messagesEnabled}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && send()}

@@ -107,13 +107,13 @@ export default function CategoriesTab() {
       {editing && (
         <Sheet title={t(editing.id ? 'Edit category' : 'New category')} onClose={() => setEditing(null)}>
           <FormField label={t('Key (e.g. taxi)')}>
-            <input className="search-input" value={editing.key} disabled={!!editing.id} onChange={(e) => setEditing({ ...editing, key: e.target.value })} />
+            <input className="search-input" maxLength={50} value={editing.key} disabled={!!editing.id} onChange={(e) => setEditing({ ...editing, key: e.target.value })} />
           </FormField>
           <FormField label={t('Name')}>
-            <input className="search-input" value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} />
+            <input className="search-input" maxLength={50} value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} />
           </FormField>
           <FormField label={t('Icon')} hint={t('Available icons: police, bank, law, medical, taxi, car-dealer, wrench, tow-truck, car-wash, restaurant, bar, barber, tattoo, music, news, shop, people, funeral')}>
-            <input className="search-input" value={editing.icon} onChange={(e) => setEditing({ ...editing, icon: e.target.value })} />
+            <input className="search-input" maxLength={100} value={editing.icon} onChange={(e) => setEditing({ ...editing, icon: e.target.value })} />
           </FormField>
           <FormField label={t('Sort order')}>
             <input className="search-input" type="number" value={editing.sort} onChange={(e) => setEditing({ ...editing, sort: Number(e.target.value) })} />

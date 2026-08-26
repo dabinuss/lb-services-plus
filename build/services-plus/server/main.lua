@@ -192,7 +192,7 @@ local function getUnreadCounts(source)
     end
 
     local company = Companies.GetForPlayer(source)
-    if not company or not Employees.IsLoggedIn(source, company.id) then return result end
+    if not company or not Employees.IsLoggedIn(source, company.id) or not Framework.GetOnDuty(source) then return result end
 
     local ownerKey = Framework.GetIdentifier(source)
     result.companyMessages = tonumber(MySQL.scalar.await([[
@@ -242,7 +242,9 @@ local function resolveConversationViewer(source, channelId)
     end
 
     local job = Framework.GetJob(source)
-    if job and job.name == channel.company_job then
+    local employeeCompany = job and Companies.GetByJob(job.name)
+    if employeeCompany and job.name == channel.company_job
+        and Employees.IsLoggedIn(source, employeeCompany.id) and Framework.GetOnDuty(source) then
         return Framework.GetIdentifier(source), "employee", channel.id
     end
 
@@ -275,7 +277,7 @@ local function markRead(source, scope)
     local ownerKey, eventOwnerKey, companyId = Framework.GetPhoneNumber(source), nil, 0
     if isCompanyScope then
         local company = Companies.GetForPlayer(source)
-        if not company or not Employees.IsLoggedIn(source, company.id) then return false end
+        if not company or not Employees.IsLoggedIn(source, company.id) or not Framework.GetOnDuty(source) then return false end
         ownerKey, companyId = Framework.GetIdentifier(source), company.id
     end
     if not ownerKey then return false end
@@ -309,6 +311,7 @@ RegisterCallback("bootstrap", function(source, reply)
         categories = Companies.GetCategories(),
         companies = Companies.GetPublicList(),
         myNumber = phoneNumber,
+        maxPassengerCount = Config.MaxPassengerCount,
         locale = GetServicesLocale(phoneNumber),
         unread = getUnreadCounts(source),
         companySession = getCompanySession(source, company, job, phoneNumber),
@@ -353,6 +356,10 @@ RegisterCallback("setStatus", function(source, reply, status)
     -- round 4 §11: low severity, no other player/company data at stake),
     -- but there's no reason a non-employee should be able to call this at
     -- all - matches the same guard toggleDuty already has.
+    local company = Companies.GetForPlayer(source)
+    if not company or not Employees.IsLoggedIn(source, company.id) or not Framework.GetOnDuty(source) then
+        return reply(false)
+    end
     reply(Employees.UpdateStatus(source, status))
 end)
 
@@ -361,12 +368,17 @@ end)
 -- ---------------------------------------------------------------------------
 RegisterCallback("getHotlines", function(source, reply)
     local company = Companies.GetForPlayer(source)
-    if not company then return reply(false) end
+    if not company or not Employees.IsLoggedIn(source, company.id) or not Framework.GetOnDuty(source) then return reply(false) end
 
     reply(Employees.GetHotlineOptions(source, company.id))
 end)
 
 RegisterCallback("toggleHotline", function(source, reply, numberId, active)
+    local sessionCompany = Companies.GetForPlayer(source)
+    if not sessionCompany or not Employees.IsLoggedIn(source, sessionCompany.id)
+        or not Framework.GetOnDuty(source) then
+        return reply({ ok = false, reason = "off_duty" })
+    end
     local ok, reason = Employees.ToggleHotline(source, numberId, active == true)
     if not ok then return reply({ ok = false, reason = reason }) end
 
@@ -498,7 +510,7 @@ RegisterCallback("getTeam", function(source, reply, companyId)
     if not company then return reply(false) end
 
     local isOwnLoggedInCompany = ownCompany and ownCompany.id == company.id
-        and Employees.IsLoggedIn(source, company.id)
+        and Employees.IsLoggedIn(source, company.id) and Framework.GetOnDuty(source)
 
     if visibility ~= "everyone" and (visibility ~= "employees" or not ownCompany
         or ownCompany.id ~= company.id or not isOwnLoggedInCompany) then return reply(false) end
@@ -524,7 +536,7 @@ end)
 -- ---------------------------------------------------------------------------
 RegisterCallback("getCompanyConversations", function(source, reply, rawCursor)
     local company = Companies.GetForPlayer(source)
-    if not company then return reply(false) end
+    if not company or not Employees.IsLoggedIn(source, company.id) or not Framework.GetOnDuty(source) then return reply(false) end
 
     local cursor = NormalizeListCursor(rawCursor)
     local query = [[
@@ -568,7 +580,8 @@ end)
 -- ---------------------------------------------------------------------------
 RegisterCallback("getCompanySettings", function(source, reply)
     local company, job = Companies.GetForPlayer(source)
-    if not company or not Framework.IsBoss(source, job.name, company.boss_grade) then return reply(false) end
+    if not company or not Employees.IsLoggedIn(source, company.id) or not Framework.GetOnDuty(source)
+        or not Framework.IsBoss(source, job.name, company.boss_grade) then return reply(false) end
 
     local numbers = Companies.GetNumbers(company.id)
     local numberList = {}
@@ -602,7 +615,8 @@ local ROUTING_MODES = { all = true, random = true, hotline = true }
 
 RegisterCallback("updateCompanySettings", function(source, reply, settings)
     local company, job = Companies.GetForPlayer(source)
-    if not company or not Framework.IsBoss(source, job.name, company.boss_grade) then return reply(false) end
+    if not company or not Employees.IsLoggedIn(source, company.id) or not Framework.GetOnDuty(source)
+        or not Framework.IsBoss(source, job.name, company.boss_grade) then return reply(false) end
     if type(settings) ~= "table"
         or type(settings.callsEnabled) ~= "boolean"
         or type(settings.messagesEnabled) ~= "boolean"
@@ -638,7 +652,8 @@ end)
 
 RegisterCallback("updateNumberSettings", function(source, reply, numberId, settings)
     local company, job = Companies.GetForPlayer(source)
-    if not company or not Framework.IsBoss(source, job.name, company.boss_grade) then return reply(false) end
+    if not company or not Employees.IsLoggedIn(source, company.id) or not Framework.GetOnDuty(source)
+        or not Framework.IsBoss(source, job.name, company.boss_grade) then return reply(false) end
     numberId = tonumber(numberId)
     if not numberId or numberId ~= math.floor(numberId) or type(settings) ~= "table"
         or type(settings.callsEnabled) ~= "boolean"
@@ -726,7 +741,7 @@ end)
 -- authenticated employee and their current company.
 RegisterCallback("getEmployeeDailyStats", function(source, reply)
     local company = Companies.GetForPlayer(source)
-    if not company or not Employees.IsLoggedIn(source, company.id) then return reply(false) end
+    if not company or not Employees.IsLoggedIn(source, company.id) or not Framework.GetOnDuty(source) then return reply(false) end
 
     local identifier = Framework.GetIdentifier(source)
     local phoneNumber = Framework.GetPhoneNumber(source)
@@ -747,6 +762,10 @@ end)
 
 RegisterCallback("companyLogout", function(source, reply)
     local job = Framework.GetJob(source)
+    if job and Framework.GetOnDuty(source) then
+        Framework.SetDuty(source, false)
+        Framework.RefreshDuty(source)
+    end
     if job then Employees.BroadcastRemoved(source, job.name) end
     Requests.ClearPendingNotificationsForSource(source)
     Requests.SuspendActiveForSource(source)
@@ -761,7 +780,14 @@ end)
 
 AddEventHandler("services-plus:internal:dutyChanged", function(source)
     local company = Companies.GetForPlayer(source)
-    if not Framework.GetOnDuty(source) then Employees.ClearCompanySession(source) end
+    if company and Employees.IsLoggedIn(source, company.id) then
+        if Framework.GetOnDuty(source) then
+            Requests.RestoreActiveForSource(source)
+        else
+            Requests.ClearPendingNotificationsForSource(source)
+            Requests.SuspendActiveForSource(source)
+        end
+    end
     if company then Companies.NotifyDirectoryChanged(company.id) end
 end)
 
@@ -783,7 +809,10 @@ RegisterCallback("toggleDuty", function(source, reply, state)
     -- companies - it must not become a universal duty switch for whatever
     -- job the player happens to hold (that flips QB/QBX's real job.onduty).
     local company = Companies.GetForPlayer(source)
-    if not company then return reply(false) end
+    if not company or not Employees.IsLoggedIn(source, company.id) then return reply(false) end
+    if state ~= true and Requests.GetActive(source) then
+        return reply({ ok = false, reason = "active_request" })
+    end
 
     if not Framework.SetDuty(source, state == true) then return reply(false) end
     Framework.RefreshDuty(source)
@@ -895,7 +924,8 @@ RegisterCallback("sendMessage", function(source, reply, channelId, content)
         -- must actually be an employee of the owning company to reply as the company
         local job = Framework.GetJob(source)
 
-        if not job or job.name ~= company.job then
+        if not job or job.name ~= company.job or not Employees.IsLoggedIn(source, company.id)
+            or not Framework.GetOnDuty(source) then
             return reply(false)
         end
     elseif not Config.MessageOffline and not Companies.IsAvailable(company.id) then
@@ -932,7 +962,8 @@ RegisterCallback("getMessages", function(source, reply, channelId, beforeId)
     local myNum = Framework.GetPhoneNumber(source)
     local job = Framework.GetJob(source)
     local company = number and Companies.GetById(number.company_id)
-    local owns = myNum == channel.contact_number or (company and job and job.name == company.job)
+    local owns = myNum == channel.contact_number or (company and job and job.name == company.job
+        and Employees.IsLoggedIn(source, company.id) and Framework.GetOnDuty(source))
 
     if not owns then return reply(false) end
 
@@ -1041,6 +1072,7 @@ RegisterCallback("archiveConversation", function(source, reply, channelId)
 
     local isContact = Framework.GetPhoneNumber(source) == channel.contact_number
     local isEmployee = company ~= nil and job ~= nil and job.name == company.job
+        and Employees.IsLoggedIn(source, company.id) and Framework.GetOnDuty(source)
 
     if not isContact and not isEmployee then return reply(false) end
 

@@ -261,6 +261,9 @@ CREATE TABLE IF NOT EXISTS `phone_services_plus_request_types` (
     `category_id` INT UNSIGNED DEFAULT NULL,
 
     `name` VARCHAR(50) NOT NULL,
+    -- Stable public/API key. Unlike the display name, this never changes
+    -- after creation and is not overloaded with presentation concerns.
+    `identifier` VARCHAR(100) NOT NULL,
     `icon` VARCHAR(100) DEFAULT NULL,
     `description` VARCHAR(255) DEFAULT NULL,
 
@@ -288,6 +291,7 @@ CREATE TABLE IF NOT EXISTS `phone_services_plus_request_types` (
     `feature` VARCHAR(50) DEFAULT NULL,
 
     PRIMARY KEY (`id`),
+    UNIQUE KEY `request_type_identifier` (`identifier`),
     FOREIGN KEY (`category_id`) REFERENCES `phone_services_plus_categories`(`id`) ON DELETE SET NULL
 ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -330,20 +334,17 @@ CREATE TABLE IF NOT EXISTS `phone_services_plus_requests` (
     `passenger_count` INT DEFAULT NULL,
     `description` VARCHAR(255) DEFAULT NULL,
 
-    -- Feature bookkeeping (request-types/taxi/server.lua and friends), all NULL
-    -- for requests whose type has no feature. `accepted_at` exists
-    -- separately from `updated_at` because that column gets overwritten on
-    -- *both* the accept and the complete transition, so it can't answer
-    -- "how long was this active" by itself. `pickup_distance` is a proxy,
-    -- not a real trip odometer - this request system has no drop-off
-    -- location or route tracking (see server/requests.lua's own header on
-    -- the deliberately small state machine), so it's the straight-line
-    -- distance between the accepting employee and the pickup point,
-    -- captured once at accept. `feature_data` is the frozen result computed
-    -- at completion (e.g. the Taxameter's final fare) - a snapshot, because
-    -- the company's rate can change after the fact and old requests must
-    -- keep showing what they actually cost at the time.
+    -- Feature bookkeeping (request-types/taxi/server.lua and friends), all
+    -- NULL/zero for requests whose type has no feature. accepted_at tracks
+    -- dispatch acceptance; service_started_at begins the actual billable
+    -- service (for taxis: arrival at pickup). travelled_distance is sampled
+    -- periodically during that service, never once from accept to pickup.
+    -- pickup_distance remains only for backwards compatibility with rows
+    -- written before the real journey meter. feature_data freezes the tariff
+    -- at acceptance and later stores the final result.
     `accepted_at` TIMESTAMP NULL DEFAULT NULL,
+    `service_started_at` TIMESTAMP NULL DEFAULT NULL,
+    `travelled_distance` FLOAT NOT NULL DEFAULT 0,
     `pickup_distance` FLOAT DEFAULT NULL,
     `feature_data` JSON DEFAULT NULL,
 

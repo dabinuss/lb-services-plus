@@ -22,10 +22,12 @@
       changing its rate during a ride therefore cannot change that ride's
       price.
 
-    Distance is a proxy, not a real trip odometer (see sql/install.sql's
-    `pickup_distance` comment) - this system has no drop-off location or
-    route tracking to measure an actual driven distance against. Per-minute
-    billing has no such caveat: `accepted_at` -> now is a real duration.
+    Billing starts only once the assigned driver reaches the pickup radius.
+    From there, the existing low-frequency journey reporter supplies
+    server-owned player positions. Distance is accumulated between plausible
+    samples and persisted periodically; per-minute uses the same billable
+    service start. Dispatch acceptance and travel to the customer are never
+    charged.
 ]]
 
 TaxiPricing = {}
@@ -33,6 +35,9 @@ TaxiPricing = {}
 local FEATURE = "taxi_pricing"
 local BILLING_MODES = { per_minute = true, per_100m = true }
 local MIN_RATE, MAX_RATE = 0, 1000
+local METER_PERSIST_INTERVAL = 60
+local MAX_METRES_PER_SECOND = 120
+local activeMeters = {} -- requestId -> sampled billable journey state
 
 local function clampRate(value)
     local n = tonumber(value)
@@ -135,10 +140,8 @@ function TaxiPricing.UpdateCompanySettings(company, requestTypeId, patch)
     return true
 end
 
---- Requests.Accept hook - no-op unless this request's type has the feature
---- on. Captures the one distance sample this feature ever gets (see file
---- header), freezes the currently configured tariff, and starts the
---- per-minute clock.
+--- Requests.Accept hook - freezes the tariff, but deliberately does not
+--- start billing. The service clock/meter starts on pickup arrival.
 ---@param requestId number
 ---@param employeeSource number
 function TaxiPricing.OnAccept(requestId, employeeSource)
@@ -152,30 +155,110 @@ function TaxiPricing.OnAccept(requestId, employeeSource)
 
     local billingMode, rate = getPricingConfig(row.company_id, row.request_type_id)
 
-    local distance = json.null
-    if type(row.pos_x) == "number" and type(row.pos_y) == "number" then
-        local ped = GetPlayerPed(employeeSource)
-        if ped and ped ~= 0 then
-            local coords = GetEntityCoords(ped)
-            local dx, dy = coords.x - row.pos_x, coords.y - row.pos_y
-            distance = math.sqrt(dx * dx + dy * dy)
+    MySQL.update.await(
+        "UPDATE phone_services_plus_requests SET accepted_at = NOW(), service_started_at = NULL, travelled_distance = 0, pickup_distance = NULL, feature_data = ? WHERE id = ?",
+        { json.encode({ feature = FEATURE, billingMode = billingMode, rate = rate }), requestId }
+    )
+    activeMeters[tonumber(requestId)] = nil
+end
+
+local function newMeterState(requestId, coords, distance)
+    local now = os.time()
+    local state = {
+        distance = math.max(0, tonumber(distance) or 0),
+        lastX = coords and tonumber(coords.x) or nil,
+        lastY = coords and tonumber(coords.y) or nil,
+        lastSampleAt = now,
+        lastPersistAt = now,
+    }
+    activeMeters[tonumber(requestId)] = state
+    return state
+end
+
+local function loadMeterState(requestId, coords)
+    local row = MySQL.single.await([[
+        SELECT r.travelled_distance, r.service_started_at, t.feature
+        FROM phone_services_plus_requests r
+        JOIN phone_services_plus_request_types t ON t.id = r.request_type_id
+        WHERE r.id = ?
+    ]], { requestId })
+    if not row or row.feature ~= FEATURE or not row.service_started_at then return nil end
+    return newMeterState(requestId, coords, row.travelled_distance)
+end
+
+local function sampleMeter(requestId, coords, forcePersist)
+    local id = tonumber(requestId)
+    if not id or not coords then return nil end
+    local x, y = tonumber(coords.x), tonumber(coords.y)
+    if not x or not y then return nil end
+
+    local state = activeMeters[id] or loadMeterState(id, coords)
+    if not state then return nil end
+
+    local now = os.time()
+    if state.lastX and state.lastY then
+        local dx, dy = x - state.lastX, y - state.lastY
+        local delta = math.sqrt(dx * dx + dy * dy)
+        local elapsed = math.max(1, now - state.lastSampleAt)
+        -- Ignore teleports or corrupted samples. 120 m/s leaves generous
+        -- headroom for GTA driving while preventing one jump from billing
+        -- kilometres that were never driven.
+        if delta <= math.max(250, elapsed * MAX_METRES_PER_SECOND) then
+            state.distance = state.distance + delta
         end
     end
 
-    MySQL.update.await(
-        "UPDATE phone_services_plus_requests SET accepted_at = NOW(), pickup_distance = ?, feature_data = ? WHERE id = ?",
-        { distance, json.encode({ feature = FEATURE, billingMode = billingMode, rate = rate }), requestId }
-    )
+    state.lastX, state.lastY, state.lastSampleAt = x, y, now
+    if forcePersist or now - state.lastPersistAt >= METER_PERSIST_INTERVAL then
+        MySQL.update.await(
+            "UPDATE phone_services_plus_requests SET travelled_distance = ? WHERE id = ? AND service_started_at IS NOT NULL",
+            { state.distance, id }
+        )
+        state.lastPersistAt = now
+    end
+    return state.distance
 end
 
---- Requests.Complete hook - no-op unless this request's type has the
---- feature on. Uses the tariff captured at acceptance and adds the final
---- metric/amount. Requests that were already active before this version
---- fall back to the current setting once for backwards compatibility.
 ---@param requestId number
-function TaxiPricing.OnComplete(requestId)
+---@param employeeSource number
+---@param coords table
+function TaxiPricing.OnServiceStarted(requestId, employeeSource, coords)
     local row = MySQL.single.await([[
-        SELECT r.company_id, r.request_type_id, r.accepted_at, r.pickup_distance, r.feature_data, t.feature
+        SELECT t.feature
+        FROM phone_services_plus_requests r
+        JOIN phone_services_plus_request_types t ON t.id = r.request_type_id
+        WHERE r.id = ? AND r.status = 'active'
+    ]], { requestId })
+    if not row or row.feature ~= FEATURE then return end
+
+    MySQL.update.await([[
+        UPDATE phone_services_plus_requests
+        SET service_started_at = COALESCE(service_started_at, NOW())
+        WHERE id = ? AND status = 'active'
+    ]], { requestId })
+    newMeterState(requestId, coords, 0)
+end
+
+---@param requestId number
+---@param employeeSource number
+---@param coords table
+function TaxiPricing.OnProgress(requestId, employeeSource, coords)
+    sampleMeter(requestId, coords, false)
+end
+
+--- Uses the tariff captured at acceptance and the actual service metric.
+--- Requests accepted before tariff snapshots existed fall back to the
+--- current company setting once for backwards compatibility.
+---@param requestId number
+---@param employeeSource? number
+function TaxiPricing.OnComplete(requestId, employeeSource)
+    if employeeSource then
+        local ped = GetPlayerPed(employeeSource)
+        if ped and ped ~= 0 then sampleMeter(requestId, GetEntityCoords(ped), true) end
+    end
+
+    local row = MySQL.single.await([[
+        SELECT r.company_id, r.request_type_id, r.service_started_at, r.travelled_distance, r.feature_data, t.feature
         FROM phone_services_plus_requests r
         JOIN phone_services_plus_request_types t ON t.id = r.request_type_id
         WHERE r.id = ?
@@ -191,14 +274,13 @@ function TaxiPricing.OnComplete(requestId)
 
     local metric
     if billingMode == "per_minute" then
-        if not row.accepted_at then return end
-        local seconds = MySQL.scalar.await(
-            "SELECT TIMESTAMPDIFF(SECOND, accepted_at, NOW()) FROM phone_services_plus_requests WHERE id = ?",
+        local seconds = row.service_started_at and MySQL.scalar.await(
+            "SELECT TIMESTAMPDIFF(SECOND, service_started_at, NOW()) FROM phone_services_plus_requests WHERE id = ?",
             { requestId }
-        )
+        ) or 0
         metric = math.max(0, tonumber(seconds) or 0) / 60
     else
-        metric = math.max(0, tonumber(row.pickup_distance) or 0)
+        metric = math.max(0, tonumber(row.travelled_distance) or 0)
     end
 
     local amount = billingMode == "per_minute" and (rate * metric) or (rate * (metric / 100))
@@ -208,21 +290,31 @@ function TaxiPricing.OnComplete(requestId)
         "UPDATE phone_services_plus_requests SET feature_data = ? WHERE id = ?",
         { json.encode({ feature = FEATURE, billingMode = billingMode, rate = rate, metric = metric, amount = amount }), requestId }
     )
+    activeMeters[tonumber(requestId)] = nil
+end
+
+function TaxiPricing.OnCancel(requestId)
+    activeMeters[tonumber(requestId)] = nil
 end
 
 RegisterCallback("getTaxiPricingSettings", function(source, reply)
     local company, job = Companies.GetForPlayer(source)
-    if not company or not Framework.IsBoss(source, job.name, company.boss_grade) then return reply(false) end
+    if not company or not Employees.IsLoggedIn(source, company.id) or not Framework.GetOnDuty(source)
+        or not Framework.IsBoss(source, job.name, company.boss_grade) then return reply(false) end
     reply(TaxiPricing.GetCompanySettings(company))
 end)
 
 RegisterCallback("updateTaxiPricingSettings", function(source, reply, requestTypeId, settings)
     local company, job = Companies.GetForPlayer(source)
-    if not company or not Framework.IsBoss(source, job.name, company.boss_grade) then return reply(false) end
+    if not company or not Employees.IsLoggedIn(source, company.id) or not Framework.GetOnDuty(source)
+        or not Framework.IsBoss(source, job.name, company.boss_grade) then return reply(false) end
     reply(TaxiPricing.UpdateCompanySettings(company, requestTypeId, settings))
 end)
 
 Features.Register(FEATURE, {
     OnAccept = TaxiPricing.OnAccept,
+    OnServiceStarted = TaxiPricing.OnServiceStarted,
+    OnProgress = TaxiPricing.OnProgress,
     OnComplete = TaxiPricing.OnComplete,
+    OnCancel = TaxiPricing.OnCancel,
 })

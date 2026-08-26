@@ -146,6 +146,7 @@ const fixtures = {
       },
     ],
     myNumber: '5550100',
+    maxPassengerCount: 20,
     admin: true,
     // Logged in at the Mechanic company (Downtown Cab Co., id 3) - referenced
     // by companyLogin/getTeam/getCompanyConversations/etc. below too, keep
@@ -169,31 +170,31 @@ const fixtures = {
   requestTypes: {
     4: [
       {
-        id: 1, category_id: 4, name: 'Roadside Assistance', icon: 'roadside_assistance',
+        id: 1, category_id: 4, name: 'Roadside Assistance', identifier: 'roadside_assistance', icon: null,
         description: 'Request on-site repairs.', passenger_count: 0, passenger_mode: 'disabled', description_enabled: 1, note_mode: 'required',
       },
     ],
     3: [
       {
-        id: 2, category_id: 3, name: 'Taxi Pickup', icon: 'taxi_pickup',
+        id: 2, category_id: 3, name: 'Taxi Pickup', identifier: 'taxi', icon: null,
         description: 'Request a ride from your current location.', passenger_count: 1, passenger_mode: 'required', count_label: 'Passenger count', description_enabled: 1, note_mode: 'optional',
       },
     ],
     1: [
       {
-        id: 3, category_id: 1, name: 'Request Backup', icon: 'request_backup',
+        id: 3, category_id: 1, name: 'Request Backup', identifier: 'request_backup', icon: null,
         description: 'Flag down the nearest available unit.', passenger_count: 0, passenger_mode: 'disabled', description_enabled: 1, note_mode: 'optional',
       },
     ],
     2: [
       {
-        id: 4, category_id: 2, name: 'Medical Emergency', icon: 'medical_emergency',
+        id: 4, category_id: 2, name: 'Medical Emergency', identifier: 'medical_emergency', icon: null,
         description: 'Request an ambulance to your location.', passenger_count: 1, passenger_mode: 'required', count_label: 'Number of injured people', description_enabled: 0, note_mode: 'disabled',
       },
     ],
     5: [
       {
-        id: 5, category_id: 5, name: 'Breaking News', icon: 'breaking_news',
+        id: 5, category_id: 5, name: 'Breaking News', identifier: 'breaking_news', icon: null,
         description: 'Report breaking news at your current location.', passenger_count: 0,
         passenger_mode: 'disabled', description_enabled: 0, note_mode: 'disabled',
       },
@@ -478,6 +479,7 @@ async function fetchNuiFixture(action, data) {
     case 'companyLogout':
       return true
     case 'toggleDuty':
+      return { ok: true, onDuty: data.onDuty, status: 'available', loggedIn: true }
     case 'setStatus':
       return true
     case 'openConversation':
@@ -715,7 +717,7 @@ async function fetchNuiFixture(action, data) {
         {
           id: fixtureAdminRequestTypes.length + 1, category_id: data.categoryId,
           passenger_count: data.passengerMode !== 'disabled' ? 1 : 0, passenger_mode: data.passengerMode,
-          count_label: data.countLabel || 'Passenger count', icon: requestTypeIdentifier(data.name), note_mode: data.noteMode,
+          count_label: data.countLabel || 'Passenger count', identifier: data.identifier || requestTypeIdentifier(data.name), icon: null, note_mode: data.noteMode,
           description_enabled: data.noteMode !== 'disabled' ? 1 : 0, competition_enabled: data.competitionEnabled ? 1 : 0,
           enabled: 1, ...data,
         },
@@ -727,7 +729,7 @@ async function fetchNuiFixture(action, data) {
           ? {
               ...t, ...data, category_id: data.categoryId,
               passenger_count: data.passengerMode !== 'disabled' ? 1 : 0, passenger_mode: data.passengerMode,
-              count_label: data.countLabel || 'Passenger count', icon: requestTypeIdentifier(data.name), note_mode: data.noteMode,
+              count_label: data.countLabel || 'Passenger count', note_mode: data.noteMode,
               description_enabled: data.noteMode !== 'disabled' ? 1 : 0, competition_enabled: data.competitionEnabled ? 1 : 0,
               enabled: data.enabled !== false ? 1 : 0,
             }

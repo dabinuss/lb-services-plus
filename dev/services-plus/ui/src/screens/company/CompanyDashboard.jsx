@@ -30,7 +30,15 @@ export default function CompanyDashboard({
   const { t } = useI18n()
   const [tab, setTab] = useState('home')
   const [visitedTabs, setVisitedTabs] = useState(() => new Set(['home']))
-  const tabs = TABS.filter((t) => !t.bossOnly || session.employee.isBoss)
+  const [onDuty, setOnDuty] = useState(employee.onDuty !== false)
+  const [loggingOut, setLoggingOut] = useState(false)
+  const tabs = TABS.filter((item) => item.key === 'home' || (onDuty && (!item.bossOnly || session.employee.isBoss)))
+
+  const logout = async () => {
+    if (loggingOut) return
+    setLoggingOut(true)
+    await onLogout()
+  }
 
   const openTab = (next) => {
     setVisitedTabs((current) => current.has(next) ? current : new Set([...current, next]))
@@ -45,12 +53,35 @@ export default function CompanyDashboard({
     if (tab === 'calls') onReadCalls?.()
   }, [tab, callRefreshToken, onReadCalls])
 
+  useEffect(() => {
+    if (!onDuty && tab !== 'home') setTab('home')
+  }, [onDuty, tab])
+
+  useEffect(() => {
+    setOnDuty(employee.onDuty !== false)
+  }, [employee.onDuty])
+
   // `company` (from the public companies list, incl. background) can be
   // missing if it's currently hidden from that list (e.g. unavailable and
   // UnavailableCompanyMode is "hide") - session.company still has the
   // basics from the login RPC, just never a background photo.
   const icon = company?.icon || session.company.icon
   const background = company?.background
+
+  if (loggingOut) {
+    return (
+      <div className="screen company-screen login-screen">
+        <div className="login-card is-verifying" aria-busy="true">
+          <div className="login-brand">
+            {icon ? <img className="login-icon" src={icon} alt="" /> : <div className="login-icon login-icon-fallback">{session.company.name[0]}</div>}
+          </div>
+          <div className="login-eyebrow">{t('Employee portal')}</div>
+          <div className="login-title">{t('Signing out…')}</div>
+          <div className="login-progress" aria-hidden="true"><span /></div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="screen company-screen">
@@ -63,7 +94,7 @@ export default function CompanyDashboard({
           <div className="dashboard-company">{session.company.name}</div>
         </div>
 
-        <button className="icon-button logout" onClick={onLogout} aria-label={t('Logout')}>
+        <button className="icon-button logout" onClick={logout} aria-label={t('Logout')}>
           <Icon name="logout" size={16} />
         </button>
       </div>
@@ -93,14 +124,14 @@ export default function CompanyDashboard({
             employeeMemberId={employee.memberId}
             employeeName={session.employee.name}
             employeeRankTitle={session.employee.gradeLabel || employee.jobLabel || session.company.name}
-            onLogout={onLogout}
+            onDutyChange={setOnDuty}
             teamUpdate={teamUpdate}
           /></div>
         )}
-        {visitedTabs.has('requests') && <div className={`subtab-view${tab === 'requests' ? ' active' : ''}`}><RequestsTab refresh={requestRefresh} /></div>}
-        {visitedTabs.has('messages') && <div className={`subtab-view${tab === 'messages' ? ' active' : ''}`}><MessagesTab refreshToken={messageRefreshToken} onOpenConversation={onOpenConversation} onReadConversation={onReadConversation} /></div>}
-        {visitedTabs.has('calls') && <div className={`subtab-view${tab === 'calls' ? ' active' : ''}`}><CallsTab refreshToken={callRefreshToken} /></div>}
-        {visitedTabs.has('settings') && session.employee.isBoss && <div className={`subtab-view${tab === 'settings' ? ' active' : ''}`}><SettingsTab /></div>}
+        {onDuty && visitedTabs.has('requests') && <div className={`subtab-view${tab === 'requests' ? ' active' : ''}`}><RequestsTab refresh={requestRefresh} /></div>}
+        {onDuty && visitedTabs.has('messages') && <div className={`subtab-view${tab === 'messages' ? ' active' : ''}`}><MessagesTab refreshToken={messageRefreshToken} onOpenConversation={onOpenConversation} onReadConversation={onReadConversation} /></div>}
+        {onDuty && visitedTabs.has('calls') && <div className={`subtab-view${tab === 'calls' ? ' active' : ''}`}><CallsTab refreshToken={callRefreshToken} /></div>}
+        {onDuty && visitedTabs.has('settings') && session.employee.isBoss && <div className={`subtab-view${tab === 'settings' ? ' active' : ''}`}><SettingsTab /></div>}
       </div>
     </div>
   )
