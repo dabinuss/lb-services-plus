@@ -39,14 +39,7 @@ local function countCards(owner)
     return total, owned
 end
 
-local function cleanText(value, maximum, required)
-    if value == nil and not required then return nil end
-    if type(value) ~= "string" then return nil, "invalid_text" end
-    value = value:gsub("[%z\1-\8\11\12\14-\31]", "")
-    if required and value == "" then return nil, "empty_text" end
-    if #value > maximum then return nil, "text_too_long" end
-    return value
-end
+local cleanText = PeekPlusText.Clean
 
 local function cleanKey(value)
     if value == nil then return nil end

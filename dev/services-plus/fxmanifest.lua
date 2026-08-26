@@ -11,6 +11,7 @@ shared_scripts {
     'shared/config.lua',
     'peekplus/shared/config.lua',
     'peekplus/shared/defaults.lua',
+    'peekplus/shared/text.lua',
     'peekplus/shared/quick_action_policy.lua',
     'shared/categories.lua',
     -- Each of these appends its own request type to
