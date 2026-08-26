@@ -2,7 +2,7 @@
 // .full-phone tree and owns LB's native .phoneVisbility peek position. It
 // does not enqueue an LB notification or edit any LB Phone files.
 ;(function () {
-    const CONTROLLER_VERSION = 'peekplus-1.3.0'
+    const CONTROLLER_VERSION = 'peekplus-1.4.0'
     const resourceName = typeof GetParentResourceName === 'function' ? GetParentResourceName() : 'services-plus'
     const OVERLAY_ID = 'services-plus-overlay'
     const STYLE_ID = 'services-plus-overlay-styles'
@@ -244,14 +244,21 @@
             max-width: 90vw;
             border-radius: 1.125rem;
             padding: .9rem 1rem;
-            box-shadow: 0 .4rem 1rem rgba(0, 0, 0, .24);
-            border-left: .24rem solid #8e8e93;
+            border: 1px solid rgba(127, 127, 127, .18);
+            box-shadow: 0 .22rem .8rem rgba(0, 0, 0, .2);
+            backdrop-filter: blur(1.2rem) saturate(1.12);
         }
-        #${OVERLAY_ID} .sp-card[data-variant='info'] { border-left-color: #0a84ff; }
-        #${OVERLAY_ID} .sp-card[data-variant='success'] { border-left-color: #30d158; }
-        #${OVERLAY_ID} .sp-card[data-variant='warning'] { border-left-color: #ff9f0a; }
-        #${OVERLAY_ID} .sp-card[data-variant='error'] { border-left-color: #ff453a; }
-        #${OVERLAY_ID}[data-theme] .sp-card[data-state='active'] {
+        #${OVERLAY_ID} .sp-card[data-appearance='services'] {
+            border: 0;
+            border-left: .24rem solid #8e8e93;
+            box-shadow: 0 .4rem 1rem rgba(0, 0, 0, .24);
+            backdrop-filter: none;
+        }
+        #${OVERLAY_ID} .sp-card[data-appearance='services'][data-variant='info'] { border-left-color: #0a84ff; }
+        #${OVERLAY_ID} .sp-card[data-appearance='services'][data-variant='success'] { border-left-color: #30d158; }
+        #${OVERLAY_ID} .sp-card[data-appearance='services'][data-variant='warning'] { border-left-color: #ff9f0a; }
+        #${OVERLAY_ID} .sp-card[data-appearance='services'][data-variant='error'] { border-left-color: #ff453a; }
+        #${OVERLAY_ID}[data-theme] .sp-card[data-appearance='services'][data-state='active'] {
             color: #f5f7fa;
             background: linear-gradient(145deg, rgba(22,27,33,.985), rgba(10,13,17,.99));
             border-top: 1px solid rgba(255,255,255,.09);
@@ -263,18 +270,20 @@
         #${OVERLAY_ID} .sp-card[data-template='compact'] .sp-title { font-size: .86rem; }
         #${OVERLAY_ID} .sp-card[data-template='compact'] .sp-meta { margin-top: .2rem; }
         #${OVERLAY_ID}[data-theme='light'] .sp-card {
-            background: rgb(245, 245, 250);
+            background: rgba(242, 242, 247, .96);
             color: #000;
         }
         #${OVERLAY_ID}[data-theme='dark'] .sp-card {
-            background: rgb(28, 28, 30);
+            background: rgba(44, 44, 46, .96);
             color: #f2f2f7;
         }
+        #${OVERLAY_ID}[data-theme='light'] .sp-card[data-appearance='services'] { background: rgb(245, 245, 250); }
+        #${OVERLAY_ID}[data-theme='dark'] .sp-card[data-appearance='services'] { background: rgb(28, 28, 30); }
         /* Full-card consumers own their visual surface. PeekPlus only
            supplies a bounded display slot and the trusted action bridge. */
         #${OVERLAY_ID}[data-theme] .sp-card[data-full-card='true'] {
             width: 100%; max-width: 100%; padding: 0; border: 0; border-radius: 0;
-            color: inherit; background: transparent; box-shadow: none;
+            color: inherit; background: transparent; box-shadow: none; backdrop-filter: none;
         }
         #${OVERLAY_ID} .sp-header { display: flex; align-items: center; gap: .65rem; min-width: 0; }
         #${OVERLAY_ID} .sp-card-icon {
@@ -291,7 +300,10 @@
         #${OVERLAY_ID} .sp-status {
             flex: 0 0 auto; display: flex; align-items: center; gap: .32rem;
             padding: .3rem .48rem; border-radius: .55rem; font-size: .66rem; font-weight: 700;
-            color: #30d158; background: rgba(48,209,88,.13); border: 1px solid rgba(48,209,88,.22);
+            color: #0a84ff; background: rgba(10,132,255,.11); border: 1px solid rgba(10,132,255,.18);
+        }
+        #${OVERLAY_ID} .sp-card[data-appearance='services'] .sp-status {
+            color: #30d158; background: rgba(48,209,88,.13); border-color: rgba(48,209,88,.22);
         }
         #${OVERLAY_ID} .sp-status::before { content: ''; width: .38rem; height: .38rem; border-radius: 50%; background: currentColor; }
         #${OVERLAY_ID} .sp-icon { display: block; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
@@ -326,14 +338,13 @@
             font-weight: 700;
             cursor: pointer;
         }
-        #${OVERLAY_ID} .sp-btn.accept,
-        #${OVERLAY_ID} .sp-btn.complete,
-        #${OVERLAY_ID} .sp-btn.success { background: linear-gradient(180deg, #35df65, #22b94e); color: #fff; box-shadow: 0 .18rem .5rem rgba(48,209,88,.2); }
-        #${OVERLAY_ID} .sp-btn.decline,
-        #${OVERLAY_ID} .sp-btn.cancel { background: #ff453a; color: #fff; }
-        #${OVERLAY_ID} .sp-btn.danger { background: linear-gradient(180deg, #ff5a52, #e63b34); color: #fff; box-shadow: 0 .18rem .5rem rgba(255,69,58,.16); }
-        #${OVERLAY_ID} .sp-btn.primary { background: #0a84ff; color: #fff; }
+        #${OVERLAY_ID} .sp-btn.success { background: rgba(127,127,127,.18); color: #30d158; }
+        #${OVERLAY_ID} .sp-btn.danger { background: rgba(127,127,127,.18); color: #ff453a; }
+        #${OVERLAY_ID} .sp-btn.primary { background: rgba(10,132,255,.14); color: #0a84ff; }
         #${OVERLAY_ID} .sp-btn.default { background: rgba(127, 127, 127, .25); color: inherit; }
+        #${OVERLAY_ID} .sp-card[data-appearance='services'] .sp-btn.success { background: linear-gradient(180deg, #35df65, #22b94e); color: #fff; box-shadow: 0 .18rem .5rem rgba(48,209,88,.2); }
+        #${OVERLAY_ID} .sp-card[data-appearance='services'] .sp-btn.danger { background: linear-gradient(180deg, #ff5a52, #e63b34); color: #fff; box-shadow: 0 .18rem .5rem rgba(255,69,58,.16); }
+        #${OVERLAY_ID} .sp-card[data-appearance='services'] .sp-btn.primary { background: #0a84ff; color: #fff; }
         #${OVERLAY_ID} .sp-btn:disabled { cursor: default; opacity: .55; }
         #${OVERLAY_ID} .sp-btn:active:not(:disabled) { transform: scale(.96); filter: brightness(1.08); }
         #${OVERLAY_ID} .sp-motion-result {
@@ -626,6 +637,10 @@
         element.appendChild(frame)
     }
 
+    function cardAppearance(payload) {
+        return payload.template === 'services' ? 'services' : 'default'
+    }
+
     function renderCard(targetDocument, element, payload, reusableFrame) {
         if (payload.layout === 'custom' && payload.templateDefinition?.fullCard === true) {
             renderCustomTemplate(targetDocument, element, payload, reusableFrame)
@@ -640,7 +655,9 @@
             addText(targetDocument, heading, 'sp-title', payload.title)
             addText(targetDocument, heading, 'sp-sub', payload.subtitle)
             header.appendChild(heading)
-            if (payload.state === 'active') addText(targetDocument, header, 'sp-status', 'Active request')
+            if (payload.state === 'active') {
+                addText(targetDocument, header, 'sp-status', cardAppearance(payload) === 'services' ? 'Active request' : 'Active')
+            }
             element.appendChild(header)
         } else {
             addText(targetDocument, element, 'sp-title', payload.title)
@@ -859,6 +876,7 @@
             existingCard.dataset.variant = lastState.card.variant || 'neutral'
             existingCard.dataset.state = lastState.card.state || 'pending'
             existingCard.dataset.template = lastState.card.template || 'default'
+            existingCard.dataset.appearance = cardAppearance(lastState.card)
             existingCard.dataset.fullCard = 'true'
             renderCard(container.ownerDocument, existingCard, lastState.card, reusableFrame)
             animateCardIn(existingCard, container, motion)
@@ -870,6 +888,7 @@
         card.dataset.variant = lastState.card.variant || 'neutral'
         card.dataset.state = lastState.card.state || 'pending'
         card.dataset.template = lastState.card.template || 'default'
+        card.dataset.appearance = cardAppearance(lastState.card)
         card.dataset.cardId = String(lastState.card.id)
         card.dataset.fullCard = lastState.card.templateDefinition?.fullCard === true ? 'true' : 'false'
         renderCard(container.ownerDocument, card, lastState.card, reusableFrame)

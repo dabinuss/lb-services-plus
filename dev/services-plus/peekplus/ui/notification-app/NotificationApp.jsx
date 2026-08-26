@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import Frame from '../../../ui/src/components/Frame.jsx'
+import CategoryIcon from '../../../ui/src/components/CategoryIcon.jsx'
 import { devMode, fetchNui, getSettings, onNuiEvent, onSettingsChange } from '../../../ui/src/lib/nui.js'
 import { useI18n } from '../../../ui/src/lib/i18n.jsx'
 import './NotificationApp.css'
@@ -20,12 +21,22 @@ const DEV_HISTORY = [
   },
 ]
 
-const VARIANT_ICON = { neutral: '●', info: 'i', success: '✓', warning: '!', error: '×' }
+function NotificationIcon({ card, variant }) {
+  return (
+    <span className="pn-variant-icon" data-variant={variant}>
+      <CategoryIcon icon={card.icon} />
+      {card.iconUrl && <img src={card.iconUrl} alt="" referrerPolicy="no-referrer" onError={(event) => event.currentTarget.remove()} />}
+    </span>
+  )
+}
 
 function Progress({ progress }) {
   const { t } = useI18n()
   if (!progress) return null
-  const percent = Math.max(0, Math.min(100, (progress.value / progress.max) * 100))
+  const value = Number(progress.value)
+  const maximum = Number(progress.max)
+  if (!Number.isFinite(value) || !Number.isFinite(maximum) || maximum <= 0) return null
+  const percent = Math.max(0, Math.min(100, (value / maximum) * 100))
   return (
     <div className="pn-progress">
       <div className="pn-progress-label"><span>{progress.label ? t(progress.label) : t('Progress')}</span><span>{Math.round(percent)}%</span></div>
@@ -48,10 +59,13 @@ function HistoryCard({ entry, expanded, onOpen, onDelete, disabled }) {
   const { t } = useI18n()
   const card = entry.card || {}
   const variant = card.variant || 'neutral'
+  const resultTone = ['active', 'completed'].includes(entry.result)
+    ? 'success'
+    : ['declined', 'expired', 'error', 'failed'].includes(entry.result) ? 'danger' : 'neutral'
   return (
-    <article className={`pn-card variant-${variant}${entry.read ? '' : ' unread'}`}>
-      <button className="pn-card-main" onClick={onOpen} disabled={disabled}>
-        <span className="pn-variant-icon">{VARIANT_ICON[variant] || '●'}</span>
+    <article className={`pn-card variant-${variant}${entry.read ? '' : ' unread'}${expanded ? ' expanded' : ''}`}>
+      <button className="pn-card-main" onClick={onOpen} disabled={disabled} aria-expanded={expanded}>
+        <NotificationIcon card={card} variant={variant} />
         <span className="pn-copy">
           <span className="pn-title">{card.title ? t(card.title) : t('Notification')}</span>
           {card.subtitle && <span className="pn-subtitle">{t(card.subtitle)}</span>}
@@ -66,7 +80,7 @@ function HistoryCard({ entry, expanded, onOpen, onDelete, disabled }) {
           ))}
           <Progress progress={card.progress} />
           <Timer timer={card.timer} />
-          <div className="pn-meta"><span>{entry.owner}</span><span>{t(entry.result)}</span></div>
+          <div className="pn-meta"><span>{entry.owner}</span><span className={`pn-result tone-${resultTone}`}>{t(entry.result)}</span></div>
           <button className="pn-delete" onClick={onDelete} disabled={disabled}>{t('Delete')}</button>
         </div>
       )}

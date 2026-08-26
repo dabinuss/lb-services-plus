@@ -60,7 +60,7 @@ end
 local function requestTemplate(payload, state)
     local identifier = normalizeIdentifier(payload.requestType or payload.typeIcon)
     local templates = identifier and requestTypeTemplates[identifier] or nil
-    return templates and templates[state] or "action"
+    return templates and templates[state] or "services"
 end
 
 local categoryIcons = {
@@ -145,6 +145,7 @@ local function pendingCard(payload)
         state = "pending",
         variant = "info",
         template = requestTemplate(payload, "pending"),
+        layout = "details",
         icon = requestIcon(payload),
         iconUrl = payload.companyIcon,
         title = tostring(payload.typeName or label(payload, "newRequest", "New request")),
@@ -204,6 +205,7 @@ local function activeCard(payload)
         state = "active",
         variant = "success",
         template = requestTemplate(payload, "active"),
+        layout = "details",
         icon = requestIcon(payload),
         iconUrl = payload.companyIcon,
         templateData = { statusLabel = label(payload, "activeRequest", "Active request") },
@@ -319,7 +321,8 @@ local function customerJourneyCard(payload)
         key = ("customer-service-request:%s"):format(payload.requestId),
         state = "active",
         variant = payload.arrived and "success" or "info",
-        template = "detail",
+        template = "services",
+        layout = "details",
         icon = requestIcon(payload),
         iconUrl = payload.companyIcon,
         title = tostring(payload.title),

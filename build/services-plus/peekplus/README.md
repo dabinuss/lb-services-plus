@@ -78,7 +78,9 @@ Card options:
 - `layout`: content model: `text`, `details`, `actions`, `progress`, `timer`
   or the `custom` layout selected by a registered iframe template.
 - `template`: visual renderer. Built-ins are `default`, `compact`, `detail`,
-  `action`, `progress` and `timer`.
+  `action`, `progress`, `timer` and `services`. The generic renderers use a
+  neutral LB-Phone-like appearance. `services` opts into the stronger
+  Services+ request styling and can be combined with an explicit `layout`.
 - `history`: `false` excludes this card from the local history; it defaults
   to `true`.
 - `icon`: optional semantic card icon such as `taxi`, `medical`, `police`, or `wrench`.
