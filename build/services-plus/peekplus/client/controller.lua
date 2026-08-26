@@ -398,11 +398,14 @@ local function updateHistory(card, result)
     notifyHistory()
 end
 
-local function renderVisible(playSound)
+local function renderVisible(playSound, reason, motion, outgoingMotion, outgoingReason)
     if not nuiReady then return end
     local card = visibleId and cards[visibleId] or nil
     if not card then
-        return sendNui("peekplus:clear", {})
+        return sendNui("peekplus:clear", {
+            reason = reason,
+            motion = motion or "exit",
+        })
     end
 
     local canUsePhone = PeekPlusLBPhone.IsUsable()
@@ -434,6 +437,10 @@ local function renderVisible(playSound)
         hidden = not canUsePhone and not limits.rootFallback,
         playSound = shouldPlaySound,
         soundName = soundName,
+        reason = reason,
+        motion = motion,
+        outgoingMotion = outgoingMotion,
+        outgoingReason = outgoingReason,
     })
 end
 
@@ -494,7 +501,7 @@ local function resumeCardTimer(card)
     startCardTimer(card)
 end
 
-local function showNext(playSound)
+local function showNext(playSound, outgoingReason, outgoingMotion, incomingReason)
     if visibleId and cards[visibleId] then return end
     visibleId = nil
 
@@ -505,7 +512,7 @@ local function showNext(playSound)
             cards[id].queued = false
             resumeCardTimer(cards[id])
             emitLifecycle(cards[id], "resumed")
-            renderVisible(false)
+            renderVisible(false, "resumed", "resume", outgoingMotion, outgoingReason)
             return watchVisible(cards[id])
         end
     end
@@ -519,11 +526,11 @@ local function showNext(playSound)
             card.queued = false
             startCardTimer(card)
             emitLifecycle(card, "visible")
-            renderVisible(playSound ~= false)
+            renderVisible(playSound ~= false, incomingReason or "visible", "enter", outgoingMotion, outgoingReason)
             return watchVisible(card)
         end
     end
-    renderVisible(false)
+    renderVisible(false, outgoingReason, outgoingMotion or "exit")
 end
 
 function PeekPlus.Show(spec, owner)
@@ -572,12 +579,12 @@ function PeekPlus.Show(spec, owner)
         normalized.queued = false
         startCardTimer(normalized)
         emitLifecycle(normalized, "visible")
-        renderVisible(true)
+        renderVisible(true, "created", "interrupt", "interrupt", "suspended")
         watchVisible(normalized)
     else
         queue[#queue + 1] = id
         if visible then emitLifecycle(normalized, "queued") end
-        showNext(true)
+        showNext(true, nil, nil, "created")
     end
     return id, nil, publicCard(normalized)
 end
@@ -588,6 +595,7 @@ function PeekPlus.Update(id, patch, owner, expectedRevision, actionToken)
     if card.owner ~= owner then return false, "not_owner" end
     if expectedRevision and tonumber(expectedRevision) ~= card.revision then return false, "stale_revision" end
     if actionToken and card.actionInFlight ~= actionToken then return false, "stale_action" end
+    local actionSucceeded = card.actionInFlight ~= nil
     local normalized, err = normalizeSpec(patch, true, owner)
     if not normalized then return false, err end
 
@@ -618,7 +626,7 @@ function PeekPlus.Update(id, patch, owner, expectedRevision, actionToken)
     if normalized.duration == nil and normalized.hold == nil then scheduleExpiry(card) end
     if normalized.priority ~= nil and card.queued then sortQueue() end
     if visibleId == id then
-        renderVisible(false)
+        renderVisible(false, "updated", actionSucceeded and "action-success" or "update")
         watchVisible(card)
     end
     updateHistory(card, card.state)
@@ -663,7 +671,7 @@ function PeekPlus.UpdatePresentation(id, patch, owner)
         if not decodedOk then return false, "invalid_template_data" end
         card.templateData = decoded
     end
-    if visibleId == id then renderVisible(false) end
+    if visibleId == id then renderVisible(false, "updated") end
     return true
 end
 
@@ -685,6 +693,7 @@ function PeekPlus.Remove(id, owner, expectedRevision, actionToken, reason)
     if removalReason == "removed" and (card.state == "completed" or card.state == "declined") then
         removalReason = card.state
     end
+    local actionSucceeded = card.actionInFlight ~= nil and removalReason ~= "expired"
     updateHistory(card, removalReason)
     emitLifecycle(card, removalReason, { removed = true })
     cards[id] = nil
@@ -692,7 +701,7 @@ function PeekPlus.Remove(id, owner, expectedRevision, actionToken, reason)
         peekWatchToken = peekWatchToken + 1
         interruptedId = nil
         visibleId = nil
-        showNext(true)
+        showNext(true, removalReason, actionSucceeded and "action-success" or "exit")
     end
     return true
 end
@@ -741,7 +750,7 @@ function PeekPlus.ClearOwner(owner)
         emitLifecycle(removed[index], "owner_stopped", { removed = true })
     end
 
-    if visibleRemoved then showNext(true) end
+    if visibleRemoved then showNext(true, "owner_stopped", "exit") end
     return true, nil, #removed
 end
 
@@ -750,11 +759,14 @@ function PeekPlus.ReleaseAction(id, owner, actionToken)
     if not card then return false, "card_not_found" end
     if card.owner ~= owner then return false, "not_owner" end
     if actionToken and card.actionInFlight ~= actionToken then return false, "stale_action" end
+    local actionFailed = card.actionInFlight ~= nil
     card.actionInFlight = nil
     card.confirmAction = nil
     card.revision = card.revision + 1
     scheduleExpiry(card)
-    if visibleId == id then renderVisible(false) end
+    if visibleId == id then
+        renderVisible(false, actionFailed and "action_failed" or "updated", actionFailed and "action-failed" or nil)
+    end
     return true
 end
 

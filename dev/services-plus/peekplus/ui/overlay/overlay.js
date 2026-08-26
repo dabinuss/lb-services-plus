@@ -2,7 +2,7 @@
 // .full-phone tree and owns LB's native .phoneVisbility peek position. It
 // does not enqueue an LB notification or edit any LB Phone files.
 ;(function () {
-    const CONTROLLER_VERSION = 'peekplus-1.2.2'
+    const CONTROLLER_VERSION = 'peekplus-1.3.0'
     const resourceName = typeof GetParentResourceName === 'function' ? GetParentResourceName() : 'services-plus'
     const OVERLAY_ID = 'services-plus-overlay'
     const STYLE_ID = 'services-plus-overlay-styles'
@@ -35,6 +35,7 @@
     let timerAnchorCardId = null
     let timerAnchorKey = null
     let timerAnchorStartedAt = 0
+    let motionSequence = 0
     const reportedCapabilities = new Set()
     const ICON_PATHS = {
         request: ['M5 5h14v14H5z', 'M8 9h8', 'M8 13h5'],
@@ -236,6 +237,8 @@
         }
         #${OVERLAY_ID} .sp-card {
             pointer-events: auto;
+            position: relative;
+            will-change: transform, opacity;
             box-sizing: border-box;
             width: 24rem;
             max-width: 90vw;
@@ -332,6 +335,12 @@
         #${OVERLAY_ID} .sp-btn.primary { background: #0a84ff; color: #fff; }
         #${OVERLAY_ID} .sp-btn.default { background: rgba(127, 127, 127, .25); color: inherit; }
         #${OVERLAY_ID} .sp-btn:disabled { cursor: default; opacity: .55; }
+        #${OVERLAY_ID} .sp-btn:active:not(:disabled) { transform: scale(.96); filter: brightness(1.08); }
+        #${OVERLAY_ID} .sp-motion-result {
+            position: absolute; inset: 0; z-index: 3; display: grid; place-items: center;
+            border-radius: inherit; pointer-events: none; color: #fff;
+            background: rgba(18, 22, 27, .42); font-size: 2.1rem; font-weight: 800;
+        }
         #${OVERLAY_ID}[data-host='phone'] .sp-card[data-full-card='true'] { max-height: 20rem; }
         /* LB Phone itself uses this (misspelled) wrapper to move the complete
            device: closed = 60rem, notification = 45rem. Owning this single
@@ -592,6 +601,10 @@
             && reusableFrame.dataset.cardId === String(payload.id)
             && reusableFrame.dataset.template === String(payload.template)
         if (canReuse) {
+            // Move the live iframe into a newly built standard card before
+            // the old wrapper is replaced. Without this, non-fullCard custom
+            // templates disappear on their first update.
+            if (reusableFrame.parentElement !== element) element.appendChild(reusableFrame)
             postTemplateFrame(reusableFrame, payload)
             return
         }
@@ -599,11 +612,17 @@
         frame.className = 'sp-template-frame'
         frame.src = definition.ui + '?v=' + Date.now()
         frame.sandbox = 'allow-scripts allow-same-origin allow-popups'
-        frame.onload = () => postTemplateFrame(frame, payload)
         frame.dataset.cardId = String(payload.id)
         frame.dataset.template = String(payload.template)
         frame.dataset.fullCard = definition.fullCard === true ? 'true' : 'false'
         frame.style.height = `${Number(definition.height) || 160}px`
+        frame.onload = () => {
+            const current = lastState?.card
+            if (current && frame.dataset.cardId === String(current.id)
+                && frame.dataset.template === String(current.template)) {
+                postTemplateFrame(frame, current)
+            }
+        }
         element.appendChild(frame)
     }
 
@@ -643,14 +662,161 @@
                 ? action.confirm?.label || 'Confirm?'
                 : action.label
             button.disabled = payload.actionInFlight === true || callHasPriority || isNativeBannerActive()
-            button.onclick = () => post('peekplusAction', {
-                id: payload.id,
-                revision: payload.revision,
-                action: action.id,
-            })
+            button.onclick = () => {
+                if (button.disabled) return
+                button.disabled = true
+                button.animate?.([
+                    { transform: 'scale(1)' },
+                    { transform: 'scale(.94)', offset: .42 },
+                    { transform: 'scale(1)' },
+                ], { duration: 150, easing: 'ease-out' })
+                post('peekplusAction', {
+                    id: payload.id,
+                    revision: payload.revision,
+                    action: action.id,
+                }).then((accepted) => {
+                    if (accepted !== true && button.isConnected) button.disabled = false
+                })
+            }
             buttons.appendChild(button)
         })
         element.appendChild(buttons)
+    }
+
+    function prefersReducedMotion(element) {
+        return element?.ownerDocument?.defaultView?.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true
+    }
+
+    function runAnimation(element, keyframes, options) {
+        if (!element?.animate || prefersReducedMotion(element)) return Promise.resolve()
+        try {
+            const animation = element.animate(keyframes, { fill: 'both', ...options })
+            return Promise.resolve(animation.finished).catch(() => {}).finally(() => animation.cancel?.())
+        } catch {
+            // Older CEF builds may expose Web Animations only partially.
+            // Rendering must still complete synchronously in that case.
+            return Promise.resolve()
+        }
+    }
+
+    function cancelAnimations(element) {
+        if (!element?.getAnimations) return
+        let animations
+        try {
+            animations = element.getAnimations({ subtree: true })
+        } catch {
+            try {
+                animations = element.getAnimations()
+            } catch {
+                return
+            }
+        }
+        for (const animation of animations) animation.cancel?.()
+    }
+
+    function verticalOffset(container, fallback, lockscreen) {
+        return container?.dataset.host === 'lockscreen' ? lockscreen : fallback
+    }
+
+    function animateResult(card, motion) {
+        if (motion !== 'action-success' && motion !== 'action-failed') return Promise.resolve()
+        const result = card.ownerDocument.createElement('span')
+        result.className = 'sp-motion-result'
+        result.textContent = motion === 'action-success' ? '✓' : '×'
+        card.appendChild(result)
+        const success = motion === 'action-success'
+        const cardFrames = success
+            ? [
+                { transform: 'scale(1)', filter: 'brightness(1)' },
+                { transform: 'scale(1.025)', filter: 'brightness(1.12)', offset: .5 },
+                { transform: 'scale(1)', filter: 'brightness(1)' },
+            ]
+            : [
+                { transform: 'translateX(0)' },
+                { transform: 'translateX(-5px)', offset: .3 },
+                { transform: 'translateX(5px)', offset: .6 },
+                { transform: 'translateX(0)' },
+            ]
+        const resultAnimation = runAnimation(result, [
+            { opacity: 0, transform: 'scale(.7)' },
+            { opacity: 1, transform: 'scale(1)', offset: .42 },
+            { opacity: 0, transform: 'scale(1.08)' },
+        ], { duration: success ? 320 : 280, easing: 'ease-out' })
+        return Promise.all([
+            resultAnimation,
+            runAnimation(card, cardFrames, { duration: success ? 300 : 260, easing: 'ease-out' }),
+        ]).finally(() => result.remove())
+    }
+
+    function animateCardIn(card, container, motion) {
+        if (!motion) return Promise.resolve()
+        if (motion === 'update') {
+            return runAnimation(card, [
+                { opacity: .82, transform: 'translateY(-3px) scale(.985)' },
+                { opacity: 1, transform: 'translateY(0) scale(1)' },
+            ], { duration: 220, easing: 'cubic-bezier(.2,.8,.2,1)' })
+        }
+        if (motion === 'action-success' || motion === 'action-failed') return animateResult(card, motion)
+        const distance = motion === 'resume'
+            ? verticalOffset(container, -24, -20)
+            : verticalOffset(container, -50, -40)
+        return runAnimation(card, [
+            { opacity: 0, transform: `translateY(${distance}px)` },
+            { opacity: 1, transform: 'translateY(0)' },
+        ], {
+            duration: motion === 'resume' ? 260 : 300,
+            easing: 'cubic-bezier(.18,.82,.25,1)',
+        })
+    }
+
+    function animateCardOut(card, container, motion) {
+        const distance = motion === 'interrupt'
+            ? verticalOffset(container, -58, -68)
+            : verticalOffset(container, -72, -84)
+        return runAnimation(card, [
+            { opacity: 1, transform: 'translateY(0)' },
+            { opacity: 0, transform: `translateY(${distance}px)` },
+        ], { duration: 210, easing: 'cubic-bezier(.4,0,1,1)' })
+    }
+
+    function animateCardUpdate(card, container, previousHeight) {
+        const nextHeight = card.getBoundingClientRect().height
+        const cardMotion = animateCardIn(card, container, 'update')
+        if (!previousHeight || !nextHeight || Math.abs(previousHeight - nextHeight) < 1) return cardMotion
+        return Promise.all([
+            cardMotion,
+            runAnimation(container, [
+                { height: `${previousHeight}px`, overflow: 'hidden' },
+                { height: `${nextHeight}px`, overflow: 'hidden' },
+            ], { duration: 240, easing: 'cubic-bezier(.2,.8,.2,1)' }),
+        ])
+    }
+
+    async function replaceCard(container, card, existingCard, motion, outgoingMotion, sequence) {
+        const sameCard = existingCard?.dataset.cardId === card.dataset.cardId
+        const previousHeight = sameCard ? existingCard.getBoundingClientRect().height : 0
+        if (existingCard && !sameCard) {
+            await animateResult(existingCard, outgoingMotion)
+            await animateCardOut(existingCard, container, outgoingMotion)
+            if (sequence !== motionSequence) return
+        }
+        container.replaceChildren(card)
+        const attachedFrame = card.querySelector('.sp-template-frame')
+        if (attachedFrame && lastState?.card
+            && attachedFrame.dataset.cardId === String(lastState.card.id)
+            && attachedFrame.dataset.template === String(lastState.card.template)) {
+            // The iframe may have loaded while the outgoing card was still
+            // animating. Re-post now that resize messages can target it.
+            postTemplateFrame(attachedFrame, lastState.card)
+        }
+        if (sameCard && motion === 'update') await animateCardUpdate(card, container, previousHeight)
+        else if (sameCard && motion === 'action-success') {
+            await Promise.all([
+                animateCardUpdate(card, container, previousHeight),
+                animateResult(card, motion),
+            ])
+        }
+        else await animateCardIn(card, container, motion)
     }
 
     function render() {
@@ -667,6 +833,12 @@
         })
         if (renderKey === lastRenderKey && container.firstElementChild) return
         lastRenderKey = renderKey
+        const motion = lastState?.motion || null
+        const outgoingMotion = lastState?.outgoingMotion || 'exit'
+        if (lastState) {
+            lastState.motion = null
+            lastState.outgoingMotion = null
+        }
         const existingCard = container.querySelector('.sp-card')
         const reusableFrame = container.querySelector('.sp-template-frame')
         clearRenderedTimer()
@@ -676,12 +848,20 @@
         }
         if (lastState.card.layout !== 'timer') clearTimerAnchor()
 
-        if (reusableFrame && existingCard && lastState.card.layout === 'custom' && lastState.card.templateDefinition?.fullCard === true) {
+        const reusableFullCard = reusableFrame && existingCard
+            && lastState.card.layout === 'custom'
+            && lastState.card.templateDefinition?.fullCard === true
+            && reusableFrame.dataset.cardId === String(lastState.card.id)
+            && reusableFrame.dataset.template === String(lastState.card.template)
+        if (reusableFullCard) {
+            motionSequence += 1
+            cancelAnimations(container)
             existingCard.dataset.variant = lastState.card.variant || 'neutral'
             existingCard.dataset.state = lastState.card.state || 'pending'
             existingCard.dataset.template = lastState.card.template || 'default'
             existingCard.dataset.fullCard = 'true'
             renderCard(container.ownerDocument, existingCard, lastState.card, reusableFrame)
+            animateCardIn(existingCard, container, motion)
             return
         }
 
@@ -690,9 +870,12 @@
         card.dataset.variant = lastState.card.variant || 'neutral'
         card.dataset.state = lastState.card.state || 'pending'
         card.dataset.template = lastState.card.template || 'default'
+        card.dataset.cardId = String(lastState.card.id)
         card.dataset.fullCard = lastState.card.templateDefinition?.fullCard === true ? 'true' : 'false'
         renderCard(container.ownerDocument, card, lastState.card, reusableFrame)
-        container.replaceChildren(card)
+        const sequence = ++motionSequence
+        cancelAnimations(container)
+        replaceCard(container, card, existingCard, motion, outgoingMotion, sequence)
     }
 
     function capturePeek() {
@@ -789,6 +972,21 @@
         }
     }
 
+    async function clearOverlay(motion, immediate) {
+        const sequence = ++motionSequence
+        const container = lbDocument?.getElementById(OVERLAY_ID) || rootDocument?.getElementById(OVERLAY_ID)
+        const card = container?.querySelector('.sp-card')
+        cancelAnimations(container)
+        if (!immediate && card) {
+            await animateResult(card, motion)
+            await animateCardOut(card, container, motion)
+        }
+        if (sequence !== motionSequence) return
+        releasePeek(immediate === true)
+        rootDocument?.getElementById(OVERLAY_ID)?.remove()
+        lbDocument?.getElementById(OVERLAY_ID)?.remove()
+    }
+
     function beginPeek(duration, holdPeek) {
         const milliseconds = Number(duration) || 0
         const indefinite = milliseconds < 0
@@ -818,9 +1016,7 @@
                 clearTimerAnchor()
                 lastState = null
                 lastRenderKey = null
-                releasePeek(true)
-                rootDocument?.getElementById(OVERLAY_ID)?.remove()
-                lbDocument?.getElementById(OVERLAY_ID)?.remove()
+                clearOverlay('exit')
             }
             peekTimer = window.setTimeout(expireLocally, milliseconds)
         }
@@ -955,6 +1151,7 @@
     function handleTemplateResize(event) {
         const frame = lbDocument?.querySelector('.sp-template-frame') || rootDocument?.querySelector('.sp-template-frame')
         if (!frame || frame.contentWindow !== event.source) return
+        if (frame.dataset.cardId !== String(lastState?.card?.id)) return
         const definition = lastState?.card?.templateDefinition
         const maxHeight = Number(definition?.height) || 320
         const clamped = Math.max(40, Math.min(maxHeight, Math.ceil(event.data.height)))
@@ -980,9 +1177,7 @@
                 clearTimerAnchor()
                 lastState = null
                 lastRenderKey = null
-                releasePeek(true)
-                rootDocument?.getElementById(OVERLAY_ID)?.remove()
-                lbDocument?.getElementById(OVERLAY_ID)?.remove()
+                clearOverlay(null, true)
                 return
             }
             lastState = {
@@ -990,6 +1185,10 @@
                 forceFallback: data.forceFallback === true,
                 peekDuration: typeof data.peekDuration === 'number' ? data.peekDuration : -1,
                 receivedAt: Date.now(),
+                reason: data.reason || null,
+                motion: data.motion || null,
+                outgoingMotion: data.outgoingMotion || null,
+                outgoingReason: data.outgoingReason || null,
             }
             if (data.playSound === true) playNotificationSound(data.soundName)
             beginPeek(data.peekDuration, data.holdPeek === true)
@@ -998,9 +1197,7 @@
             clearTimerAnchor()
             lastState = null
             lastRenderKey = null
-            releasePeek()
-            rootDocument?.getElementById(OVERLAY_ID)?.remove()
-            lbDocument?.getElementById(OVERLAY_ID)?.remove()
+            clearOverlay(data.motion || 'exit')
             return
         } else if (data.action === 'peekplus:phone') {
             // On the open lockscreen the card participates in LB Phone's
