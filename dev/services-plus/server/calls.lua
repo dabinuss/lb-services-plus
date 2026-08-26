@@ -244,7 +244,8 @@ end)
 
 -- Calls that DID start but never got a matching callEnded (server crash,
 -- lb-phone restart mid-call, ...) would otherwise sit at 'ringing' forever.
--- One batched UPDATE, not a query per row.
+-- Each conditional UPDATE claims exactly one transition so a concurrent
+-- callEnded handler and this cleanup can never both publish the same call.
 CreateThread(function()
     while true do
         Wait(10 * 60000)
@@ -258,20 +259,17 @@ CreateThread(function()
             LIMIT 500
         ]]) or {}
         if #stale > 0 then
-            local ids = {}
-            for i = 1, #stale do ids[#ids + 1] = tonumber(stale[i].id) end
-            MySQL.update.await(([[
-                UPDATE phone_services_plus_calls
-                SET state = 'missed', ended_at = NOW()
-                WHERE state = 'ringing' AND ended_at IS NULL AND id IN (%s)
-            ]]):format(table.concat(ids, ",")))
+            for i = 1, #stale do
+                local row = stale[i]
+                local affected = MySQL.update.await([[
+                    UPDATE phone_services_plus_calls
+                    SET state = 'missed', ended_at = NOW()
+                    WHERE id = ? AND state = 'ringing' AND ended_at IS NULL
+                      AND created_at < NOW() - INTERVAL 1 HOUR
+                ]], { row.id })
 
-            local missed = MySQL.query.await(([[
-                SELECT id, company_id, customer_number
-                FROM phone_services_plus_calls
-                WHERE state = 'missed' AND id IN (%s)
-            ]]):format(table.concat(ids, ","))) or {}
-            for i = 1, #missed do publishMissedCall(missed[i]) end
+                if affected == 1 then publishMissedCall(row) end
+            end
         end
     end
 end)

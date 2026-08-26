@@ -153,6 +153,65 @@ local activeAssignments = {}
 local disconnectCleanupLocks = {} -- requestId -> true while one cleanup owns it
 local clearNotifications
 
+local validRequestStatuses = {
+    open = true,
+    active = true,
+    completed = true,
+    cancelled = true,
+}
+
+--- Atomically claims a terminal request transition. Only the caller whose
+--- conditional UPDATE affects the row may emit the corresponding side
+--- effects. Accept remains separate because it also assigns company/staff.
+---@param requestId number
+---@param fromStatuses string[]
+---@param targetStatus "completed"|"cancelled"
+---@param conditions? { employeeIdentifier?: string, requesterNumber?: string, disconnectGraceMinutes?: number, openAgeMinutes?: number }
+---@return boolean
+local function claimTerminalRequestTransition(requestId, fromStatuses, targetStatus, conditions)
+    if not validRequestStatuses[targetStatus]
+        or (targetStatus ~= "completed" and targetStatus ~= "cancelled") then return false end
+
+    local placeholders = {}
+    local params = { targetStatus, requestId }
+    for i = 1, #(fromStatuses or {}) do
+        local status = fromStatuses[i]
+        if not validRequestStatuses[status] then return false end
+        placeholders[#placeholders + 1] = "?"
+        params[#params + 1] = status
+    end
+    if #placeholders == 0 then return false end
+
+    local sql = ([=[
+        UPDATE phone_services_plus_requests
+        SET status = ?, employee_disconnected_at = NULL
+        WHERE id = ? AND status IN (%s)
+    ]=]):format(table.concat(placeholders, ","))
+    conditions = conditions or {}
+
+    if conditions.employeeIdentifier ~= nil then
+        sql = sql .. " AND employee_identifier = ?"
+        params[#params + 1] = conditions.employeeIdentifier
+    end
+    if conditions.requesterNumber ~= nil then
+        sql = sql .. " AND requester_number = ?"
+        params[#params + 1] = conditions.requesterNumber
+    end
+    if conditions.disconnectGraceMinutes ~= nil then
+        sql = sql .. [[
+          AND employee_disconnected_at IS NOT NULL
+          AND TIMESTAMPADD(MINUTE, ?, employee_disconnected_at) <= NOW()
+        ]]
+        params[#params + 1] = conditions.disconnectGraceMinutes
+    end
+    if conditions.openAgeMinutes ~= nil then
+        sql = sql .. " AND TIMESTAMPADD(MINUTE, ?, created_at) <= NOW()"
+        params[#params + 1] = conditions.openAgeMinutes
+    end
+
+    return MySQL.update.await(sql, params) == 1
+end
+
 local function getDisconnectGraceMinutes()
     local value = tonumber(MySQL.scalar.await(
         "SELECT value FROM phone_services_plus_settings WHERE `key` = 'active_request_disconnect_grace_minutes'"
@@ -230,15 +289,9 @@ local function cancelExpiredDisconnectedRequests(identifier)
             -- affectedRows uniquely owns this transition. A concurrent
             -- normal Cancel or reconnect makes this return zero, so only
             -- the winner emits cancellation side effects.
-            local affected = MySQL.update.await([[
-                UPDATE phone_services_plus_requests
-                SET status = 'cancelled', employee_disconnected_at = NULL
-                WHERE id = ? AND status = 'active'
-                  AND employee_disconnected_at IS NOT NULL
-                  AND TIMESTAMPADD(MINUTE, ?, employee_disconnected_at) <= NOW()
-            ]], { id, graceMinutes })
-
-            if affected == 1 then
+            if claimTerminalRequestTransition(id, { "active" }, "cancelled", {
+                disconnectGraceMinutes = graceMinutes,
+            }) then
                 local row = claimed[id]
                 cancelledIds[#cancelledIds + 1] = id
                 Features.OnCancel(id)
@@ -1088,15 +1141,15 @@ function Requests.Complete(requestId, actorSource)
     local before = Requests.Get(id)
     if not before or before.status ~= "active" then return false end
 
-    local sql = "UPDATE phone_services_plus_requests SET status = 'completed', employee_disconnected_at = NULL WHERE id = ? AND status = 'active'"
-    local params = { id }
+    local conditions
     if actorSource then
         if not authorizedAssignedEmployee(actorSource, before) then return false end
-        sql = sql .. " AND employee_identifier = ?"
-        params[#params + 1] = Framework.GetIdentifier(actorSource)
+        local identifier = Framework.GetIdentifier(actorSource)
+        if type(identifier) ~= "string" or identifier == "" then return false end
+        conditions = { employeeIdentifier = identifier }
     end
 
-    if MySQL.update.await(sql, params) == 0 then return false end
+    if not claimTerminalRequestTransition(id, { "active" }, "completed", conditions) then return false end
 
     -- Feature hook (server/features.lua) - a no-op unless this request's
     -- type has a feature module registered for it. Runs before the
@@ -1151,21 +1204,20 @@ function Requests.Cancel(requestId, actorSource)
     local before = Requests.Get(id)
     if not before or (before.status ~= "open" and before.status ~= "active") then return false end
 
-    local sql = "UPDATE phone_services_plus_requests SET status = 'cancelled', employee_disconnected_at = NULL WHERE id = ? AND status IN ('open', 'active')"
-    local params = { id }
+    local conditions
     if actorSource then
         local phoneNumber = Framework.GetPhoneNumber(actorSource)
         if phoneNumber and phoneNumber == before.requesterNumber then
-            sql = sql .. " AND requester_number = ?"
-            params[#params + 1] = phoneNumber
+            conditions = { requesterNumber = phoneNumber }
         else
             if not authorizedAssignedEmployee(actorSource, before) then return false end
-            sql = sql .. " AND employee_identifier = ?"
-            params[#params + 1] = Framework.GetIdentifier(actorSource)
+            local identifier = Framework.GetIdentifier(actorSource)
+            if type(identifier) ~= "string" or identifier == "" then return false end
+            conditions = { employeeIdentifier = identifier }
         end
     end
 
-    if MySQL.update.await(sql, params) == 0 then return false end
+    if not claimTerminalRequestTransition(id, { "open", "active" }, "cancelled", conditions) then return false end
 
     Features.OnCancel(id)
 
@@ -1397,20 +1449,17 @@ CreateThread(function()
             end
 
             if #ids == 0 then break end
-            local idList = table.concat(ids, ",")
-            MySQL.update.await((
-                "UPDATE phone_services_plus_requests SET status = 'cancelled' " ..
-                "WHERE status = 'open' AND created_at < NOW() - INTERVAL 30 MINUTE AND id IN (%s)"
-            ):format(idList))
-
-            local requests = Requests.GetMany(ids)
-            for i = 1, #requests do
-                if requests[i].status == "cancelled" then
-                    clearNotifications(requests[i].id)
-                    local unreadDelta = recordCustomerUpdate(requests[i])
-                    if pushRequestUpdate then pushRequestUpdate(requests[i], unreadDelta) end
-                    TriggerEvent("services-plus:requestExpired", requests[i])
-                    TriggerEvent("services-plus:requestCancelled", requests[i])
+            for i = 1, #ids do
+                local id = ids[i]
+                if claimTerminalRequestTransition(id, { "open" }, "cancelled", { openAgeMinutes = 30 }) then
+                    local request = Requests.Get(id)
+                    if request then
+                        clearNotifications(id)
+                        local unreadDelta = recordCustomerUpdate(request)
+                        if pushRequestUpdate then pushRequestUpdate(request, unreadDelta) end
+                        TriggerEvent("services-plus:requestExpired", request)
+                        TriggerEvent("services-plus:requestCancelled", request)
+                    end
                 end
             end
 

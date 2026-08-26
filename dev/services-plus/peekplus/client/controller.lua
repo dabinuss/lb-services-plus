@@ -994,21 +994,25 @@ local function playerStateBlocksQuickActions()
 end
 
 local function quickActionContextBlocked(control)
-    if callActive or phoneOpen or IsPauseMenuActive() or IsNuiFocused() then return true end
-    if not IsPlayerControlOn(PlayerId()) or not IsControlEnabled(0, control) then return true end
-    if IsScreenFadedOut() or IsScreenFadingOut() or IsScreenFadingIn()
+    local screenTransition = IsScreenFadedOut() or IsScreenFadingOut() or IsScreenFadingIn()
         or GetIsLoadingScreenActive() or IsPlayerSwitchInProgress() or IsCutsceneActive()
-        or IsWarningMessageActive() then
-        return true
-    end
+        or IsWarningMessageActive()
 
     local ped = PlayerPedId()
-    if not ped or ped == 0 or IsEntityDead(ped) or IsPedDeadOrDying(ped, true)
-        or IsPedInjured(ped) or IsPedCuffed(ped) or playerStateBlocksQuickActions() then
-        return true
-    end
-
-    return false
+    return PeekPlusQuickActionPolicy.IsBlocked({
+        callActive = callActive,
+        phoneOpen = phoneOpen,
+        pauseMenuActive = IsPauseMenuActive(),
+        nuiFocused = IsNuiFocused(),
+        playerControlOn = IsPlayerControlOn(PlayerId()),
+        controlEnabled = IsControlEnabled(0, control),
+        screenTransition = screenTransition,
+        invalidPed = not ped or ped == 0,
+        deadOrInjured = ped and ped ~= 0 and (IsEntityDead(ped)
+            or IsPedDeadOrDying(ped, true) or IsPedInjured(ped)) or false,
+        cuffed = ped and ped ~= 0 and IsPedCuffed(ped) or false,
+        blockedPlayerState = playerStateBlocksQuickActions(),
+    })
 end
 
 local function clearVisibleConfirmation()
