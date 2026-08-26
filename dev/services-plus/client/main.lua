@@ -138,7 +138,7 @@ local function syncNativeCompanyCalls(result)
     if type(result) ~= "table" then return end
 
     local shouldReceive = result.loggedIn == true and result.onDuty == true and result.status == "available"
-    local shouldRelease = result.release == true
+    local shouldRelease = result.release == true or result.loggedIn == false
 
     pcall(function()
         if shouldReceive or shouldRelease then
@@ -178,6 +178,7 @@ CreateThread(function()
         syncNativeCompanyCalls(result.employee)
     else
         clearActiveCompanyId()
+        syncNativeCompanyCalls({ release = true, loggedIn = false })
     end
 end)
 
@@ -188,14 +189,15 @@ end)
 RegisterNetEvent("services-plus:client:employeeDutyChanged", function(payload)
     local employee = type(payload) == "table" and payload.employee or nil
 
-    if not employee or (payload and payload.jobChanged == true)
-        or employee.loggedIn ~= true then
+    local shouldRelease = not employee or (payload and payload.jobChanged == true)
+        or employee.loggedIn ~= true
+    if shouldRelease then
         clearActiveCompanyId()
     end
 
     -- Leaving every Services+ company must release a native calls toggle
     -- that may still be held from the old job's Busy/Pause/off-duty state.
-    syncNativeCompanyCalls(employee or { release = true })
+    syncNativeCompanyCalls(shouldRelease and { release = true, loggedIn = false } or employee)
 
     exports["lb-phone"]:SendCustomAppMessage(Config.App.identifier, {
         type = "employeeDutyChanged",
@@ -223,7 +225,11 @@ end)
 
 RegisterNUICallback("bootstrap", function(_, cb)
     local result = bridge("bootstrap")
-    if result and result.employee then syncNativeCompanyCalls(result.employee) end
+    if result and result.employee then
+        syncNativeCompanyCalls(result.employee)
+    elseif result then
+        syncNativeCompanyCalls({ release = true, loggedIn = false })
+    end
     cb(result)
 end)
 
@@ -253,7 +259,7 @@ end)
 RegisterNUICallback("companyLogout", function(_, cb)
     local result = bridge("companyLogout")
     if result and result.ok == true then clearActiveCompanyId() end
-    syncNativeCompanyCalls(result)
+    if result and result.ok == true then syncNativeCompanyCalls(result) end
     cb(result and result.ok == true)
 end)
 

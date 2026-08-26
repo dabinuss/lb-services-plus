@@ -115,10 +115,15 @@ export default function App() {
   }, [])
 
   const logoutCompany = useCallback(async () => {
-    await Promise.allSettled([
+    const [logoutResult] = await Promise.allSettled([
       fetchNui('companyLogout'),
       new Promise((resolve) => setTimeout(resolve, 400)),
     ])
+    if (logoutResult.status !== 'fulfilled' || logoutResult.value !== true) {
+      showToast(t('Could not sign out. Try again.'), 'error')
+      return false
+    }
+
     setCompanySession(null)
     setBootstrap((current) => current?.employee ? {
       ...current,
@@ -130,7 +135,8 @@ export default function App() {
       companyRequests: 0,
       companyCalls: 0,
     }))
-  }, [])
+    return true
+  }, [t])
 
   const loginCompany = useCallback((session) => {
     setCompanySession(session)

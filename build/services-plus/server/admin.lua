@@ -48,8 +48,7 @@ local function validateString(value, minLength, maxLength, optional)
     local normalized = value:match("^%s*(.-)%s*$")
     if normalized == "" and optional then return nil, true end
 
-    local ok, length = pcall(utf8.len, normalized)
-    if not ok or not length or length < minLength or length > maxLength then return nil, false end
+    if not IsValidUtf8Length(normalized, minLength, maxLength) then return nil, false end
     return normalized, true
 end
 

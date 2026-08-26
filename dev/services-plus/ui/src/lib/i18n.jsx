@@ -54,6 +54,7 @@ const DE = {
   'Sign in to {company}': 'Bei {company} anmelden',
   'Signing in…': 'Anmeldung läuft…',
   'Signing out…': 'Abmeldung läuft…',
+  'Could not sign out. Try again.': 'Abmeldung fehlgeschlagen. Versuche es erneut.',
   'Employee portal': 'Mitarbeiterportal',
   'Secure online session': 'Sichere Online-Sitzung',
   'Verifying session…': 'Sitzung wird geprüft…',

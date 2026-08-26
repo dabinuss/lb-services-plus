@@ -47,19 +47,29 @@ end
 ---@param senderIdentifier string? Stable employee identity; nil for customers/company-level exports
 ---@return table|false
 function Messages.Send(company, number, channel, senderNumber, senderType, content, senderIdentifier)
-    if type(content) ~= "string" or content == "" or #content > 1000 then return false end
+    if not IsValidUtf8Length(content, 1, 1000) then return false end
     if not company or not number or not channel or not senderNumber then return false end
 
-    local messageId = MySQL.insert.await(
-        "INSERT INTO phone_services_plus_messages (channel_id, company_id, sender, sender_identifier, sender_type, content) VALUES (?, ?, ?, ?, ?, ?)",
-        { channel.id, company.id, senderNumber, senderIdentifier or json.null, senderType, content }
-    )
-    if not messageId then return false end
+    local preview = TruncateUtf8(content, 100)
+    if not preview then return false end
 
-    MySQL.update.await(
-        "UPDATE phone_services_plus_channels SET last_message = ?, archived_by_contact = 0, archived_by_company = 0 WHERE id = ?",
-        { content:sub(1, 100), channel.id }
-    )
+    local messageId
+    local success = MySQL.startTransaction(function(query)
+        local inserted = query(
+            "INSERT INTO phone_services_plus_messages (channel_id, company_id, sender, sender_identifier, sender_type, content) VALUES (?, ?, ?, ?, ?, ?)",
+            { channel.id, company.id, senderNumber, senderIdentifier or json.null, senderType, content }
+        )
+        if not inserted or not inserted.insertId then return false end
+
+        local updated = query(
+            "UPDATE phone_services_plus_channels SET last_message = ?, archived_by_contact = 0, archived_by_company = 0 WHERE id = ?",
+            { preview, channel.id }
+        )
+        if not updated then return false end
+
+        messageId = inserted.insertId
+    end)
+    if not success or not messageId then return false end
 
     local payload = { channelId = channel.id, id = messageId, sender_type = senderType, content = content }
 
@@ -102,7 +112,7 @@ end
 ---@return table|false
 function Messages.SendCompanyMessage(companyJob, targetNumber, content)
     if type(companyJob) ~= "string" or type(targetNumber) ~= "string" then return false end
-    if type(content) ~= "string" or content == "" or #content > 1000 then return false end
+    if not IsValidUtf8Length(content, 1, 1000) then return false end
     targetNumber = targetNumber:match("^%s*(.-)%s*$")
     if targetNumber == "" then return false end
 
@@ -763,7 +773,14 @@ end)
 RegisterCallback("companyLogout", function(source, reply)
     local job = Framework.GetJob(source)
     if job and Framework.GetOnDuty(source) then
-        Framework.SetDuty(source, false)
+        if not Framework.SetDuty(source, false) then
+            return reply({
+                ok = false,
+                onDuty = Framework.GetOnDuty(source),
+                status = Employees.GetStatus(source),
+                loggedIn = true,
+            })
+        end
         Framework.RefreshDuty(source)
     end
     if job then Employees.BroadcastRemoved(source, job.name) end
@@ -775,7 +792,13 @@ RegisterCallback("companyLogout", function(source, reply)
         local company = Companies.GetByJob(job.name)
         if company then Companies.NotifyDirectoryChanged(company.id) end
     end
-    reply({ ok = true, onDuty = Framework.GetOnDuty(source), status = Employees.GetStatus(source), loggedIn = false })
+    reply({
+        ok = true,
+        release = true,
+        onDuty = Framework.GetOnDuty(source),
+        status = Employees.GetStatus(source),
+        loggedIn = false,
+    })
 end)
 
 AddEventHandler("services-plus:internal:dutyChanged", function(source)
@@ -889,7 +912,7 @@ RegisterCallback("openConversation", function(source, reply, numberId, page)
 end)
 
 RegisterCallback("sendMessage", function(source, reply, channelId, content)
-    if type(content) ~= "string" or content == "" or #content > 1000 then
+    if not IsValidUtf8Length(content, 1, 1000) then
         return reply(false)
     end
 

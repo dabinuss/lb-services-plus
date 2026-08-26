@@ -51,6 +51,33 @@ function DatabaseBoolean(value)
     return value == true or value == 1 or value == "1"
 end
 
+--- Validates UTF-8 and measures user-facing text in Unicode code points
+--- rather than bytes. MySQL's utf8mb4 VARCHAR limits use characters too.
+---@param value any
+---@param minLength number
+---@param maxLength number
+---@return boolean
+---@return number?
+function IsValidUtf8Length(value, minLength, maxLength)
+    if type(value) ~= "string" then return false end
+    local ok, length = pcall(utf8.len, value)
+    if not ok or not length or length < minLength or length > maxLength then return false end
+    return true, length
+end
+
+--- Truncates valid UTF-8 at a character boundary.
+---@param value string
+---@param maxLength number
+---@return string?
+function TruncateUtf8(value, maxLength)
+    local valid, length = IsValidUtf8Length(value, 0, math.maxinteger)
+    if not valid then return nil end
+    if length <= maxLength then return value end
+
+    local nextCharacter = utf8.offset(value, maxLength + 1)
+    return nextCharacter and value:sub(1, nextCharacter - 1) or value
+end
+
 --- Safely resolves the currently connected source that owns a phone number.
 --- LB Phone may throw while stopping/restarting, so every caller shares the
 --- same guarded lookup and online-player validation.

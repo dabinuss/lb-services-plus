@@ -37,7 +37,11 @@ export default function CompanyDashboard({
   const logout = async () => {
     if (loggingOut) return
     setLoggingOut(true)
-    await onLogout()
+    try {
+      if (!await onLogout()) setLoggingOut(false)
+    } catch {
+      setLoggingOut(false)
+    }
   }
 
   const openTab = (next) => {

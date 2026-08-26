@@ -204,6 +204,10 @@ local function cancelExpiredDisconnectedRequests(identifier)
         params[#params + 1] = identifier
     end
 
+    -- Keep the ownership-safe per-row updates bounded. Any remaining stale
+    -- rows are picked up by the next scheduled cleanup pass.
+    sql = sql .. " ORDER BY id ASC LIMIT 500"
+
     local candidates = MySQL.query.await(sql, params) or {}
     local claimed = {}
     local ids = {}
@@ -220,41 +224,35 @@ local function cancelExpiredDisconnectedRequests(identifier)
     if #ids == 0 then return end
 
     local ok, err = pcall(function()
-        -- IDs originate from the unsigned integer primary key, so composing
-        -- this bounded IN list is safe and avoids one UPDATE per request.
-        local idList = table.concat(ids, ",")
-        MySQL.update.await(([=[
-            UPDATE phone_services_plus_requests
-            SET status = 'cancelled', employee_disconnected_at = NULL
-            WHERE id IN (%s) AND status = 'active'
-              AND employee_disconnected_at IS NOT NULL
-              AND TIMESTAMPADD(MINUTE, ?, employee_disconnected_at) <= NOW()
-        ]=]):format(idList), { graceMinutes })
-
-        -- Only rows this cleanup changed have both a claimed id and a
-        -- cleared disconnect timestamp. A concurrent reconnect/cancel
-        -- therefore cannot receive the wrong notification.
-        local cancelled = MySQL.query.await(([=[
-            SELECT id
-            FROM phone_services_plus_requests
-            WHERE id IN (%s) AND status = 'cancelled' AND employee_disconnected_at IS NULL
-        ]=]):format(idList)) or {}
-
         local cancelledIds = {}
-        for i = 1, #cancelled do
-            local row = claimed[tonumber(cancelled[i].id)]
-            cancelledIds[#cancelledIds + 1] = tonumber(cancelled[i].id)
-            Features.OnCancel(tonumber(cancelled[i].id))
-            clearNotifications(tonumber(cancelled[i].id))
-            endCustomerJourney(tonumber(cancelled[i].id), row and row.requester_number, "cancelled")
-            if row and row.requester_number then
-                pcall(function()
-                    exports["lb-phone"]:SendNotification(row.requester_number, {
-                        app = Config.App.identifier,
-                        title = Config.App.name,
-                        content = LForNumber(row.requester_number, "notifications.requestCancelledUnavailable"),
-                    })
-                end)
+        for i = 1, #ids do
+            local id = ids[i]
+            -- affectedRows uniquely owns this transition. A concurrent
+            -- normal Cancel or reconnect makes this return zero, so only
+            -- the winner emits cancellation side effects.
+            local affected = MySQL.update.await([[
+                UPDATE phone_services_plus_requests
+                SET status = 'cancelled', employee_disconnected_at = NULL
+                WHERE id = ? AND status = 'active'
+                  AND employee_disconnected_at IS NOT NULL
+                  AND TIMESTAMPADD(MINUTE, ?, employee_disconnected_at) <= NOW()
+            ]], { id, graceMinutes })
+
+            if affected == 1 then
+                local row = claimed[id]
+                cancelledIds[#cancelledIds + 1] = id
+                Features.OnCancel(id)
+                clearNotifications(id)
+                endCustomerJourney(id, row and row.requester_number, "cancelled")
+                if row and row.requester_number then
+                    pcall(function()
+                        exports["lb-phone"]:SendNotification(row.requester_number, {
+                            app = Config.App.identifier,
+                            title = Config.App.name,
+                            content = LForNumber(row.requester_number, "notifications.requestCancelledUnavailable"),
+                        })
+                    end)
+                end
             end
         end
 
@@ -788,7 +786,11 @@ function Requests.Create(source, requestTypeReference, options)
         or (DatabaseBoolean(requestType.description_enabled) and "optional" or "disabled")
     local note = type(options.description) == "string" and options.description:match("^%s*(.-)%s*$") or ""
     if noteMode == "required" and note == "" then return false end
-    local finalDescription = noteMode ~= "disabled" and note ~= "" and note:sub(1, 255) or nil
+    local finalDescription
+    if noteMode ~= "disabled" and note ~= "" then
+        finalDescription = TruncateUtf8(note, 255)
+        if not finalDescription then return false end
+    end
 
     local category = Companies.GetCategory(requestType.category_id)
     local competition = DatabaseBoolean(requestType.competition_enabled)
@@ -1022,7 +1024,8 @@ function Requests.GetActive(source)
     if not source or GetPlayerName(source) == nil then return nil end
 
     local company = Companies.GetForPlayer(source)
-    if not company or not Employees.IsLoggedIn(source, company.id) then return nil end
+    if not company or not Employees.IsLoggedIn(source, company.id)
+        or not Framework.GetOnDuty(source) then return nil end
 
     local identifier = Framework.GetIdentifier(source)
     cancelExpiredDisconnectedRequests(identifier)
@@ -1046,6 +1049,13 @@ function Requests.GetActive(source)
 
     activeAssignments[source] = nil
     return nil
+end
+
+local function authorizedAssignedEmployee(source, request)
+    local company, job = Companies.GetForPlayer(source)
+    return company ~= nil and job ~= nil and request.company ~= nil
+        and company.id == request.company.id and job.name == request.company.job
+        and Employees.IsLoggedIn(source, company.id) and Framework.GetOnDuty(source)
 end
 
 local function toOverlayPayload(request, source)
@@ -1081,6 +1091,7 @@ function Requests.Complete(requestId, actorSource)
     local sql = "UPDATE phone_services_plus_requests SET status = 'completed', employee_disconnected_at = NULL WHERE id = ? AND status = 'active'"
     local params = { id }
     if actorSource then
+        if not authorizedAssignedEmployee(actorSource, before) then return false end
         sql = sql .. " AND employee_identifier = ?"
         params[#params + 1] = Framework.GetIdentifier(actorSource)
     end
@@ -1143,9 +1154,15 @@ function Requests.Cancel(requestId, actorSource)
     local sql = "UPDATE phone_services_plus_requests SET status = 'cancelled', employee_disconnected_at = NULL WHERE id = ? AND status IN ('open', 'active')"
     local params = { id }
     if actorSource then
-        sql = sql .. " AND (requester_number = ? OR employee_identifier = ?)"
-        params[#params + 1] = Framework.GetPhoneNumber(actorSource) or ""
-        params[#params + 1] = Framework.GetIdentifier(actorSource)
+        local phoneNumber = Framework.GetPhoneNumber(actorSource)
+        if phoneNumber and phoneNumber == before.requesterNumber then
+            sql = sql .. " AND requester_number = ?"
+            params[#params + 1] = phoneNumber
+        else
+            if not authorizedAssignedEmployee(actorSource, before) then return false end
+            sql = sql .. " AND employee_identifier = ?"
+            params[#params + 1] = Framework.GetIdentifier(actorSource)
+        end
     end
 
     if MySQL.update.await(sql, params) == 0 then return false end
