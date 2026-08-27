@@ -46,6 +46,7 @@ local peekId, err = exports["services-plus"]:ShowPeek({
     duration = 15000,
     variant = "warning",
     template = "action",
+    tapAction = "accept",
     avatarUrl = "https://cdn.fivemanage.com/contacts/dispatcher.jpg",
     thumbnailUrl = "https://cdn.fivemanage.com/incidents/42.jpg",
     history = true,
@@ -77,6 +78,10 @@ Card options:
 - `actions`: up to the configured maximum. Version 1 supports the optional
   keys `RETURN` and `BACK`. An action may provide `successLabel` for the
   short success confirmation; otherwise its normal label is used.
+- `tapAction`: optional ID of one of the card's declared `actions`. Tapping
+  the notification invokes that action through the normal revision, action
+  token, lock and confirmation path. Set it to `false` in an update to remove
+  the binding. Interactive controls do not trigger the card tap.
 - `dismissible`: enables a presentation-only swipe dismissal. With the phone
   closed, swipe the card upward; on the open lockscreen, swipe it horizontally.
   It defaults to `false` so existing interactive cards remain opt-in.
@@ -137,7 +142,7 @@ Listen to the event scoped to the exact consumer resource name:
 AddEventHandler("peekplus:action:my-resource", function(data)
     -- data.id
     -- data.action
-    -- data.source ("action" or "dismiss")
+    -- data.source ("action", "tap" or "dismiss")
     -- data.confirmed
     -- data.revision
     -- data.actionToken
@@ -256,7 +261,7 @@ confirmation state and server-facing action validation. The iframe receives:
 window.addEventListener('message', ({ data }) => {
     if (data?.type !== 'peekplus:template') return
     // data.template, data.data, data.presentation, data.actionEndpoint
-    // and a bounded, validated data.card summary including actions.
+    // and a bounded, validated data.card summary including actions and tapAction.
 })
 ```
 

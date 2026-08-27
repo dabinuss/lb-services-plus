@@ -2,7 +2,7 @@
 // .full-phone tree and owns LB's native .phoneVisbility peek position. It
 // does not enqueue an LB notification or edit any LB Phone files.
 ;(function () {
-    const CONTROLLER_VERSION = 'peekplus-1.7.0'
+    const CONTROLLER_VERSION = 'peekplus-1.8.0'
     const resourceName = typeof GetParentResourceName === 'function' ? GetParentResourceName() : 'services-plus'
     const OVERLAY_ID = 'services-plus-overlay'
     const STYLE_ID = 'services-plus-overlay-styles'
@@ -251,6 +251,7 @@
         }
         #${OVERLAY_ID}[data-host='lockscreen'] .sp-card[data-dismissible='true'] { touch-action: pan-y; }
         #${OVERLAY_ID}:not([data-host='lockscreen']) .sp-card[data-dismissible='true'] { touch-action: none; }
+        #${OVERLAY_ID} .sp-card[data-tappable='true'] { cursor: pointer; }
         #${OVERLAY_ID} .sp-card[data-swiping='true'] { transition: none !important; }
         #${OVERLAY_ID} .sp-card[data-appearance='services'] {
             border: 0;
@@ -627,6 +628,7 @@
                 thumbnailUrl: payload.thumbnailUrl,
                 details: payload.details || [],
                 actions: payload.actions || [],
+                tapAction: payload.tapAction || null,
                 actionInFlight: payload.actionInFlight === true,
                 actionInFlightId: payload.actionInFlightId || null,
                 confirmAction: payload.confirmAction,
@@ -888,6 +890,49 @@
         }, { once: true })
     }
 
+    function installTapAction(card) {
+        const trigger = () => {
+            const payload = lastState?.card
+            if (!payload?.tapAction || payload.id !== card.dataset.cardId) return
+            if (card.dataset.tapPending === 'true' || payload.actionInFlight === true) return
+            if (callHasPriority || isNativeBannerActive()) return
+            card.dataset.tapPending = 'true'
+            runAnimation(card, [
+                { transform: 'scale(1)' },
+                { transform: 'scale(.985)' },
+                { transform: 'scale(1)' },
+            ], { duration: 150, easing: 'ease-out' })
+            post('peekplusAction', {
+                id: payload.id,
+                revision: payload.revision,
+                action: payload.tapAction,
+                source: 'tap',
+            }).then((accepted) => {
+                if (accepted !== true && card.isConnected) card.dataset.tapPending = 'false'
+            })
+        }
+
+        const bind = (source) => {
+            if (!source?.addEventListener) return
+            source.addEventListener('click', (event) => {
+                if (event.defaultPrevented) return
+                if (event.target?.closest?.('button, a, input, textarea, select, [role="button"], [data-no-tap]')) return
+                trigger()
+            })
+        }
+
+        bind(card)
+        const frame = card.querySelector('.sp-template-frame')
+        if (frame) frame.addEventListener('load', () => {
+            try {
+                bind(frame.contentDocument)
+            } catch {
+                // Cross-origin templates can still use the advertised action
+                // endpoint and tapAction from their trusted card payload.
+            }
+        }, { once: true })
+    }
+
     function verticalOffset(container, fallback, lockscreen) {
         return container?.dataset.host === 'lockscreen' ? lockscreen : fallback
     }
@@ -1069,6 +1114,8 @@
             existingCard.dataset.appearance = cardAppearance(lastState.card)
             existingCard.dataset.fullCard = 'true'
             existingCard.dataset.dismissible = lastState.card.dismissible === true ? 'true' : 'false'
+            existingCard.dataset.tappable = lastState.card.tapAction ? 'true' : 'false'
+            existingCard.dataset.tapPending = 'false'
             existingCard.dataset.actionInFlightId = lastState.card.actionInFlightId || ''
             existingCard.dataset.actionInFlightLabel = actionFeedbackLabel(lastState.card)
             renderCard(container.ownerDocument, existingCard, lastState.card, reusableFrame)
@@ -1085,10 +1132,13 @@
         card.dataset.cardId = String(lastState.card.id)
         card.dataset.fullCard = lastState.card.templateDefinition?.fullCard === true ? 'true' : 'false'
         card.dataset.dismissible = lastState.card.dismissible === true ? 'true' : 'false'
+        card.dataset.tappable = lastState.card.tapAction ? 'true' : 'false'
+        card.dataset.tapPending = 'false'
         card.dataset.actionInFlightId = lastState.card.actionInFlightId || ''
         card.dataset.actionInFlightLabel = actionFeedbackLabel(lastState.card)
         renderCard(container.ownerDocument, card, lastState.card, reusableFrame)
         installSwipeGesture(card, container)
+        installTapAction(card)
         const sequence = ++motionSequence
         cancelAnimations(container)
         replaceCard(container, card, existingCard, motion, outgoingMotion, sequence)

@@ -240,6 +240,16 @@ local function normalizeSpec(spec, partial, owner)
             result.dismissAction = dismissAction
         end
     end
+    if spec.tapAction ~= nil then
+        if spec.tapAction == false then
+            result.tapAction = false
+        else
+            local tapAction, err = cleanText(spec.tapAction, limits.textLimits.actionId, true)
+            if not tapAction then return nil, err end
+            if not tapAction:match("^[%w_%-]+$") then return nil, "invalid_tap_action" end
+            result.tapAction = tapAction
+        end
+    end
     if spec.key ~= nil or not partial then
         local key, err = cleanKey(spec.key)
         if err then return nil, err end
@@ -369,6 +379,7 @@ local function publicCard(card)
         actions = cloneValue(card.actions),
         dismissible = card.dismissible,
         dismissAction = card.dismissAction,
+        tapAction = card.tapAction,
         createdAt = card.createdAt,
         expiresAt = card.expiresAt,
         actionInFlight = card.actionInFlight ~= nil,
@@ -605,6 +616,14 @@ function PeekPlus.Show(spec, owner)
         normalized.dismissible = true
     end
     if normalized.dismissAction == false then normalized.dismissAction = nil end
+    if normalized.tapAction then
+        local actionExists = false
+        for index = 1, #normalized.actions do
+            if normalized.actions[index].id == normalized.tapAction then actionExists = true break end
+        end
+        if not actionExists then return nil, "invalid_tap_action" end
+    end
+    if normalized.tapAction == false then normalized.tapAction = nil end
     nextId = nextId + 1
     local now = GetGameTimer()
     local id = ("peekplus:%s:%s:%d"):format(runtimeId, owner, nextId)
@@ -668,6 +687,18 @@ function PeekPlus.Update(id, patch, owner, expectedRevision, actionToken)
         nextDismissible = true
     end
 
+    local nextTapAction = normalized.tapAction
+    if nextTapAction == nil then nextTapAction = card.tapAction end
+    if nextTapAction == false then nextTapAction = nil end
+    if nextTapAction then
+        local nextActions = normalized.actions or card.actions
+        local actionExists = false
+        for index = 1, #nextActions do
+            if nextActions[index].id == nextTapAction then actionExists = true break end
+        end
+        if not actionExists then return false, "invalid_tap_action" end
+    end
+
     if normalized.state and normalized.state ~= card.state then
         local transitions = defaults.transitions[card.state] or {}
         if not transitions[normalized.state] then return false, "invalid_transition" end
@@ -681,10 +712,11 @@ function PeekPlus.Update(id, patch, owner, expectedRevision, actionToken)
         if normalized.key then keyIndex[owner .. ":" .. normalized.key] = id end
     end
     for field, value in pairs(normalized) do
-        if field ~= "dismissAction" then card[field] = value end
+        if field ~= "dismissAction" and field ~= "tapAction" then card[field] = value end
     end
     card.dismissAction = nextDismissAction
     card.dismissible = nextDismissible == true
+    card.tapAction = nextTapAction
     card.revision = card.revision + 1
     card.actionInFlight = nil
     card.actionInFlightId = nil
@@ -1014,6 +1046,7 @@ local function handleAction(data, source)
     if card.actionInFlight then return false end
     local action = findAction(card, tostring(data.action or ""))
     if not action then return false end
+    if source == "tap" and card.tapAction ~= action.id then return false end
 
     if action.confirm and card.confirmAction ~= action.id then
         card.confirmAction = action.id
@@ -1057,7 +1090,8 @@ local function handleDismiss(data)
 end
 
 RegisterNUICallback("peekplusAction", function(data, callback)
-    callback(handleAction(data))
+    local source = type(data) == "table" and data.source == "tap" and "tap" or nil
+    callback(handleAction(data, source))
 end)
 
 RegisterNUICallback("peekplusDismiss", function(data, callback)
