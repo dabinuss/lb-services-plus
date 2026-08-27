@@ -55,6 +55,7 @@ local function cleanHttpsImage(value)
     if value:sub(1, 8):lower() ~= "https://" then return nil, "invalid_image_url" end
     local authority = value:sub(9):match("^([^/%?#]+)")
     if not authority or authority:find("@", 1, true) then return nil, "invalid_image_url" end
+    if not PeekPlusLBPhone.IsMediaLinkAllowed(value) then return nil, "media_url_not_allowed" end
     return value
 end
 
@@ -192,6 +193,13 @@ local function normalizeSpec(spec, partial, owner)
         local iconUrl, err = cleanHttpsImage(spec.iconUrl)
         if err then return nil, err end
         result.iconUrl = iconUrl
+    end
+    for _, field in ipairs({ "avatarUrl", "thumbnailUrl" }) do
+        if spec[field] ~= nil or not partial then
+            local imageUrl, err = cleanHttpsImage(spec[field])
+            if err then return nil, err end
+            result[field] = imageUrl
+        end
     end
 
     if spec.state ~= nil or not partial then
@@ -345,6 +353,8 @@ local function publicCard(card)
         description = card.description,
         icon = card.icon,
         iconUrl = card.iconUrl,
+        avatarUrl = card.avatarUrl,
+        thumbnailUrl = card.thumbnailUrl,
         variant = card.variant,
         layout = card.layout,
         template = card.template,

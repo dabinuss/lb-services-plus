@@ -119,10 +119,25 @@ adminCallback("admin:updateServiceSettings", function(_, reply, data)
     reply(true)
 end)
 
--- Company branding is rendered directly by every player's NUI. Keep it
--- flexible (no domain allowlist), but only accept well-formed HTTPS URLs
--- that fit the DB column and don't point at obvious local/private targets.
--- This also rejects credentials and whitespace/control-character tricks.
+local brandingMediaPolicy = nil
+
+local function getBrandingMediaPolicy()
+    if brandingMediaPolicy == nil then
+        local ok, phoneConfig = pcall(function()
+            return exports["lb-phone"]:GetConfig()
+        end)
+        brandingMediaPolicy = ok and PeekPlusMediaPolicy.Build(phoneConfig) or false
+    end
+    return brandingMediaPolicy ~= false and brandingMediaPolicy or nil
+end
+
+AddEventHandler("onResourceStart", function(resourceName)
+    if resourceName == "lb-phone" then brandingMediaPolicy = nil end
+end)
+
+-- Company branding is rendered directly by every player's NUI and can also
+-- become a PeekPlus icon. In addition to strict HTTPS/host validation, apply
+-- the exact same configured LB Phone media allow-/denylist policy.
 ---@param value any
 ---@return string? normalized
 ---@return boolean valid
@@ -180,6 +195,9 @@ local function optionalHttpsUrl(value)
             if #label > 63 or label:sub(1, 1) == "-" or label:sub(-1) == "-" then return nil, false end
         end
     end
+
+    local policy = getBrandingMediaPolicy()
+    if not policy or not PeekPlusMediaPolicy.IsAllowed(value, policy) then return nil, false end
 
     return value, true
 end

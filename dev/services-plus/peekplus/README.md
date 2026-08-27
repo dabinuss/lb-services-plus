@@ -46,6 +46,8 @@ local peekId, err = exports["services-plus"]:ShowPeek({
     duration = 15000,
     variant = "warning",
     template = "action",
+    avatarUrl = "https://cdn.fivemanage.com/contacts/dispatcher.jpg",
+    thumbnailUrl = "https://cdn.fivemanage.com/incidents/42.jpg",
     history = true,
     sound = true,
     priority = 0,
@@ -95,6 +97,17 @@ Card options:
   to `true`.
 - `icon`: optional semantic card icon such as `taxi`, `medical`, `police`, or `wrench`.
 - `iconUrl`: optional HTTPS image URL shown as the card icon; `icon` remains its fallback.
+- `avatarUrl`: optional HTTPS sender/contact image. The default renderer shows
+  it as a circular avatar in place of `iconUrl`; `icon` remains its fallback.
+- `thumbnailUrl`: optional HTTPS preview image shown compactly on the right.
+  Custom full-card templates receive both media fields in `data.card` and
+  decide how to present them themselves.
+
+Every remote media field (`iconUrl`, `avatarUrl`, and `thumbnailUrl`) must also
+pass LB Phone's configured media policy. PeekPlus reads it through `GetConfig()`
+and mirrors LB Phone's external/upload hostname and domain wildcard rules. A
+URL rejected by that policy returns `media_url_not_allowed`; malformed or
+non-HTTPS values return `invalid_image_url`.
 - `details`: up to the configured number of `{ label, value, icon? }` rows. If every row has an icon, PeekPlus uses the compact icon/value layout and keeps labels as accessibility text.
 - `progress`: `{ value, max, label }` for a progress layout.
 - `timer`: `{ elapsed, duration, countdown, label }`, using milliseconds.

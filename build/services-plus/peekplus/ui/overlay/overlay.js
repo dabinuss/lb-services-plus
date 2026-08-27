@@ -2,7 +2,7 @@
 // .full-phone tree and owns LB's native .phoneVisbility peek position. It
 // does not enqueue an LB notification or edit any LB Phone files.
 ;(function () {
-    const CONTROLLER_VERSION = 'peekplus-1.6.0'
+    const CONTROLLER_VERSION = 'peekplus-1.7.0'
     const resourceName = typeof GetParentResourceName === 'function' ? GetParentResourceName() : 'services-plus'
     const OVERLAY_ID = 'services-plus-overlay'
     const STYLE_ID = 'services-plus-overlay-styles'
@@ -167,6 +167,7 @@
         #${OVERLAY_ID}[data-host='phone'] .sp-sub { font-size: .74rem; line-height: 1.08; }
         #${OVERLAY_ID}[data-host='phone'] .sp-header { gap: .62rem; }
         #${OVERLAY_ID}[data-host='phone'] .sp-card-icon { width: 2.35rem; height: 2.35rem; border-radius: .68rem; }
+        #${OVERLAY_ID}[data-host='phone'] .sp-thumbnail { width: 3rem; height: 3rem; }
         #${OVERLAY_ID}[data-host='phone'] .sp-card-icon .sp-icon { width: 1.48rem; height: 1.48rem; }
         #${OVERLAY_ID}[data-host='phone'] .sp-status { padding: .28rem .46rem; font-size: .64rem; }
         #${OVERLAY_ID}[data-host='phone'] .sp-meta {
@@ -299,6 +300,12 @@
         #${OVERLAY_ID} .sp-card-icon-fallback { display: grid; place-items: center; width: 100%; height: 100%; }
         #${OVERLAY_ID} .sp-card-icon-image { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .16s ease; }
         #${OVERLAY_ID} .sp-card-icon.has-image .sp-card-icon-image { opacity: 1; }
+        #${OVERLAY_ID} .sp-card-icon[data-avatar='true'] { border-radius: 50%; }
+        #${OVERLAY_ID} .sp-thumbnail {
+            display: block; flex: 0 0 auto; width: 3.35rem; height: 3.35rem;
+            object-fit: cover; border-radius: .72rem; background: rgba(127,127,127,.12);
+            border: 1px solid rgba(127,127,127,.16);
+        }
         #${OVERLAY_ID} .sp-heading { min-width: 0; flex: 1 1 auto; }
         #${OVERLAY_ID} .sp-status {
             flex: 0 0 auto; display: flex; align-items: center; gap: .32rem;
@@ -474,9 +481,10 @@
         parent.appendChild(wrapper)
     }
 
-    function addCardIcon(targetDocument, parent, name, imageUrl) {
+    function addCardIcon(targetDocument, parent, name, imageUrl, avatar) {
         const wrapper = targetDocument.createElement('span')
         wrapper.className = 'sp-card-icon'
+        wrapper.dataset.avatar = avatar === true ? 'true' : 'false'
         addIcon(targetDocument, wrapper, name, 'sp-card-icon-fallback')
         if (imageUrl) {
             const image = targetDocument.createElement('img')
@@ -489,6 +497,17 @@
             wrapper.appendChild(image)
         }
         parent.appendChild(wrapper)
+    }
+
+    function addThumbnail(targetDocument, parent, imageUrl) {
+        if (!imageUrl) return
+        const image = targetDocument.createElement('img')
+        image.className = 'sp-thumbnail'
+        image.alt = ''
+        image.referrerPolicy = 'no-referrer'
+        image.onerror = () => image.remove()
+        image.src = imageUrl
+        parent.appendChild(image)
     }
 
     function formatDuration(milliseconds) {
@@ -604,6 +623,8 @@
                 variant: payload.variant,
                 icon: payload.icon,
                 iconUrl: payload.iconUrl,
+                avatarUrl: payload.avatarUrl,
+                thumbnailUrl: payload.thumbnailUrl,
                 details: payload.details || [],
                 actions: payload.actions || [],
                 actionInFlight: payload.actionInFlight === true,
@@ -659,10 +680,12 @@
             renderCustomTemplate(targetDocument, element, payload, reusableFrame)
             return
         }
-        if (payload.icon || payload.state === 'active') {
+        if (payload.icon || payload.iconUrl || payload.avatarUrl || payload.thumbnailUrl || payload.state === 'active') {
             const header = targetDocument.createElement('div')
             header.className = 'sp-header'
-            addCardIcon(targetDocument, header, payload.icon, payload.iconUrl)
+            if (payload.icon || payload.iconUrl || payload.avatarUrl || payload.state === 'active') {
+                addCardIcon(targetDocument, header, payload.icon, payload.avatarUrl || payload.iconUrl, Boolean(payload.avatarUrl))
+            }
             const heading = targetDocument.createElement('div')
             heading.className = 'sp-heading'
             addText(targetDocument, heading, 'sp-title', payload.title)
@@ -671,6 +694,7 @@
             if (payload.state === 'active') {
                 addText(targetDocument, header, 'sp-status', cardAppearance(payload) === 'services' ? 'Active request' : 'Active')
             }
+            addThumbnail(targetDocument, header, payload.thumbnailUrl)
             element.appendChild(header)
         } else {
             addText(targetDocument, element, 'sp-title', payload.title)

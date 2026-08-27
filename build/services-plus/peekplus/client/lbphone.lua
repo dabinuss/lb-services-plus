@@ -9,6 +9,7 @@ local settings = {
 }
 local phoneOpen = false
 local callActive = false
+local mediaPolicy = nil
 
 local function safeExport(name, default)
     if GetResourceState("lb-phone") ~= "started" then return default end
@@ -71,6 +72,18 @@ function PeekPlusLBPhone.RequestSettings()
     return false
 end
 
+local function buildMediaPolicy()
+    local phoneConfig = safeExport("GetConfig", nil)
+    return PeekPlusMediaPolicy.Build(phoneConfig)
+end
+
+function PeekPlusLBPhone.IsMediaLinkAllowed(link)
+    if type(link) ~= "string" then return false end
+    if mediaPolicy == nil then mediaPolicy = buildMediaPolicy() or false end
+    if mediaPolicy == false then return false end
+    return PeekPlusMediaPolicy.IsAllowed(link, mediaPolicy)
+end
+
 RegisterNetEvent("services-plus:client:peekplusSettings", normalizeSettings)
 RegisterNetEvent("lb-phone:settingsUpdated", function(first, second)
     normalizeSettings(type(second) == "table" and second or first)
@@ -88,6 +101,7 @@ end)
 AddEventHandler("onClientResourceStart", function(resourceName)
     if resourceName ~= GetCurrentResourceName() and resourceName ~= "lb-phone" then return end
     SetTimeout(resourceName == "lb-phone" and 500 or 0, function()
+        mediaPolicy = nil
         phoneOpen = safeExport("IsOpen", false) == true
         PeekPlusLBPhone.RequestSettings()
         if PeekPlus and PeekPlus.Reconnect then PeekPlus.Reconnect(phoneOpen) end
@@ -96,6 +110,7 @@ end)
 
 AddEventHandler("onClientResourceStop", function(resourceName)
     if resourceName ~= "lb-phone" then return end
+    mediaPolicy = nil
     phoneOpen = false
     if PeekPlus and PeekPlus.PhoneUnavailable then PeekPlus.PhoneUnavailable() end
 end)
