@@ -27,6 +27,7 @@ local uiLabels = {
     active = L("peekplus.active"),
     activeRequest = L("peekplus.activeRequest"),
     confirm = L("peekplus.confirm"),
+    now = L("peekplus.now"),
 }
 
 local function sendNui(action, data)

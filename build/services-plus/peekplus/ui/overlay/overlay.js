@@ -2,7 +2,7 @@
 // .full-phone tree and owns LB's native .phoneVisbility peek position. It
 // does not enqueue an LB notification or edit any LB Phone files.
 ;(function () {
-    const CONTROLLER_VERSION = 'peekplus-1.9.0'
+    const CONTROLLER_VERSION = 'peekplus-1.9.1'
     const resourceName = typeof GetParentResourceName === 'function' ? GetParentResourceName() : 'services-plus'
     const OVERLAY_ID = 'services-plus-overlay'
     const STYLE_ID = 'services-plus-overlay-styles'
@@ -182,7 +182,7 @@
         }
         #${OVERLAY_ID}[data-host='phone'] {
             position: absolute;
-            top: 4.45rem;
+            top: 4.5rem;
             left: 0;
             right: 0;
         }
@@ -417,6 +417,219 @@
             background: rgba(18, 22, 27, .68); padding: 1rem; text-align: center;
             font-size: 1rem; font-weight: 800;
         }
+        /* Match LB Phone's native banner geometry and surface tokens. The
+           fallbacks keep the root-level renderer usable when the phone DOM is
+           temporarily unavailable. */
+        #${OVERLAY_ID} { font-family: Roboto, -apple-system, 'Segoe UI', sans-serif; }
+        #${OVERLAY_ID} .sp-card:not([data-full-card='true']) {
+            display: flex;
+            flex-direction: column;
+            gap: 0;
+            width: 24rem;
+            max-width: 90vw;
+            padding: 0;
+            overflow: hidden;
+            border: 0;
+            border-radius: 1.125rem;
+            box-shadow: none;
+            backdrop-filter: blur(.625rem);
+        }
+        #${OVERLAY_ID}[data-theme='light'] .sp-card:not([data-full-card='true']) {
+            color: var(--phone-text-primary, #111);
+            background: rgba(180, 180, 180, .7);
+        }
+        #${OVERLAY_ID}[data-theme='dark'] .sp-card:not([data-full-card='true']) {
+            color: var(--phone-text-primary, #f2f2f7);
+            background: rgba(41, 41, 41, .8);
+        }
+        #${OVERLAY_ID}[data-host='lockscreen'] .sp-card:not([data-full-card='true']) {
+            background: var(--notification-primary, rgba(41, 41, 41, .8));
+        }
+        #${OVERLAY_ID} .sp-card[data-appearance='services']:not([data-full-card='true']),
+        #${OVERLAY_ID}[data-theme] .sp-card[data-appearance='services'][data-state='active']:not([data-full-card='true']) {
+            color: var(--phone-text-primary, inherit);
+            background: var(--notification-primary, rgba(41, 41, 41, .8));
+            border: 0;
+            box-shadow: none;
+            backdrop-filter: blur(.625rem);
+        }
+        #${OVERLAY_ID}[data-theme='light'] .sp-card[data-appearance='services']:not([data-full-card='true']) {
+            background: var(--notification-primary, rgba(180, 180, 180, .7));
+        }
+        #${OVERLAY_ID}[data-theme='dark'] .sp-card[data-appearance='services']:not([data-full-card='true']) {
+            background: var(--notification-primary, rgba(41, 41, 41, .8));
+        }
+        #${OVERLAY_ID}[data-host='phone'][data-theme='light'] .sp-card[data-appearance='services']:not([data-full-card='true']) {
+            background: rgba(180, 180, 180, .7);
+        }
+        #${OVERLAY_ID}[data-host='phone'][data-theme='dark'] .sp-card[data-appearance='services']:not([data-full-card='true']) {
+            background: rgba(41, 41, 41, .8);
+        }
+        #${OVERLAY_ID}[data-host='phone'] .sp-card:not([data-full-card='true']) {
+            width: 24rem;
+            max-width: calc(100% - 2rem);
+            max-height: 11.25rem;
+            padding: 0;
+            border-radius: 1.125rem;
+        }
+        #${OVERLAY_ID} .sp-content {
+            box-sizing: border-box;
+            align-self: center;
+            width: 95%;
+            min-height: 0;
+            overflow: hidden;
+            padding: .9rem 1rem .9rem 1.25rem;
+        }
+        #${OVERLAY_ID} .sp-content[data-actions='true'] { padding-bottom: .3rem; }
+        #${OVERLAY_ID} .sp-card[data-template='compact'] .sp-content { padding: .7rem 1rem .7rem 1.1rem; }
+        #${OVERLAY_ID} .sp-card[data-template='compact'] .sp-content[data-actions='true'] { padding-bottom: .25rem; }
+        #${OVERLAY_ID} .sp-header { align-items: center; gap: .55rem; width: 100%; }
+        #${OVERLAY_ID} .sp-card-icon,
+        #${OVERLAY_ID}[data-host='phone'] .sp-card-icon {
+            width: 2.75rem;
+            height: 2.75rem;
+            border: 0;
+            border-radius: .625rem;
+            background: rgba(127, 127, 127, .14);
+            box-shadow: none;
+        }
+        #${OVERLAY_ID} .sp-card-icon[data-avatar='true'] { overflow: visible; border-radius: 50%; }
+        #${OVERLAY_ID} .sp-card-icon[data-avatar='true'] .sp-card-icon-image { border-radius: 50%; }
+        #${OVERLAY_ID} .sp-card-icon .sp-icon,
+        #${OVERLAY_ID}[data-host='phone'] .sp-card-icon .sp-icon { width: 1.55rem; height: 1.55rem; }
+        #${OVERLAY_ID} .sp-avatar-app-icon {
+            position: absolute;
+            right: -.25rem;
+            bottom: -.25rem;
+            z-index: 2;
+            display: grid;
+            place-items: center;
+            width: 1.25rem;
+            height: 1.25rem;
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, .45);
+            border-radius: .3125rem;
+            color: var(--phone-text-primary, #fff);
+            background: var(--notification-secondary, #39393b);
+        }
+        #${OVERLAY_ID} .sp-avatar-app-icon img { width: 100%; height: 100%; object-fit: cover; }
+        #${OVERLAY_ID} .sp-avatar-app-icon .sp-icon { width: .8rem; height: .8rem; }
+        #${OVERLAY_ID} .sp-heading { display: flex; flex: 1 1 auto; flex-direction: column; width: 85%; }
+        #${OVERLAY_ID} .sp-heading-row {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: .6rem;
+            width: 100%;
+            min-width: 0;
+        }
+        #${OVERLAY_ID} .sp-title,
+        #${OVERLAY_ID}[data-host='phone'] .sp-title,
+        #${OVERLAY_ID} .sp-card[data-template='compact'] .sp-title {
+            min-width: 0;
+            overflow: hidden;
+            color: var(--phone-text-primary, inherit);
+            font-size: 1rem;
+            font-weight: 500;
+            line-height: 1.2;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        #${OVERLAY_ID} .sp-time,
+        #${OVERLAY_ID} .sp-status,
+        #${OVERLAY_ID}[data-host='phone'] .sp-status {
+            flex: 0 0 auto;
+            display: block;
+            padding: 0;
+            border: 0;
+            border-radius: 0;
+            color: var(--phone-text-primary, inherit);
+            background: transparent;
+            font-size: .78rem;
+            font-weight: 400;
+            line-height: 1.2;
+            opacity: .6;
+        }
+        #${OVERLAY_ID} .sp-status::before { display: none; }
+        #${OVERLAY_ID} .sp-card[data-appearance='services'] .sp-status {
+            color: #30d158;
+            background: transparent;
+            border: 0;
+            opacity: .9;
+        }
+        #${OVERLAY_ID} .sp-body-row { display: flex; align-items: flex-start; justify-content: space-between; gap: .55rem; min-width: 0; }
+        #${OVERLAY_ID} .sp-copy { min-width: 0; flex: 1 1 auto; }
+        #${OVERLAY_ID} .sp-sub,
+        #${OVERLAY_ID}[data-host='phone'] .sp-sub {
+            margin-top: .12rem;
+            overflow: hidden;
+            color: var(--phone-text-primary, inherit);
+            font-size: .82rem;
+            font-weight: 400;
+            line-height: 1.2;
+            opacity: .62;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        #${OVERLAY_ID} .sp-meta,
+        #${OVERLAY_ID}[data-host='phone'] .sp-meta,
+        #${OVERLAY_ID} .sp-card[data-template='compact'] .sp-meta {
+            display: -webkit-box;
+            margin-top: .18rem;
+            overflow: hidden;
+            color: var(--phone-text-primary, inherit);
+            font-size: .94rem;
+            font-weight: 500;
+            line-height: 1.2;
+            opacity: .8;
+            white-space: normal;
+            -webkit-box-orient: vertical;
+            -webkit-line-clamp: 2;
+        }
+        #${OVERLAY_ID} .sp-thumbnail,
+        #${OVERLAY_ID}[data-host='phone'] .sp-thumbnail {
+            width: 2.5rem;
+            height: 2.5rem;
+            margin-top: .25rem;
+            border: 0;
+            border-radius: .5rem;
+            background: rgba(127, 127, 127, .12);
+        }
+        #${OVERLAY_ID} .sp-details { margin-top: .65rem; gap: .3rem; }
+        #${OVERLAY_ID} .sp-detail { font-size: .78rem; font-weight: 400; }
+        #${OVERLAY_ID} .sp-detail-label { opacity: .6; }
+        #${OVERLAY_ID} .sp-detail-value { font-weight: 500; }
+        #${OVERLAY_ID} .sp-buttons,
+        #${OVERLAY_ID}[data-host='phone'] .sp-buttons {
+            box-sizing: border-box;
+            justify-content: center;
+            width: 93%;
+            margin: 0 auto;
+            padding: .5rem 1rem .5rem .75rem;
+            gap: 1rem;
+            border-radius: 0 0 1.125rem 1.125rem;
+            background: var(--notification-secondary, rgba(127, 127, 127, .18));
+        }
+        #${OVERLAY_ID} .sp-btn,
+        #${OVERLAY_ID}[data-host='phone'] .sp-btn {
+            appearance: none;
+            flex: 0 1 auto;
+            padding: .5rem 1rem;
+            border: 0;
+            border-radius: .5rem;
+            color: var(--phone-text-primary, inherit);
+            background: var(--controlcentre-opacity2, rgba(127, 127, 127, .22));
+            font-family: inherit;
+            font-size: .9375rem;
+            font-weight: 500;
+            line-height: 1;
+        }
+        #${OVERLAY_ID} .sp-btn.success,
+        #${OVERLAY_ID} .sp-card[data-appearance='services'] .sp-btn.success { color: #30d158; background: var(--controlcentre-opacity2, rgba(127, 127, 127, .22)); box-shadow: none; }
+        #${OVERLAY_ID} .sp-btn.danger,
+        #${OVERLAY_ID} .sp-card[data-appearance='services'] .sp-btn.danger { color: #ff453a; background: var(--controlcentre-opacity2, rgba(127, 127, 127, .22)); box-shadow: none; }
+        #${OVERLAY_ID} .sp-btn.primary,
+        #${OVERLAY_ID} .sp-card[data-appearance='services'] .sp-btn.primary { color: #0a84ff; background: var(--controlcentre-opacity2, rgba(127, 127, 127, .22)); box-shadow: none; }
         #${OVERLAY_ID}[data-host='phone'] .sp-card[data-full-card='true'] { max-height: 20rem; }
         /* LB Phone itself uses this (misspelled) wrapper to move the complete
            device: closed = 60rem, notification = 45rem. Owning this single
@@ -527,18 +740,38 @@
         parent.appendChild(wrapper)
     }
 
-    function addCardIcon(targetDocument, parent, name, imageUrl, avatar) {
+    function addCardIcon(targetDocument, parent, name, imageUrl, avatar, appIconUrl) {
         const wrapper = targetDocument.createElement('span')
         wrapper.className = 'sp-card-icon'
         wrapper.dataset.avatar = avatar === true ? 'true' : 'false'
         addIcon(targetDocument, wrapper, name, 'sp-card-icon-fallback')
+        let avatarBadge = null
+        if (avatar) {
+            avatarBadge = targetDocument.createElement('span')
+            avatarBadge.className = 'sp-avatar-app-icon'
+            if (appIconUrl) {
+                const appIcon = targetDocument.createElement('img')
+                appIcon.alt = ''
+                appIcon.referrerPolicy = 'no-referrer'
+                appIcon.onerror = () => avatarBadge?.remove()
+                appIcon.src = appIconUrl
+                avatarBadge.appendChild(appIcon)
+            } else {
+                addIcon(targetDocument, avatarBadge, name, 'sp-avatar-app-icon-fallback')
+            }
+            wrapper.appendChild(avatarBadge)
+        }
         if (imageUrl) {
             const image = targetDocument.createElement('img')
             image.className = 'sp-card-icon-image'
             image.alt = ''
             image.referrerPolicy = 'no-referrer'
             image.onload = () => wrapper.classList.add('has-image')
-            image.onerror = () => image.remove()
+            image.onerror = () => {
+                image.remove()
+                avatarBadge?.remove()
+                wrapper.dataset.avatar = 'false'
+            }
             image.src = imageUrl
             wrapper.appendChild(image)
         }
@@ -728,38 +961,57 @@
             renderCustomTemplate(targetDocument, element, payload, reusableFrame)
             return
         }
-        if (payload.icon || payload.iconUrl || payload.avatarUrl || payload.thumbnailUrl || payload.state === 'active') {
-            const header = targetDocument.createElement('div')
-            header.className = 'sp-header'
-            if (payload.icon || payload.iconUrl || payload.avatarUrl || payload.state === 'active') {
-                addCardIcon(targetDocument, header, payload.icon, payload.avatarUrl || payload.iconUrl, Boolean(payload.avatarUrl))
-            }
-            const heading = targetDocument.createElement('div')
-            heading.className = 'sp-heading'
-            addText(targetDocument, heading, 'sp-title', payload.title)
-            addText(targetDocument, heading, 'sp-sub', payload.subtitle)
-            header.appendChild(heading)
-            if (payload.state === 'active') {
-                const statusLabel = payload.templateData?.statusLabel
-                    || (cardAppearance(payload) === 'services'
-                        ? uiLabel('activeRequest')
-                        : uiLabel('active'))
-                addText(targetDocument, header, 'sp-status', statusLabel)
-            }
-            addThumbnail(targetDocument, header, payload.thumbnailUrl)
-            element.appendChild(header)
-        } else {
-            addText(targetDocument, element, 'sp-title', payload.title)
-            addText(targetDocument, element, 'sp-sub', payload.subtitle)
-        }
-        addText(targetDocument, element, 'sp-meta', payload.description)
-        if (payload.layout === 'details') renderDetails(targetDocument, element, payload.details)
-        if (payload.layout === 'progress') renderProgress(targetDocument, element, payload.progress)
-        if (payload.layout === 'timer') renderTimer(targetDocument, element, payload.timer, payload.id)
-        if (payload.layout === 'custom') renderCustomTemplate(targetDocument, element, payload, reusableFrame)
         const visibleActions = Array.isArray(payload.actions)
             ? payload.actions.filter((action) => action.presentation !== 'tap')
             : []
+
+        const content = targetDocument.createElement('div')
+        content.className = 'sp-content'
+        content.dataset.actions = visibleActions.length > 0 ? 'true' : 'false'
+        const header = targetDocument.createElement('div')
+        header.className = 'sp-header'
+        if (payload.icon || payload.iconUrl || payload.avatarUrl || payload.state === 'active') {
+            addCardIcon(
+                targetDocument,
+                header,
+                payload.icon,
+                payload.avatarUrl || payload.iconUrl,
+                Boolean(payload.avatarUrl),
+                payload.avatarUrl ? payload.iconUrl : null,
+            )
+        }
+        const heading = targetDocument.createElement('div')
+        heading.className = 'sp-heading'
+        const headingRow = targetDocument.createElement('div')
+        headingRow.className = 'sp-heading-row'
+        addText(targetDocument, headingRow, 'sp-title', payload.title)
+        if (payload.state === 'active') {
+            const statusLabel = payload.templateData?.statusLabel
+                || (cardAppearance(payload) === 'services'
+                    ? uiLabel('activeRequest')
+                    : uiLabel('active'))
+            addText(targetDocument, headingRow, 'sp-status', statusLabel)
+        } else {
+            addText(targetDocument, headingRow, 'sp-time', uiLabel('now'))
+        }
+        heading.appendChild(headingRow)
+        const bodyRow = targetDocument.createElement('div')
+        bodyRow.className = 'sp-body-row'
+        const copy = targetDocument.createElement('div')
+        copy.className = 'sp-copy'
+        addText(targetDocument, copy, 'sp-sub', payload.subtitle)
+        addText(targetDocument, copy, 'sp-meta', payload.description)
+        bodyRow.appendChild(copy)
+        addThumbnail(targetDocument, bodyRow, payload.thumbnailUrl)
+        heading.appendChild(bodyRow)
+        header.appendChild(heading)
+        content.appendChild(header)
+
+        if (payload.layout === 'details') renderDetails(targetDocument, content, payload.details)
+        if (payload.layout === 'progress') renderProgress(targetDocument, content, payload.progress)
+        if (payload.layout === 'timer') renderTimer(targetDocument, content, payload.timer, payload.id)
+        if (payload.layout === 'custom') renderCustomTemplate(targetDocument, content, payload, reusableFrame)
+        element.appendChild(content)
         if (visibleActions.length === 0) return
 
         const buttons = targetDocument.createElement('div')

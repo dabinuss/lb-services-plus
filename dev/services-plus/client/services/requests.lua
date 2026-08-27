@@ -189,14 +189,14 @@ local function pendingCard(payload)
         actions = {
             {
                 id = "decline",
-                label = ("Backspace · %s"):format(label(payload, "decline", "Decline")),
+                label = label(payload, "decline", "Decline"),
                 successLabel = label(payload, "declined", "Declined"),
                 key = "BACK",
                 color = "danger",
             },
             {
                 id = "accept",
-                label = ("Enter · %s"):format(label(payload, "accept", "Accept")),
+                label = label(payload, "accept", "Accept"),
                 successLabel = label(payload, "accepted", "Accepted"),
                 key = "RETURN",
                 color = "success",
@@ -271,7 +271,7 @@ local function activeCard(payload)
             },
             {
                 id = "complete",
-                label = ("Enter · %s"):format(label(payload, "completeRequest", "Complete request")),
+                label = label(payload, "completeRequest", "Complete request"),
                 successLabel = label(payload, "completed", "Completed"),
                 key = "RETURN",
                 color = "success",

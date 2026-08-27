@@ -2,6 +2,7 @@
     "peekplus.active": "Active",
     "peekplus.activeRequest": "Active request",
     "peekplus.confirm": "Confirm?",
+    "peekplus.now": "Now",
     "notifications.newMessage": "New message",
     "notifications.requestCancelledUnavailable": "Your request was cancelled because the employee became unavailable.",
     "notifications.requestCompleted": "Your request has been completed. Thank you.",
