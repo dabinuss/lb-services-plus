@@ -49,6 +49,7 @@ local peekId, err = exports["services-plus"]:ShowPeek({
     history = true,
     sound = true,
     priority = 0,
+    dismissible = true,
     actions = {
         { id = "decline", label = "Decline", key = "BACK", color = "danger" },
         { id = "accept", label = "Accept", key = "RETURN", color = "success" },
@@ -73,6 +74,14 @@ Card options:
   held card. The held card returns without another sound.
 - `actions`: up to the configured maximum. Version 1 supports the optional
   keys `RETURN` and `BACK`.
+- `dismissible`: enables a presentation-only swipe dismissal. With the phone
+  closed, swipe the card upward; on the open lockscreen, swipe it horizontally.
+  It defaults to `false` so existing interactive cards remain opt-in.
+- `dismissAction`: deliberately couples a swipe to the ID of one of the
+  card's declared actions. The action still uses normal revision checks,
+  confirmation and action tokens. Without this option, swiping only removes
+  the PeekPlus card and records the lifecycle reason `dismissed`. Set
+  `dismissAction = false` when an update should clear an existing coupling.
 - `variant`: semantic styling: `neutral`, `info`, `success`, `warning` or
   `error`.
 - `layout`: content model: `text`, `details`, `actions`, `progress`, `timer`
@@ -114,6 +123,7 @@ Listen to the event scoped to the exact consumer resource name:
 AddEventHandler("peekplus:action:my-resource", function(data)
     -- data.id
     -- data.action
+    -- data.source ("action" or "dismiss")
     -- data.confirmed
     -- data.revision
     -- data.actionToken

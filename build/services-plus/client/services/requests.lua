@@ -154,6 +154,7 @@ local function pendingCard(payload)
         details = activeDetails(payload, distanceFromPlayer(payload)),
         duration = Config.RequestNotificationPeekDuration or 15000,
         hold = false,
+        dismissible = true,
         sound = true,
         priority = 0,
         actions = {

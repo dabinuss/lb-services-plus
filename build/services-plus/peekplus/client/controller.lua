@@ -203,6 +203,22 @@ local function normalizeSpec(spec, partial, owner)
         if not actions then return nil, err end
         result.actions = actions
     end
+    if spec.dismissible ~= nil or not partial then
+        if spec.dismissible ~= nil and type(spec.dismissible) ~= "boolean" then
+            return nil, "invalid_dismissible"
+        end
+        result.dismissible = spec.dismissible == true
+    end
+    if spec.dismissAction ~= nil then
+        if spec.dismissAction == false then
+            result.dismissAction = false
+        else
+            local dismissAction, err = cleanText(spec.dismissAction, limits.textLimits.actionId, true)
+            if not dismissAction then return nil, err end
+            if not dismissAction:match("^[%w_%-]+$") then return nil, "invalid_dismiss_action" end
+            result.dismissAction = dismissAction
+        end
+    end
     if spec.key ~= nil or not partial then
         local key, err = cleanKey(spec.key)
         if err then return nil, err end
@@ -328,6 +344,8 @@ local function publicCard(card)
         hold = card.hold,
         priority = card.priority,
         actions = cloneValue(card.actions),
+        dismissible = card.dismissible,
+        dismissAction = card.dismissAction,
         createdAt = card.createdAt,
         expiresAt = card.expiresAt,
         actionInFlight = card.actionInFlight ~= nil,
@@ -551,6 +569,18 @@ function PeekPlus.Show(spec, owner)
 
     local normalized, err = normalizeSpec(spec, false, owner)
     if not normalized then return nil, err end
+    if normalized.dismissAction then
+        local actionExists = false
+        for index = 1, #normalized.actions do
+            if normalized.actions[index].id == normalized.dismissAction then actionExists = true break end
+        end
+        if not actionExists then return nil, "invalid_dismiss_action" end
+        if type(spec.dismissible) == "boolean" and not normalized.dismissible then
+            return nil, "invalid_dismiss_action"
+        end
+        normalized.dismissible = true
+    end
+    if normalized.dismissAction == false then normalized.dismissAction = nil end
     nextId = nextId + 1
     local now = GetGameTimer()
     local id = ("peekplus:%s:%s:%d"):format(runtimeId, owner, nextId)
@@ -599,6 +629,21 @@ function PeekPlus.Update(id, patch, owner, expectedRevision, actionToken)
     local normalized, err = normalizeSpec(patch, true, owner)
     if not normalized then return false, err end
 
+    local nextDismissAction = normalized.dismissAction
+    if nextDismissAction == nil then nextDismissAction = card.dismissAction end
+    if nextDismissAction == false then nextDismissAction = nil end
+    local nextDismissible = normalized.dismissible
+    if nextDismissible == nil then nextDismissible = card.dismissible end
+    if nextDismissAction then
+        local nextActions = normalized.actions or card.actions
+        local actionExists = false
+        for index = 1, #nextActions do
+            if nextActions[index].id == nextDismissAction then actionExists = true break end
+        end
+        if not actionExists or nextDismissible == false then return false, "invalid_dismiss_action" end
+        nextDismissible = true
+    end
+
     if normalized.state and normalized.state ~= card.state then
         local transitions = defaults.transitions[card.state] or {}
         if not transitions[normalized.state] then return false, "invalid_transition" end
@@ -611,7 +656,11 @@ function PeekPlus.Update(id, patch, owner, expectedRevision, actionToken)
         if oldKey then keyIndex[owner .. ":" .. oldKey] = nil end
         if normalized.key then keyIndex[owner .. ":" .. normalized.key] = id end
     end
-    for field, value in pairs(normalized) do card[field] = value end
+    for field, value in pairs(normalized) do
+        if field ~= "dismissAction" then card[field] = value end
+    end
+    card.dismissAction = nextDismissAction
+    card.dismissible = nextDismissible == true
     card.revision = card.revision + 1
     card.actionInFlight = nil
     card.confirmAction = nil
@@ -675,7 +724,7 @@ function PeekPlus.UpdatePresentation(id, patch, owner)
     return true
 end
 
-function PeekPlus.Remove(id, owner, expectedRevision, actionToken, reason)
+function PeekPlus.Remove(id, owner, expectedRevision, actionToken, reason, removalMotion)
     local card = cards[id]
     if not card then return false, "card_not_found" end
     if owner and card.owner ~= owner then return false, "not_owner" end
@@ -701,7 +750,7 @@ function PeekPlus.Remove(id, owner, expectedRevision, actionToken, reason)
         peekWatchToken = peekWatchToken + 1
         interruptedId = nil
         visibleId = nil
-        showNext(true, removalReason, actionSucceeded and "action-success" or "exit")
+        showNext(true, removalReason, actionSucceeded and "action-success" or removalMotion or "exit")
     end
     return true
 end
@@ -899,7 +948,7 @@ local function findAction(card, actionId)
     end
 end
 
-local function dispatchAction(card, action, confirmed)
+local function dispatchAction(card, action, confirmed, source)
     nextActionToken = nextActionToken + 1
     local token = ("%s:%d"):format(runtimeId, nextActionToken)
     card.actionInFlight = token
@@ -911,6 +960,7 @@ local function dispatchAction(card, action, confirmed)
         id = card.id,
         owner = card.owner,
         action = action.id,
+        source = source or "action",
         confirmed = confirmed == true,
         revision = revision,
         actionToken = token,
@@ -930,7 +980,7 @@ local function dispatchAction(card, action, confirmed)
     end)
 end
 
-local function handleAction(data)
+local function handleAction(data, source)
     if type(data) ~= "table" or callActive or interruptedId == visibleId then return false end
     local card = visibleId and cards[visibleId] or nil
     if not card or data.id ~= card.id or tonumber(data.revision) ~= card.revision then return false end
@@ -954,12 +1004,37 @@ local function handleAction(data)
         return true
     end
 
-    dispatchAction(card, action, action.confirm ~= nil)
+    dispatchAction(card, action, action.confirm ~= nil, source)
     return true
+end
+
+local function handleDismiss(data)
+    if type(data) ~= "table" or callActive or interruptedId == visibleId then return false end
+    local card = visibleId and cards[visibleId] or nil
+    if not card or not card.dismissible or data.id ~= card.id
+        or tonumber(data.revision) ~= card.revision or card.actionInFlight then return false end
+
+    if card.dismissAction then
+        return handleAction({
+            id = card.id,
+            revision = card.revision,
+            action = card.dismissAction,
+        }, "dismiss")
+    end
+
+    local direction = tostring(data.direction or "")
+    local motion = direction == "left" and "dismiss-left"
+        or direction == "right" and "dismiss-right"
+        or "dismiss-up"
+    return PeekPlus.Remove(card.id, card.owner, card.revision, nil, "dismissed", motion) == true
 end
 
 RegisterNUICallback("peekplusAction", function(data, callback)
     callback(handleAction(data))
+end)
+
+RegisterNUICallback("peekplusDismiss", function(data, callback)
+    callback(handleDismiss(data))
 end)
 
 RegisterNUICallback("peekplusReady", function(data, callback)

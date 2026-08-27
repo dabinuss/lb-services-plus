@@ -2,7 +2,7 @@
 // .full-phone tree and owns LB's native .phoneVisbility peek position. It
 // does not enqueue an LB notification or edit any LB Phone files.
 ;(function () {
-    const CONTROLLER_VERSION = 'peekplus-1.4.0'
+    const CONTROLLER_VERSION = 'peekplus-1.5.0'
     const resourceName = typeof GetParentResourceName === 'function' ? GetParentResourceName() : 'services-plus'
     const OVERLAY_ID = 'services-plus-overlay'
     const STYLE_ID = 'services-plus-overlay-styles'
@@ -248,6 +248,9 @@
             box-shadow: 0 .22rem .8rem rgba(0, 0, 0, .2);
             backdrop-filter: blur(1.2rem) saturate(1.12);
         }
+        #${OVERLAY_ID}[data-host='lockscreen'] .sp-card[data-dismissible='true'] { touch-action: pan-y; }
+        #${OVERLAY_ID}:not([data-host='lockscreen']) .sp-card[data-dismissible='true'] { touch-action: none; }
+        #${OVERLAY_ID} .sp-card[data-swiping='true'] { transition: none !important; }
         #${OVERLAY_ID} .sp-card[data-appearance='services'] {
             border: 0;
             border-left: .24rem solid #8e8e93;
@@ -731,6 +734,112 @@
         for (const animation of animations) animation.cancel?.()
     }
 
+    function installSwipeGesture(card, container) {
+        const bind = (source) => {
+            if (!source?.addEventListener) return
+            let gesture = null
+            let suppressClick = false
+
+            source.addEventListener('pointerdown', (event) => {
+                const payload = lastState?.card
+                if (card.dataset.dismissible !== 'true' || payload?.id !== card.dataset.cardId) return
+                if (event.button != null && event.button !== 0) return
+                if (callHasPriority || isNativeBannerActive() || payload.actionInFlight === true) return
+                if (event.target?.closest?.('button, a, input, textarea, select')) return
+                gesture = {
+                    id: event.pointerId,
+                    x: event.clientX,
+                    y: event.clientY,
+                    startedAt: Date.now(),
+                    direction: container.dataset.host === 'lockscreen' ? 'horizontal' : 'up',
+                    dragging: false,
+                }
+                source.setPointerCapture?.(event.pointerId)
+            })
+
+            source.addEventListener('pointermove', (event) => {
+                if (!gesture || event.pointerId !== gesture.id) return
+                const dx = event.clientX - gesture.x
+                const dy = event.clientY - gesture.y
+                const primary = gesture.direction === 'horizontal' ? dx : Math.min(0, dy)
+                const cross = gesture.direction === 'horizontal' ? dy : dx
+                if (!gesture.dragging && Math.abs(primary) < 8) return
+                if (!gesture.dragging && Math.abs(primary) < Math.abs(cross) * 1.15) {
+                    gesture = null
+                    return
+                }
+                if (gesture.direction === 'up' && dy > 0) return
+                gesture.dragging = true
+                event.preventDefault()
+                card.dataset.swiping = 'true'
+                card.style.transform = gesture.direction === 'horizontal'
+                    ? `translateX(${dx}px)`
+                    : `translateY(${Math.min(0, dy)}px)`
+                const distance = Math.abs(primary)
+                card.style.opacity = String(Math.max(.35, 1 - distance / 260))
+            }, { passive: false })
+
+            const finish = (event) => {
+                if (!gesture || event.pointerId !== gesture.id) return
+                const current = gesture
+                gesture = null
+                const endX = Number.isFinite(event.clientX) ? event.clientX : current.x
+                const endY = Number.isFinite(event.clientY) ? event.clientY : current.y
+                const dx = endX - current.x
+                const dy = endY - current.y
+                const primary = current.direction === 'horizontal' ? dx : Math.min(0, dy)
+                const elapsed = Math.max(1, Date.now() - current.startedAt)
+                const distance = Math.abs(primary)
+                const acceptedDistance = current.direction === 'horizontal'
+                    ? Math.min(88, card.getBoundingClientRect().width * .28)
+                    : 64
+                const acceptedVelocity = distance >= 28 && distance / elapsed >= .55
+                suppressClick = current.dragging
+                card.dataset.swiping = 'false'
+                card.style.transform = ''
+                card.style.opacity = ''
+                if (!current.dragging || (distance < acceptedDistance && !acceptedVelocity)) {
+                    if (current.dragging) runAnimation(card, [
+                        { transform: current.direction === 'horizontal' ? `translateX(${primary}px)` : `translateY(${primary}px)`, opacity: Math.max(.35, 1 - distance / 260) },
+                        { transform: 'translate(0, 0)', opacity: 1 },
+                    ], { duration: 180, easing: 'cubic-bezier(.2,.8,.2,1)' })
+                    return
+                }
+                const payload = lastState?.card
+                if (!payload || payload.id !== card.dataset.cardId) return
+                post('peekplusDismiss', {
+                    id: payload.id,
+                    revision: payload.revision,
+                    direction: current.direction === 'up' ? 'up' : primary < 0 ? 'left' : 'right',
+                }).then((accepted) => {
+                    if (accepted !== true && card.isConnected) runAnimation(card, [
+                        { transform: current.direction === 'horizontal' ? `translateX(${primary}px)` : `translateY(${primary}px)`, opacity: .55 },
+                        { transform: 'translate(0, 0)', opacity: 1 },
+                    ], { duration: 180, easing: 'cubic-bezier(.2,.8,.2,1)' })
+                })
+            }
+            source.addEventListener('pointerup', finish)
+            source.addEventListener('pointercancel', finish)
+            source.addEventListener('click', (event) => {
+                if (!suppressClick) return
+                suppressClick = false
+                event.preventDefault()
+                event.stopPropagation()
+            }, true)
+        }
+
+        bind(card)
+        const frame = card.querySelector('.sp-template-frame')
+        if (frame) frame.addEventListener('load', () => {
+            try {
+                bind(frame.contentDocument)
+            } catch {
+                // Cross-origin templates remain interactive, but gestures
+                // must begin on the surrounding PeekPlus card.
+            }
+        }, { once: true })
+    }
+
     function verticalOffset(container, fallback, lockscreen) {
         return container?.dataset.host === 'lockscreen' ? lockscreen : fallback
     }
@@ -787,6 +896,13 @@
     }
 
     function animateCardOut(card, container, motion) {
+        if (motion === 'dismiss-left' || motion === 'dismiss-right') {
+            const distance = motion === 'dismiss-left' ? '-110%' : '110%'
+            return runAnimation(card, [
+                { opacity: 1, transform: 'translateX(0)' },
+                { opacity: 0, transform: `translateX(${distance})` },
+            ], { duration: 190, easing: 'cubic-bezier(.4,0,1,1)' })
+        }
         const distance = motion === 'interrupt'
             ? verticalOffset(container, -58, -68)
             : verticalOffset(container, -72, -84)
@@ -878,6 +994,7 @@
             existingCard.dataset.template = lastState.card.template || 'default'
             existingCard.dataset.appearance = cardAppearance(lastState.card)
             existingCard.dataset.fullCard = 'true'
+            existingCard.dataset.dismissible = lastState.card.dismissible === true ? 'true' : 'false'
             renderCard(container.ownerDocument, existingCard, lastState.card, reusableFrame)
             animateCardIn(existingCard, container, motion)
             return
@@ -891,7 +1008,9 @@
         card.dataset.appearance = cardAppearance(lastState.card)
         card.dataset.cardId = String(lastState.card.id)
         card.dataset.fullCard = lastState.card.templateDefinition?.fullCard === true ? 'true' : 'false'
+        card.dataset.dismissible = lastState.card.dismissible === true ? 'true' : 'false'
         renderCard(container.ownerDocument, card, lastState.card, reusableFrame)
+        installSwipeGesture(card, container)
         const sequence = ++motionSequence
         cancelAnimations(container)
         replaceCard(container, card, existingCard, motion, outgoingMotion, sequence)
