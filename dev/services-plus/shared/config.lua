@@ -73,6 +73,7 @@ Config.MaxOpenRequestsPerPhoneNumberPerCompany = 3
 -- this duration. Set it to 0 to use LB Phone's native duration only. Once a
 -- request is accepted, its active card is held until the request ends.
 Config.RequestNotificationPeekDuration = 15000
+Config.RequestNotificationQueueTtl = 20000
 
 -- Customer-facing tracking for accepted requests. Road distance is calculated
 -- independently on the assigned employee's client; it never reads, creates or

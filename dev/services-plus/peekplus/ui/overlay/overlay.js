@@ -2,12 +2,18 @@
 // .full-phone tree and owns LB's native .phoneVisbility peek position. It
 // does not enqueue an LB notification or edit any LB Phone files.
 ;(function () {
-    const CONTROLLER_VERSION = 'peekplus-1.8.2'
+    const CONTROLLER_VERSION = 'peekplus-1.9.0'
     const resourceName = typeof GetParentResourceName === 'function' ? GetParentResourceName() : 'services-plus'
     const OVERLAY_ID = 'services-plus-overlay'
     const STYLE_ID = 'services-plus-overlay-styles'
     const LOCK_ATTRIBUTE = 'data-services-plus-peek-lock'
     const CALL_PRIORITY_ATTRIBUTE = 'data-services-plus-call-priority'
+    const LB_PHONE_SELECTORS = {
+        fullPhone: '.full-phone',
+        displaySurface: '.phone-container',
+        visibilityWrapper: '.phoneVisbility',
+        lockscreenStack: '.lockscreen-notification-container',
+    }
 
     let lastState = null // { card, forceFallback } | null
     let rootDocument = null
@@ -26,7 +32,6 @@
     let applyingLock = false
     let peekAnimating = false
     let peekAnimationToken = 0
-    let lastNotificationSoundAt = 0
     let callHasPriority = false
     let phoneIsOpen = false
     let domFrame = null
@@ -83,14 +88,16 @@
     }
 
     function playNotificationSound(soundName) {
-        const now = Date.now()
-        if (now - lastNotificationSoundAt < 1200) return
-        lastNotificationSoundAt = now
         fetch('https://lb-phone/playSound', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json; charset=UTF-8' },
             body: JSON.stringify({ soundType: 'notification', soundName: soundName || 'default' }),
         }).catch(() => null)
+    }
+
+    function uiLabel(key) {
+        const value = lastState?.labels?.[key]
+        return typeof value === 'string' ? value : ''
     }
 
     function findRootDocument() {
@@ -102,23 +109,61 @@
         }
     }
 
-    function findLbPhone(root) {
-        try {
-            const frame = Array.from(root?.querySelectorAll('iframe') || []).find((entry) => entry.name === 'lb-phone')
-            const document = frame?.contentDocument
-            return document?.body ? { frame, document } : null
-        } catch {
-            return null
-        }
-    }
+    const LBPhoneCapabilities = {
+        findPhone(root) {
+            try {
+                const frame = Array.from(root?.querySelectorAll('iframe') || []).find((entry) => entry.name === 'lb-phone')
+                const document = frame?.contentDocument
+                return document?.body ? { frame, document } : null
+            } catch {
+                return null
+            }
+        },
+        fullPhone(document = lbDocument) {
+            return document?.querySelector(LB_PHONE_SELECTORS.fullPhone) || null
+        },
+        displaySurface(document = lbDocument) {
+            return this.fullPhone(document)?.querySelector(LB_PHONE_SELECTORS.displaySurface) || null
+        },
+        visibilityWrapper(document = lbDocument) {
+            return document?.querySelector(LB_PHONE_SELECTORS.visibilityWrapper) || null
+        },
+        lockscreenStack(document = lbDocument) {
+            return document?.querySelector(LB_PHONE_SELECTORS.lockscreenStack) || null
+        },
+        theme(document = lbDocument) {
+            return document?.documentElement?.getAttribute('data-theme') || 'dark'
+        },
+        phoneBounds(document = lbDocument) {
+            return this.fullPhone(document)?.getBoundingClientRect() || null
+        },
+        isNativeBannerActive(document = lbDocument) {
+            const wrapper = this.visibilityWrapper(document)
+            if (!wrapper) return false
 
-    function getPhoneTheme() {
-        return lbDocument?.documentElement?.getAttribute('data-theme') || 'dark'
-    }
+            const stack = this.lockscreenStack(document)
+            const nativeChildVisible = Array.from(stack?.children || []).some((child) => {
+                if (child.id === OVERLAY_ID) return false
+                const style = document.defaultView?.getComputedStyle(child)
+                return style?.display !== 'none' && style?.visibility !== 'hidden'
+                    && Number.parseFloat(style?.opacity || '1') > 0
+                    && child.getBoundingClientRect().height > 1
+            })
+            if (nativeChildVisible) return true
 
-    function isNativeBannerActive() {
-        const wrapper = lbDocument?.querySelector('.phoneVisbility')
-        return wrapper && wrapper.style.marginTop === '45rem'
+            const rootFontSize = Number.parseFloat(document.defaultView?.getComputedStyle(document.documentElement).fontSize) || 16
+            const toPixels = (value) => {
+                const parsed = Number.parseFloat(value)
+                if (!Number.isFinite(parsed)) return NaN
+                return String(value).trim().endsWith('rem') ? parsed * rootFontSize : parsed
+            }
+            const inlineMargin = toPixels(wrapper.style.marginTop)
+            if (Number.isFinite(inlineMargin) && Math.abs(inlineMargin - 45 * rootFontSize) <= rootFontSize * .5) return true
+            if (wrapper.hasAttribute(LOCK_ATTRIBUTE)) return false
+            const computedMargin = Number.parseFloat(document.defaultView?.getComputedStyle(wrapper).marginTop)
+            return Number.isFinite(computedMargin)
+                && Math.abs(computedMargin - 45 * rootFontSize) <= rootFontSize * .5
+        },
     }
 
     function reportCapability(name) {
@@ -376,7 +421,7 @@
         /* LB Phone itself uses this (misspelled) wrapper to move the complete
            device: closed = 60rem, notification = 45rem. Owning this single
            native property avoids iframe crops and preserves LB's animation. */
-        .phoneVisbility[${LOCK_ATTRIBUTE}] {
+        ${LB_PHONE_SELECTORS.visibilityWrapper}[${LOCK_ATTRIBUTE}] {
             visibility: visible !important;
             margin-top: calc(42rem - var(--peekplus-card-lift, 0px)) !important;
             transition: margin-top .5s ease-out !important;
@@ -384,20 +429,20 @@
         /* A call banner occupies the top of the phone. Lift the same native
            wrapper a little further so the request remains fully visible below
            it while LB Phone keeps the higher input/visual priority. */
-        .phoneVisbility[${LOCK_ATTRIBUTE}='active']:not([${CALL_PRIORITY_ATTRIBUTE}]) .lockscreen-notification-container {
+        ${LB_PHONE_SELECTORS.visibilityWrapper}[${LOCK_ATTRIBUTE}='active']:not([${CALL_PRIORITY_ATTRIBUTE}]) ${LB_PHONE_SELECTORS.lockscreenStack} {
             opacity: 0 !important;
             pointer-events: none !important;
             transition: opacity .3s ease;
         }
-        .phoneVisbility[${LOCK_ATTRIBUTE}='active'][${CALL_PRIORITY_ATTRIBUTE}] .lockscreen-notification-container {
+        ${LB_PHONE_SELECTORS.visibilityWrapper}[${LOCK_ATTRIBUTE}='active'][${CALL_PRIORITY_ATTRIBUTE}] ${LB_PHONE_SELECTORS.lockscreenStack} {
             opacity: 1 !important;
             transition: opacity .3s ease;
         }
-        .phoneVisbility[${LOCK_ATTRIBUTE}='active'][${CALL_PRIORITY_ATTRIBUTE}] {
+        ${LB_PHONE_SELECTORS.visibilityWrapper}[${LOCK_ATTRIBUTE}='active'][${CALL_PRIORITY_ATTRIBUTE}] {
             margin-top: calc(39rem - var(--peekplus-card-lift, 0px)) !important;
         }
-        .phoneVisbility[${LOCK_ATTRIBUTE}='arming'],
-        .phoneVisbility[${LOCK_ATTRIBUTE}='closing'] {
+        ${LB_PHONE_SELECTORS.visibilityWrapper}[${LOCK_ATTRIBUTE}='arming'],
+        ${LB_PHONE_SELECTORS.visibilityWrapper}[${LOCK_ATTRIBUTE}='closing'] {
             margin-top: 60rem !important;
         }
     `
@@ -420,13 +465,13 @@
     }
 
     function ensureContainer() {
-        const fullPhone = lbDocument?.querySelector('.full-phone') || null
-        const displaySurface = fullPhone?.querySelector('.phone-container') || null
-        const visibilityWrapper = lbDocument?.querySelector('.phoneVisbility') || null
+        const fullPhone = LBPhoneCapabilities.fullPhone()
+        const displaySurface = LBPhoneCapabilities.displaySurface()
+        const visibilityWrapper = LBPhoneCapabilities.visibilityWrapper()
         const phoneCompatible = Boolean(fullPhone && displaySurface && visibilityWrapper)
         const domFallback = Boolean(lastState && !lastState.forceFallback && !phoneCompatible)
         const lockscreenHost = phoneIsOpen && phoneCompatible && !lastState?.forceFallback
-            ? lbDocument?.querySelector('.lockscreen-notification-container')
+            ? LBPhoneCapabilities.lockscreenStack()
             : null
         const phoneHost = !phoneIsOpen && phoneCompatible && !lastState?.forceFallback
             ? displaySurface
@@ -450,8 +495,8 @@
             host.appendChild(container)
         }
         container.dataset.host = lockscreenHost ? 'lockscreen' : phoneHost ? 'phone' : 'fallback'
-        container.dataset.theme = getPhoneTheme()
-        container.dataset.callPriority = (callHasPriority || isNativeBannerActive()) ? 'true' : 'false'
+        container.dataset.theme = LBPhoneCapabilities.theme()
+        container.dataset.callPriority = (callHasPriority || LBPhoneCapabilities.isNativeBannerActive()) ? 'true' : 'false'
         return container
     }
 
@@ -611,9 +656,10 @@
             actionEndpoint: `https://${resourceName}/peekplusAction`,
             presentation: {
                 host: frame.closest(`#${OVERLAY_ID}`)?.dataset.host || 'fallback',
-                theme: getPhoneTheme(),
-                callPriority: callHasPriority || isNativeBannerActive(),
+                theme: LBPhoneCapabilities.theme(),
+                callPriority: callHasPriority || LBPhoneCapabilities.isNativeBannerActive(),
             },
+            labels: lastState?.labels || {},
             card: {
                 id: payload.id,
                 revision: payload.revision,
@@ -657,8 +703,8 @@
         }
         const frame = targetDocument.createElement('iframe')
         frame.className = 'sp-template-frame'
-        frame.src = definition.ui + '?v=' + Date.now()
-        frame.sandbox = 'allow-scripts allow-same-origin allow-popups'
+        frame.src = `${definition.ui}?v=${encodeURIComponent(definition.version || CONTROLLER_VERSION)}`
+        frame.sandbox = 'allow-scripts allow-same-origin'
         frame.dataset.cardId = String(payload.id)
         frame.dataset.template = String(payload.template)
         frame.dataset.fullCard = definition.fullCard === true ? 'true' : 'false'
@@ -694,7 +740,11 @@
             addText(targetDocument, heading, 'sp-sub', payload.subtitle)
             header.appendChild(heading)
             if (payload.state === 'active') {
-                addText(targetDocument, header, 'sp-status', cardAppearance(payload) === 'services' ? 'Active request' : 'Active')
+                const statusLabel = payload.templateData?.statusLabel
+                    || (cardAppearance(payload) === 'services'
+                        ? uiLabel('activeRequest')
+                        : uiLabel('active'))
+                addText(targetDocument, header, 'sp-status', statusLabel)
             }
             addThumbnail(targetDocument, header, payload.thumbnailUrl)
             element.appendChild(header)
@@ -722,7 +772,7 @@
             const inFlight = payload.actionInFlightId === action.id
             button.dataset.inFlight = inFlight ? 'true' : 'false'
             const label = payload.confirmAction === action.id
-                ? action.confirm?.label || 'Confirm?'
+                ? action.confirm?.label || uiLabel('confirm')
                 : action.label
             if (inFlight) {
                 const spinner = targetDocument.createElement('span')
@@ -734,7 +784,7 @@
             } else {
                 button.textContent = label
             }
-            button.disabled = payload.actionInFlight === true || callHasPriority || isNativeBannerActive()
+            button.disabled = payload.actionInFlight === true || callHasPriority || LBPhoneCapabilities.isNativeBannerActive()
             button.onclick = () => {
                 if (button.disabled) return
                 button.disabled = true
@@ -805,7 +855,7 @@
                 const payload = lastState?.card
                 if (card.dataset.dismissible !== 'true' || payload?.id !== card.dataset.cardId) return
                 if (event.button != null && event.button !== 0) return
-                if (callHasPriority || isNativeBannerActive() || payload.actionInFlight === true) return
+                if (callHasPriority || LBPhoneCapabilities.isNativeBannerActive() || payload.actionInFlight === true) return
                 if (event.target?.closest?.('button, a, input, textarea, select')) return
                 gesture = {
                     id: event.pointerId,
@@ -906,7 +956,7 @@
             const payload = lastState?.card
             if (!payload?.tapAction || payload.id !== card.dataset.cardId) return
             if (card.dataset.tapPending === 'true' || payload.actionInFlight === true) return
-            if (callHasPriority || isNativeBannerActive()) return
+            if (callHasPriority || LBPhoneCapabilities.isNativeBannerActive()) return
             card.dataset.tapPending = 'true'
             runAnimation(card, [
                 { transform: 'scale(1)' },
@@ -1099,7 +1149,7 @@
             card: lastState?.card || null,
             host: container.dataset.host,
             theme: container.dataset.theme,
-            call: callHasPriority || isNativeBannerActive(),
+            call: callHasPriority || LBPhoneCapabilities.isNativeBannerActive(),
         })
         if (renderKey === lastRenderKey && container.firstElementChild) return
         lastRenderKey = renderKey
@@ -1166,7 +1216,7 @@
     function capturePeek() {
         peekCaptureTimer = null
         if (!lbDocument || !lbFrame || Date.now() >= peekUntil) return
-        const wrapper = lbDocument.querySelector('.phoneVisbility')
+        const wrapper = LBPhoneCapabilities.visibilityWrapper()
         if (!wrapper) return
 
         syncPeekHeightLift(wrapper)
@@ -1207,13 +1257,13 @@
     function applyPeekLock() {
         if (applyingLock || !lockSnapshot || Date.now() >= peekUntil || !lbDocument || !lbFrame) return
         applyingLock = true
-        const wrapper = lbDocument.querySelector('.phoneVisbility')
+        const wrapper = LBPhoneCapabilities.visibilityWrapper()
         if (wrapper && !peekAnimating && wrapper.getAttribute(LOCK_ATTRIBUTE) !== 'active') {
             wrapper.setAttribute(LOCK_ATTRIBUTE, 'active')
         }
         if (wrapper) {
             syncPeekHeightLift(wrapper)
-            if ((callHasPriority || isNativeBannerActive()) && wrapper.getAttribute(LOCK_ATTRIBUTE) === 'active') {
+            if ((callHasPriority || LBPhoneCapabilities.isNativeBannerActive()) && wrapper.getAttribute(LOCK_ATTRIBUTE) === 'active') {
                 wrapper.setAttribute(CALL_PRIORITY_ATTRIBUTE, '')
             } else {
                 wrapper.removeAttribute(CALL_PRIORITY_ATTRIBUTE)
@@ -1242,7 +1292,7 @@
         peekTimer = null
         peekCaptureTimer = null
         peekReleaseTimer = null
-        const wrapper = lbDocument?.querySelector('.phoneVisbility')
+        const wrapper = LBPhoneCapabilities.visibilityWrapper()
         if (!immediate && wrapper?.hasAttribute(LOCK_ATTRIBUTE)) {
             wrapper.removeAttribute(CALL_PRIORITY_ATTRIBUTE)
             wrapper.setAttribute(LOCK_ATTRIBUTE, 'closing')
@@ -1360,9 +1410,9 @@
             : mutation.target?.parentElement
         if (target?.closest?.(`#${OVERLAY_ID}`)) return false
         if (mutation.type === 'attributes') {
-            return target === lbDocument?.documentElement || target?.matches?.('.phoneVisbility')
+            return target === lbDocument?.documentElement || target?.matches?.(LB_PHONE_SELECTORS.visibilityWrapper)
         }
-        const selector = '.full-phone, .phoneVisbility, .lockscreen-notification-container'
+        const selector = `${LB_PHONE_SELECTORS.fullPhone}, ${LB_PHONE_SELECTORS.visibilityWrapper}, ${LB_PHONE_SELECTORS.lockscreenStack}`
         return [...mutation.addedNodes, ...mutation.removedNodes].some((node) =>
             node?.nodeType === 1 && (node.matches?.(selector) || node.querySelector?.(selector))
         )
@@ -1370,7 +1420,7 @@
 
     function connect() {
         const nextRoot = findRootDocument()
-        const phone = findLbPhone(nextRoot)
+        const phone = LBPhoneCapabilities.findPhone(nextRoot)
         const nextLbDocument = phone?.document || null
         const nextLbFrame = phone?.frame || null
         const nextRootBody = nextRoot?.body || null
@@ -1382,8 +1432,8 @@
         if (!nextRoot) reportCapability('citizenfx-root')
         else if (!phone) reportCapability('lb-phone-iframe')
         else {
-            if (!nextLbDocument.querySelector('.full-phone')) reportCapability('.full-phone')
-            if (!nextLbDocument.querySelector('.phoneVisbility')) reportCapability('.phoneVisbility')
+            if (!LBPhoneCapabilities.fullPhone(nextLbDocument)) reportCapability(LB_PHONE_SELECTORS.fullPhone)
+            if (!LBPhoneCapabilities.visibilityWrapper(nextLbDocument)) reportCapability(LB_PHONE_SELECTORS.visibilityWrapper)
         }
 
         if (rootChanged) {
@@ -1442,7 +1492,7 @@
         const clamped = Math.max(40, Math.min(maxHeight, Math.ceil(event.data.height)))
         if (frame.style.height === `${clamped}px`) return
         frame.style.height = `${clamped}px`
-        const wrapper = lbDocument?.querySelector('.phoneVisbility')
+        const wrapper = LBPhoneCapabilities.visibilityWrapper()
         if (wrapper && peekUntil > Date.now()) syncPeekHeightLift(wrapper)
     }
 
@@ -1474,6 +1524,7 @@
                 motion: data.motion || null,
                 outgoingMotion: data.outgoingMotion || null,
                 outgoingReason: data.outgoingReason || null,
+                labels: data.labels || {},
             }
             if (data.playSound === true) playNotificationSound(data.soundName)
             beginPeek(data.peekDuration, data.holdPeek === true)
@@ -1495,9 +1546,9 @@
             releasePeek(true)
         } else if (data.action === 'peekplus:call') {
             callHasPriority = data.active === true
-            const wrapper = lbDocument?.querySelector('.phoneVisbility')
+            const wrapper = LBPhoneCapabilities.visibilityWrapper()
             if (wrapper) {
-                if ((callHasPriority || isNativeBannerActive()) && wrapper.getAttribute(LOCK_ATTRIBUTE) === 'active') {
+                if ((callHasPriority || LBPhoneCapabilities.isNativeBannerActive()) && wrapper.getAttribute(LOCK_ATTRIBUTE) === 'active') {
                     wrapper.setAttribute(CALL_PRIORITY_ATTRIBUTE, '')
                 } else {
                     wrapper.removeAttribute(CALL_PRIORITY_ATTRIBUTE)

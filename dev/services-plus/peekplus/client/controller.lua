@@ -23,6 +23,11 @@ local runtimeId = ("%x-%x"):format(GetGameTimer(), math.random(0, 0x7fffffff))
 
 local limits = Config.PeekPlus
 local defaults = PeekPlusDefaults
+local uiLabels = {
+    active = L("peekplus.active"),
+    activeRequest = L("peekplus.activeRequest"),
+    confirm = L("peekplus.confirm"),
+}
 
 local function sendNui(action, data)
     data = data or {}
@@ -151,13 +156,15 @@ local function validateActions(actions)
         if action.confirm ~= nil then
             if type(action.confirm) ~= "table" then return nil, "invalid_confirmation" end
             local confirmLabel, confirmError = cleanText(
-                action.confirm.label or "Confirm?",
+                action.confirm.label or uiLabels.confirm,
                 limits.textLimits.actionLabel,
                 true
             )
             if not confirmLabel then return nil, confirmError end
             local timeout = math.floor(tonumber(action.confirm.timeout) or 5000)
-            if timeout < 0 or timeout > limits.actionTimeout then return nil, "invalid_confirmation_timeout" end
+            if timeout < limits.minDuration or timeout > limits.actionTimeout then
+                return nil, "invalid_confirmation_timeout"
+            end
             confirm = { label = confirmLabel, timeout = timeout }
         end
 
@@ -216,8 +223,17 @@ local function normalizeSpec(spec, partial, owner)
     end
     if spec.duration ~= nil or not partial then
         local duration = math.floor(tonumber(spec.duration) or 15000)
-        if duration < -1 or duration > limits.maxDuration then return nil, "invalid_duration" end
+        if duration ~= -1 and (duration < limits.minDuration or duration > limits.maxDuration) then
+            return nil, "invalid_duration"
+        end
         result.duration = duration
+    end
+    if spec.queueTtl ~= nil or not partial then
+        local queueTtl = math.floor(tonumber(spec.queueTtl) or -1)
+        if queueTtl ~= -1 and (queueTtl < limits.minDuration or queueTtl > limits.maxQueueTtl) then
+            return nil, "invalid_queue_ttl"
+        end
+        result.queueTtl = queueTtl
     end
     if spec.priority ~= nil or not partial then
         local priority = math.floor(tonumber(spec.priority) or 0)
@@ -293,6 +309,7 @@ local function normalizeSpec(spec, partial, owner)
             ui = definitionOrError.ui,
             height = definitionOrError.height,
             fullCard = definitionOrError.fullCard,
+            version = definitionOrError.version,
         } or nil
     elseif spec.layout ~= nil then
         local layout = tostring(spec.layout)
@@ -385,6 +402,7 @@ local function publicCard(card)
         progress = cloneValue(card.progress),
         timer = cloneValue(card.timer),
         duration = card.duration,
+        queueTtl = card.queueTtl,
         hold = card.hold,
         priority = card.priority,
         actions = cloneValue(card.actions),
@@ -393,6 +411,7 @@ local function publicCard(card)
         tapAction = card.tapAction,
         createdAt = card.createdAt,
         expiresAt = card.expiresAt,
+        queueExpiresAt = card.queueExpiresAt,
         actionInFlight = card.actionInFlight ~= nil,
         actionInFlightId = card.actionInFlightId,
         confirmAction = card.confirmAction,
@@ -484,10 +503,8 @@ local function renderVisible(playSound, reason, motion, outgoingMotion, outgoing
     end
 
     local remaining
-    if card.hold or card.duration < 0 then
+    if card.hold or card.duration < 0 or card.interactionRemaining ~= nil then
         remaining = -1
-    elseif card.duration == 0 then
-        remaining = 0
     else
         remaining = math.max(0, card.expiresAt - now)
     end
@@ -501,6 +518,7 @@ local function renderVisible(playSound, reason, motion, outgoingMotion, outgoing
         hidden = not canUsePhone and not limits.rootFallback,
         playSound = shouldPlaySound,
         soundName = soundName,
+        labels = uiLabels,
         reason = reason,
         motion = motion,
         outgoingMotion = outgoingMotion,
@@ -512,7 +530,8 @@ local function watchVisible(card)
     peekWatchToken = peekWatchToken + 1
     local token = peekWatchToken
     interruptedId = nil
-    if not card or card.hold or card.expiresAt == 0 and not card.actionInFlight then return end
+    if not card or card.hold
+        or (card.expiresAt == 0 and not card.actionInFlight and not card.confirmAction) then return end
     CreateThread(function()
         while token == peekWatchToken and visibleId == card.id and cards[card.id] do
             local cameraOpen = false
@@ -544,7 +563,7 @@ local function scheduleExpiry(card)
 end
 
 local function startCardTimer(card)
-    if card.hold or card.duration <= 0 then
+    if card.hold or card.duration < 0 then
         card.expiresAt = 0
     else
         card.expiresAt = GetGameTimer() + card.duration
@@ -552,19 +571,19 @@ local function startCardTimer(card)
     end
 end
 
-local function pauseCardTimerForAction(card)
-    card.actionRemaining = nil
+local function pauseCardTimerForInteraction(card)
+    if card.interactionRemaining ~= nil then return end
     if card.expiresAt > 0 then
-        card.actionRemaining = math.max(0, card.expiresAt - GetGameTimer())
+        card.interactionRemaining = math.max(0, card.expiresAt - GetGameTimer())
         card.expiresAt = 0
     end
 end
 
-local function resumeCardTimerAfterAction(card)
-    local remaining = card.actionRemaining
-    card.actionRemaining = nil
+local function resumeCardTimerAfterInteraction(card)
+    local remaining = card.interactionRemaining
+    card.interactionRemaining = nil
     if remaining == nil then return false end
-    if card.hold or card.duration <= 0 then
+    if card.hold or card.duration < 0 then
         card.expiresAt = 0
     elseif card.queued then
         card.suspendedRemaining = remaining
@@ -577,7 +596,7 @@ local function resumeCardTimerAfterAction(card)
 end
 
 local function resumeCardTimer(card)
-    if card.actionInFlight then
+    if card.actionInFlight or card.confirmAction then
         card.expiresAt = 0
         return
     end
@@ -593,9 +612,42 @@ local function resumeCardTimer(card)
     startCardTimer(card)
 end
 
+local function queueDeadlineReached(card, now)
+    return card.queued and not card.hasBeenVisible and card.queueExpiresAt > 0
+        and card.queueExpiresAt <= (now or GetGameTimer())
+end
+
+local function expireQueuedCard(id, deadline)
+    local card = cards[id]
+    if not card or card.queueExpiresAt ~= deadline or not queueDeadlineReached(card) then return end
+    PeekPlus.Remove(id, card.owner, nil, nil, "queue_expired")
+end
+
+local function scheduleQueueExpiry(card)
+    if card.hasBeenVisible or not card.queued or card.queueTtl < 0 then
+        card.queueExpiresAt = 0
+        return
+    end
+    local deadline = GetGameTimer() + card.queueTtl
+    card.queueExpiresAt = deadline
+    SetTimeout(card.queueTtl, function() expireQueuedCard(card.id, deadline) end)
+end
+
+local function pruneExpiredQueuedCards()
+    local expired, now = {}, GetGameTimer()
+    for id, card in pairs(cards) do
+        if queueDeadlineReached(card, now) then expired[#expired + 1] = id end
+    end
+    for index = 1, #expired do
+        local card = cards[expired[index]]
+        if card then PeekPlus.Remove(card.id, card.owner, nil, nil, "queue_expired") end
+    end
+end
+
 local function showNext(playSound, outgoingReason, outgoingMotion, incomingReason)
     if visibleId and cards[visibleId] then return end
     visibleId = nil
+    pruneExpiredQueuedCards()
 
     while #suspended > 0 do
         local id = table.remove(suspended)
@@ -616,6 +668,8 @@ local function showNext(playSound, outgoingReason, outgoingMotion, incomingReaso
         if card then
             visibleId = id
             card.queued = false
+            card.hasBeenVisible = true
+            card.queueExpiresAt = 0
             startCardTimer(card)
             emitLifecycle(card, "visible")
             renderVisible(playSound ~= false, incomingReason or "visible", "enter", outgoingMotion, outgoingReason)
@@ -630,6 +684,7 @@ function PeekPlus.Show(spec, owner)
     if not owner or owner == "" then return nil, "invalid_owner" end
     local requestedKey, keyError = cleanKey(type(spec) == "table" and spec.key or nil)
     if keyError then return nil, keyError end
+    pruneExpiredQueuedCards()
     local indexed = requestedKey and keyIndex[owner .. ":" .. requestedKey] or nil
     if indexed and cards[indexed] then
         local ok, err, existing = PeekPlus.Update(indexed, spec, owner)
@@ -671,9 +726,12 @@ function PeekPlus.Show(spec, owner)
     normalized.revision = 1
     normalized.createdAt = now
     normalized.expiresAt = 0
+    normalized.queueExpiresAt = 0
     normalized.queued = true
+    normalized.hasBeenVisible = false
     normalized.soundPlayed = false
     cards[id] = normalized
+    scheduleQueueExpiry(normalized)
     if normalized.key then keyIndex[owner .. ":" .. normalized.key] = id end
     addHistory(normalized)
     emitLifecycle(normalized, "created")
@@ -689,6 +747,8 @@ function PeekPlus.Show(spec, owner)
         emitLifecycle(visible, "suspended", { by = id })
         visibleId = id
         normalized.queued = false
+        normalized.hasBeenVisible = true
+        normalized.queueExpiresAt = 0
         startCardTimer(normalized)
         emitLifecycle(normalized, "visible")
         renderVisible(true, "created", "interrupt", "interrupt", "suspended")
@@ -760,8 +820,11 @@ function PeekPlus.Update(id, patch, owner, expectedRevision, actionToken)
     card.actionInFlight = nil
     card.actionInFlightId = nil
     card.confirmAction = nil
+    if normalized.queueTtl ~= nil and card.queued and not card.hasBeenVisible then
+        scheduleQueueExpiry(card)
+    end
     if normalized.duration ~= nil or normalized.hold ~= nil then
-        card.actionRemaining = nil
+        card.interactionRemaining = nil
         card.suspendedRemaining = nil
         if card.queued then
             card.expiresAt = 0
@@ -770,7 +833,7 @@ function PeekPlus.Update(id, patch, owner, expectedRevision, actionToken)
         end
     end
     if normalized.duration == nil and normalized.hold == nil
-        and not resumeCardTimerAfterAction(card) then scheduleExpiry(card) end
+        and not resumeCardTimerAfterInteraction(card) then scheduleExpiry(card) end
     if normalized.priority ~= nil and card.queued then sortQueue() end
     if visibleId == id then
         renderVisible(false, "updated", actionSucceeded and "action-success" or "update")
@@ -913,11 +976,33 @@ function PeekPlus.ReleaseAction(id, owner, actionToken)
     card.actionInFlightId = nil
     card.confirmAction = nil
     card.revision = card.revision + 1
-    if not resumeCardTimerAfterAction(card) then scheduleExpiry(card) end
+    if not resumeCardTimerAfterInteraction(card) then scheduleExpiry(card) end
     if visibleId == id then
         renderVisible(false, actionFailed and "action_failed" or "updated", actionFailed and "action-failed" or nil)
     end
     return true
+end
+
+function PeekPlus.ResolveAction(id, owner, actionToken, expectedRevision, resolution)
+    local card = cards[id]
+    if not card then return false, "card_not_found" end
+    if card.owner ~= owner then return false, "not_owner" end
+    if tonumber(expectedRevision) ~= card.revision then return false, "stale_revision" end
+    if not actionToken or card.actionInFlight ~= actionToken then return false, "stale_action" end
+    if type(resolution) ~= "table" then return false, "invalid_resolution" end
+
+    local modes = (resolution.update ~= nil and 1 or 0)
+        + (resolution.remove == true and 1 or 0)
+        + (resolution.release == true and 1 or 0)
+    if modes ~= 1 then return false, "invalid_resolution" end
+    if resolution.update ~= nil then
+        if type(resolution.update) ~= "table" then return false, "invalid_resolution" end
+        return PeekPlus.Update(id, resolution.update, owner, expectedRevision, actionToken)
+    end
+    if resolution.remove == true then
+        return PeekPlus.Remove(id, owner, expectedRevision, actionToken, resolution.reason)
+    end
+    return PeekPlus.ReleaseAction(id, owner, actionToken)
 end
 
 function PeekPlus.Get(id, owner)
@@ -1001,6 +1086,10 @@ function PeekPlus.RegisterTemplate(owner, name, definition)
     end
     local height = math.floor(tonumber(definition.height) or 160)
     if height < 40 or height > limits.maxTemplateHeight then return nil, "invalid_template_height" end
+    local version = definition.version == nil and defaults.version or tostring(definition.version)
+    if #version > limits.textLimits.actionId or not version:match("^[%w_%-%.]+$") then
+        return nil, "invalid_template_version"
+    end
     local canonical = owner .. ":" .. name
     templates[canonical] = {
         owner = owner,
@@ -1009,6 +1098,7 @@ function PeekPlus.RegisterTemplate(owner, name, definition)
         ui = ui,
         height = height,
         fullCard = definition.fullCard == true,
+        version = version,
     }
     return canonical
 end
@@ -1052,7 +1142,7 @@ end
 local function dispatchAction(card, action, confirmed, source)
     nextActionToken = nextActionToken + 1
     local token = ("%s:%d"):format(runtimeId, nextActionToken)
-    pauseCardTimerForAction(card)
+    pauseCardTimerForInteraction(card)
     card.actionInFlight = token
     card.actionInFlightId = action.id
     card.confirmAction = nil
@@ -1093,6 +1183,7 @@ local function handleAction(data, source)
     if source == "tap" and card.tapAction ~= action.id then return false end
 
     if action.confirm and card.confirmAction ~= action.id then
+        pauseCardTimerForInteraction(card)
         card.confirmAction = action.id
         local revision = card.revision
         renderVisible(false)
@@ -1101,7 +1192,11 @@ local function handleAction(data, source)
                 local current = cards[card.id]
                 if current and current.revision == revision and current.confirmAction == action.id then
                     current.confirmAction = nil
-                    if visibleId == current.id then renderVisible(false) end
+                    resumeCardTimerAfterInteraction(current)
+                    if visibleId == current.id then
+                        renderVisible(false)
+                        watchVisible(current)
+                    end
                 end
             end)
         end
@@ -1204,7 +1299,9 @@ local function clearVisibleConfirmation()
     local card = visibleId and cards[visibleId] or nil
     if not card or not card.confirmAction then return end
     card.confirmAction = nil
+    resumeCardTimerAfterInteraction(card)
     renderVisible(false)
+    watchVisible(card)
 end
 
 local function runPrimaryHotkey()

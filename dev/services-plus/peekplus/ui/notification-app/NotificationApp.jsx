@@ -22,10 +22,21 @@ const DEV_HISTORY = [
 ]
 
 function NotificationIcon({ card, variant }) {
+  const imageUrl = card.avatarUrl || card.iconUrl
+  const handleImageError = (event) => {
+    const image = event.currentTarget
+    if (card.avatarUrl && card.iconUrl && image.dataset.fallbackUsed !== 'true') {
+      image.dataset.fallbackUsed = 'true'
+      image.parentElement.dataset.avatar = 'false'
+      image.src = card.iconUrl
+      return
+    }
+    image.remove()
+  }
   return (
-    <span className="pn-variant-icon" data-variant={variant}>
+    <span className="pn-variant-icon" data-variant={variant} data-avatar={card.avatarUrl ? 'true' : 'false'}>
       <CategoryIcon icon={card.icon} />
-      {card.iconUrl && <img src={card.iconUrl} alt="" referrerPolicy="no-referrer" onError={(event) => event.currentTarget.remove()} />}
+      {imageUrl && <img src={imageUrl} alt="" referrerPolicy="no-referrer" onError={handleImageError} />}
     </span>
   )
 }
@@ -75,6 +86,7 @@ function HistoryCard({ entry, expanded, onOpen, onDelete, disabled }) {
       </button>
       {expanded && (
         <div className="pn-details">
+          {card.thumbnailUrl && <img className="pn-thumbnail" src={card.thumbnailUrl} alt="" referrerPolicy="no-referrer" onError={(event) => event.currentTarget.remove()} />}
           {Array.isArray(card.details) && card.details.map((row, index) => (
             <div className="pn-detail-row" key={`${row.label}-${index}`}><span>{t(row.label)}</span><strong>{t(row.value)}</strong></div>
           ))}

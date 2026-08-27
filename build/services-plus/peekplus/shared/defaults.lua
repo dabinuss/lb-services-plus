@@ -1,5 +1,5 @@
 PeekPlusDefaults = {
-    version = "1.8.2",
+    version = "1.9.0",
     allowedStates = {
         queued = true,
         pending = true,
@@ -55,7 +55,7 @@ PeekPlusDefaults = {
 assert(type(Config.PeekPlus) == "table", "Config.PeekPlus must be a table")
 assert(type(Config.PeekPlusApp) == "table", "Config.PeekPlusApp must be a table")
 assert(type(Config.PeekPlusApp.enabled) == "boolean", "Config.PeekPlusApp.enabled must be true or false")
-for _, field in ipairs({ "maxCards", "maxCardsPerOwner", "maxActions", "maxDuration", "maxPriority", "actionTimeout", "soundThrottle", "maxHistory", "maxDetails", "maxTemplateDataBytes", "maxTemplateHeight", "maxTimerDuration" }) do
+for _, field in ipairs({ "maxCards", "maxCardsPerOwner", "maxActions", "minDuration", "maxDuration", "maxQueueTtl", "maxPriority", "actionTimeout", "soundThrottle", "maxHistory", "maxDetails", "maxTemplateDataBytes", "maxTemplateHeight", "maxTimerDuration" }) do
     local value = Config.PeekPlus[field]
     assert(type(value) == "number" and value % 1 == 0 and value >= 0,
         ("Config.PeekPlus.%s must be a non-negative integer"):format(field))
@@ -65,6 +65,13 @@ assert(Config.PeekPlus.maxCardsPerOwner > 0, "Config.PeekPlus.maxCardsPerOwner m
 assert(Config.PeekPlus.maxCardsPerOwner <= Config.PeekPlus.maxCards,
     "Config.PeekPlus.maxCardsPerOwner must not exceed maxCards")
 assert(Config.PeekPlus.maxActions > 0, "Config.PeekPlus.maxActions must be greater than zero")
+assert(Config.PeekPlus.minDuration > 0, "Config.PeekPlus.minDuration must be greater than zero")
+assert(Config.PeekPlus.minDuration <= Config.PeekPlus.maxDuration,
+    "Config.PeekPlus.minDuration must not exceed maxDuration")
+assert(Config.PeekPlus.minDuration <= Config.PeekPlus.maxQueueTtl,
+    "Config.PeekPlus.minDuration must not exceed maxQueueTtl")
+assert(Config.PeekPlus.minDuration <= Config.PeekPlus.actionTimeout,
+    "Config.PeekPlus.minDuration must not exceed actionTimeout")
 assert(Config.PeekPlus.maxHistory > 0, "Config.PeekPlus.maxHistory must be greater than zero")
 assert(Config.PeekPlus.maxDetails > 0, "Config.PeekPlus.maxDetails must be greater than zero")
 assert(Config.PeekPlus.maxTemplateDataBytes > 0, "Config.PeekPlus.maxTemplateDataBytes must be greater than zero")

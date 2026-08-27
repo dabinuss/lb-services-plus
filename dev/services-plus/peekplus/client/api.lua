@@ -40,6 +40,12 @@ exports("ReleasePeekAction", function(id, actionToken)
     return PeekPlus.ReleaseAction(id, owner, actionToken)
 end)
 
+exports("ResolvePeekAction", function(id, actionToken, expectedRevision, resolution)
+    local owner = invokingOwner()
+    if not owner then return false, "missing_invoking_resource" end
+    return PeekPlus.ResolveAction(id, owner, actionToken, expectedRevision, resolution)
+end)
+
 exports("GetPeek", function(id)
     local owner = invokingOwner()
     if not owner then return nil, "missing_invoking_resource" end

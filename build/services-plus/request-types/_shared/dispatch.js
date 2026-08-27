@@ -109,7 +109,7 @@ window.Dispatch = (function () {
             b.setAttribute('aria-busy', 'true')
             b.appendChild(el('span', 'dispatch-action-spinner'))
         } else {
-            b.append(icon(primary ? 'check' : 'close'), el('span', null, armed ? (action.confirm?.label || 'Confirm?') : action.label))
+            b.append(icon(primary ? 'check' : 'close'), el('span', null, armed ? (action.confirm?.label || payload.labels?.confirm || action.label) : action.label))
         }
         b.addEventListener('click', () => {
             b.disabled = true

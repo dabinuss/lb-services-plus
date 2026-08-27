@@ -44,6 +44,7 @@ local peekId, err = exports["services-plus"]:ShowPeek({
     subtitle = "Pillbox Medical",
     description = "2 injured people · Legion Square",
     duration = 15000,
+    queueTtl = 20000,
     variant = "warning",
     template = "action",
     tapAction = "accept",
@@ -68,7 +69,13 @@ Card options:
 - `key`: optional owner-local logical key. Showing the same key again updates
   the existing card instead of creating a duplicate.
 - `state`: `pending` or `active` when created.
-- `duration`: milliseconds; `-1` means no automatic expiry.
+- `duration`: visible lifetime in milliseconds. `-1` means no automatic
+  expiry; temporary values must be between `Config.PeekPlus.minDuration`
+  (250 ms by default) and `maxDuration`. `0` is invalid.
+- `queueTtl`: optional maximum wait before the card is shown for the first
+  time. `-1` (the default) keeps it queued indefinitely; temporary values use
+  the configured `minDuration`/`maxQueueTtl` bounds. Queue expiry is separate
+  from `duration` and records the lifecycle reason `queue_expired`.
 - `hold`: keeps the phone in peek until the card is changed or removed;
   defaults to `true` for an `active` card.
 - `sound`: plays at most once for this card and respects LB-Phone settings.
@@ -150,6 +157,10 @@ An action may require two-step confirmation:
 }
 ```
 
+Entering confirmation pauses a finite card's expiry timer. Confirming carries
+the same remaining time into the action lock; confirmation timeout or a local
+cancel resumes it.
+
 ## Receive actions
 
 Listen to the event scoped to the exact consumer resource name:
@@ -173,11 +184,33 @@ send the same action twice. `GetPeek()` and custom template payloads expose
 button to show progress while its siblings remain disabled. A finite card's
 expiry timer is paused while the action is pending and resumes with its
 remaining time when the action settles. After the authoritative operation succeeds,
-update or remove the card. On failure, release the action lock:
+resolve the action atomically. On failure, release the action lock:
 
 ```lua
 exports["services-plus"]:ReleasePeekAction(data.id, data.actionToken)
 ```
+
+```lua
+-- Success with an updated card:
+exports["services-plus"]:ResolvePeekAction(
+    data.id,
+    data.actionToken,
+    data.revision,
+    { update = { state = "active", duration = -1, hold = true } }
+)
+
+-- Success that removes the card:
+exports["services-plus"]:ResolvePeekAction(
+    data.id,
+    data.actionToken,
+    data.revision,
+    { remove = true, reason = "accepted" }
+)
+```
+
+`ResolvePeekAction` accepts exactly one of `update`, `remove = true`, or
+`release = true`. It verifies owner, revision, and token before changing any
+state, so consumers do not need to compose the three lower-level APIs.
 
 Owner-scoped events prevent accidental cross-resource handling but are not a
 security boundary against a modified client. The server remains authoritative.
@@ -231,7 +264,8 @@ action token. It is recorded in history and emitted through lifecycle events.
 
 PeekPlus keeps a bounded local session history and presents it through the
 separate **Notifications** app installed in LB Phone. Entries can be marked as
-read, inspected and deleted. The app never contacts the server. History is not
+read, inspected and deleted. Avatar images fall back to `iconUrl` and then the
+semantic icon; expanded entries also show `thumbnailUrl`. The app never contacts the server. History is not
 authoritative and is intentionally lost when `services-plus` restarts. A
 consumer that needs persistence owns it and rehydrates PeekPlus itself.
 
@@ -257,6 +291,7 @@ A consumer can register a resource-owned iframe renderer:
 ```lua
 local templateId, err = exports["services-plus"]:RegisterPeekTemplate("live-map", {
     ui = "ui/live-map.html",
+    version = "2.1.0",
     height = 150,
     fullCard = false,
 })
@@ -270,8 +305,11 @@ exports["services-plus"]:ShowPeek({
 ```
 
 The UI path must belong to the invoking resource and be listed in that
-resource's `files`. PeekPlus constructs the CFX URL, sandboxes the iframe,
-limits its height and payload, and removes it with the owning resource.
+resource's `files`. PeekPlus constructs the CFX URL, sandboxes the iframe with
+`allow-scripts allow-same-origin`, limits its height and payload, and removes it
+with the owning resource. `version` is an optional bounded cache key and
+defaults to the current PeekPlus version. New cards reuse that stable URL
+instead of bypassing CEF caching with a per-card timestamp.
 Normal custom templates are passive and keep PeekPlus' standard card chrome.
 Setting `fullCard = true` gives the iframe the complete bounded visual surface
 and pointer input. PeekPlus still owns geometry, lifecycle, hotkeys,
@@ -305,7 +343,7 @@ end)
 ```
 
 Reasons include `created`, `queued`, `visible`, `updated`, `deduplicated`,
-`suspended`, `resumed`, `expired`, `removed`, `owner_stopped` and a custom
+`suspended`, `resumed`, `expired`, `queue_expired`, `removed`, `owner_stopped` and a custom
 removal reason supplied to `RemovePeek`. `data.removed` is `true` only for the
 final lifecycle event after which the card no longer exists. `peekplus:ready`
 is emitted whenever the controller NUI reconnects. These are local
@@ -314,6 +352,15 @@ presentation events, not trusted gameplay authorization.
 Adapters for LB Phone's standard apps, for example a running stopwatch, are a
 future extension. They should use stable app events or exports and must not
 scrape another app's DOM.
+
+The Sibling-NUI keeps all unavoidable LB Phone DOM selectors and native-banner
+heuristics inside one capability adapter. Stable LB Phone events or exports
+remain preferred whenever they are available.
+
+`UpdatePeekPresentation` is intended for ordinary live display refreshes at
+roughly 2–4 updates per second. Consumers that need substantially higher rates
+should profile CEF first; PeekPlus deliberately avoids speculative incremental
+DOM machinery until measurements justify it.
 
 ## Phone lifecycle
 

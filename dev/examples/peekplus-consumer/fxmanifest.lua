@@ -12,5 +12,3 @@ files {
 }
 
 dependency 'services-plus'
-
-dependency 'services-plus'

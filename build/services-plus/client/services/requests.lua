@@ -148,19 +148,23 @@ end
 
 local function removeRequest(id, reason, actionContext)
     local peekId = peekByRequest[id]
+    local removed = true
     if peekId then
-        local removed = PeekPlus.Remove(
-            peekId,
-            owner,
-            actionContext and actionContext.revision or nil,
-            actionContext and actionContext.actionToken or nil,
-            reason
-        )
-        if not removed and actionContext then
-            PeekPlus.Remove(peekId, owner, nil, nil, reason)
+        if actionContext then
+            removed = PeekPlus.ResolveAction(
+                peekId,
+                owner,
+                actionContext.actionToken,
+                actionContext.revision,
+                { remove = true, reason = reason }
+            )
+        else
+            removed = PeekPlus.Remove(peekId, owner, nil, nil, reason)
         end
     end
+    if not removed then return false end
     forgetRequest(id)
+    return true
 end
 
 local function pendingCard(payload)
@@ -177,6 +181,7 @@ local function pendingCard(payload)
         description = tostring(payload.description or ""),
         details = activeDetails(payload, distanceFromPlayer(payload)),
         duration = Config.RequestNotificationPeekDuration or 15000,
+        queueTtl = Config.RequestNotificationQueueTtl or 20000,
         hold = false,
         dismissible = true,
         sound = true,
@@ -322,14 +327,18 @@ end
 local function upsertPeek(index, id, card, actionContext)
     local peekId = index[id]
     if peekId and PeekPlus.Get(peekId, owner) then
-        local updated = PeekPlus.Update(
-            peekId,
-            card,
-            owner,
-            actionContext and actionContext.revision or nil,
-            actionContext and actionContext.actionToken or nil
-        )
-        if not updated and actionContext then updated = PeekPlus.Update(peekId, card, owner) end
+        local updated
+        if actionContext then
+            updated = PeekPlus.ResolveAction(
+                peekId,
+                owner,
+                actionContext.actionToken,
+                actionContext.revision,
+                { update = card }
+            )
+        else
+            updated = PeekPlus.Update(peekId, card, owner)
+        end
         return updated and peekId or nil
     end
     return PeekPlus.Show(card, owner)
