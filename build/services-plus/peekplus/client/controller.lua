@@ -136,6 +136,10 @@ local function validateActions(actions)
         if key and not defaults.allowedKeys[key] then return nil, "invalid_action_key" end
         local color = action.color or "default"
         if not defaults.allowedColors[color] then return nil, "invalid_action_color" end
+        local presentation = action.presentation or "button"
+        if presentation ~= "button" and presentation ~= "tap" then
+            return nil, "invalid_action_presentation"
+        end
         local successLabel, successLabelError = cleanText(
             action.successLabel,
             limits.textLimits.actionLabel,
@@ -163,6 +167,7 @@ local function validateActions(actions)
             successLabel = successLabel,
             key = key,
             color = color,
+            presentation = presentation,
             confirm = confirm,
         }
     end
@@ -263,8 +268,14 @@ local function normalizeSpec(spec, partial, owner)
     if spec.template ~= nil or not partial then
         local fallback = spec.template
         if fallback == nil then
-            local actionCount = result.actions and #result.actions or 0
-            fallback = actionCount > 0 and "action" or "default"
+            local hasButtonAction = false
+            for index = 1, #(result.actions or {}) do
+                if result.actions[index].presentation ~= "tap" then
+                    hasButtonAction = true
+                    break
+                end
+            end
+            fallback = hasButtonAction and "action" or "default"
         end
         if type(fallback) ~= "string" then return nil, "invalid_template" end
         local template, layout, definitionOrError = resolveTemplate(owner, fallback)
@@ -501,7 +512,7 @@ local function watchVisible(card)
     peekWatchToken = peekWatchToken + 1
     local token = peekWatchToken
     interruptedId = nil
-    if not card or card.hold or card.expiresAt == 0 then return end
+    if not card or card.hold or card.expiresAt == 0 and not card.actionInFlight then return end
     CreateThread(function()
         while token == peekWatchToken and visibleId == card.id and cards[card.id] do
             local cameraOpen = false
@@ -541,7 +552,35 @@ local function startCardTimer(card)
     end
 end
 
+local function pauseCardTimerForAction(card)
+    card.actionRemaining = nil
+    if card.expiresAt > 0 then
+        card.actionRemaining = math.max(0, card.expiresAt - GetGameTimer())
+        card.expiresAt = 0
+    end
+end
+
+local function resumeCardTimerAfterAction(card)
+    local remaining = card.actionRemaining
+    card.actionRemaining = nil
+    if remaining == nil then return false end
+    if card.hold or card.duration <= 0 then
+        card.expiresAt = 0
+    elseif card.queued then
+        card.suspendedRemaining = remaining
+        card.expiresAt = 0
+    else
+        card.expiresAt = GetGameTimer() + remaining
+        scheduleExpiry(card)
+    end
+    return true
+end
+
 local function resumeCardTimer(card)
+    if card.actionInFlight then
+        card.expiresAt = 0
+        return
+    end
     if card.suspendedRemaining then
         local remaining = card.suspendedRemaining
         card.suspendedRemaining = nil
@@ -668,7 +707,7 @@ function PeekPlus.Update(id, patch, owner, expectedRevision, actionToken)
     if card.owner ~= owner then return false, "not_owner" end
     if expectedRevision and tonumber(expectedRevision) ~= card.revision then return false, "stale_revision" end
     if actionToken and card.actionInFlight ~= actionToken then return false, "stale_action" end
-    local actionSucceeded = card.actionInFlight ~= nil
+    local actionSucceeded = actionToken ~= nil and card.actionInFlight == actionToken
     local normalized, err = normalizeSpec(patch, true, owner)
     if not normalized then return false, err end
 
@@ -722,6 +761,7 @@ function PeekPlus.Update(id, patch, owner, expectedRevision, actionToken)
     card.actionInFlightId = nil
     card.confirmAction = nil
     if normalized.duration ~= nil or normalized.hold ~= nil then
+        card.actionRemaining = nil
         card.suspendedRemaining = nil
         if card.queued then
             card.expiresAt = 0
@@ -729,7 +769,8 @@ function PeekPlus.Update(id, patch, owner, expectedRevision, actionToken)
             startCardTimer(card)
         end
     end
-    if normalized.duration == nil and normalized.hold == nil then scheduleExpiry(card) end
+    if normalized.duration == nil and normalized.hold == nil
+        and not resumeCardTimerAfterAction(card) then scheduleExpiry(card) end
     if normalized.priority ~= nil and card.queued then sortQueue() end
     if visibleId == id then
         renderVisible(false, "updated", actionSucceeded and "action-success" or "update")
@@ -799,7 +840,8 @@ function PeekPlus.Remove(id, owner, expectedRevision, actionToken, reason, remov
     if removalReason == "removed" and (card.state == "completed" or card.state == "declined") then
         removalReason = card.state
     end
-    local actionSucceeded = card.actionInFlight ~= nil and removalReason ~= "expired"
+    local actionSucceeded = actionToken ~= nil and card.actionInFlight == actionToken
+        and removalReason ~= "expired"
     updateHistory(card, removalReason)
     emitLifecycle(card, removalReason, { removed = true })
     cards[id] = nil
@@ -864,13 +906,14 @@ function PeekPlus.ReleaseAction(id, owner, actionToken)
     local card = cards[id]
     if not card then return false, "card_not_found" end
     if card.owner ~= owner then return false, "not_owner" end
-    if actionToken and card.actionInFlight ~= actionToken then return false, "stale_action" end
-    local actionFailed = card.actionInFlight ~= nil
+    if not card.actionInFlight then return false, "no_action_in_flight" end
+    if not actionToken or card.actionInFlight ~= actionToken then return false, "stale_action" end
+    local actionFailed = true
     card.actionInFlight = nil
     card.actionInFlightId = nil
     card.confirmAction = nil
     card.revision = card.revision + 1
-    scheduleExpiry(card)
+    if not resumeCardTimerAfterAction(card) then scheduleExpiry(card) end
     if visibleId == id then
         renderVisible(false, actionFailed and "action_failed" or "updated", actionFailed and "action-failed" or nil)
     end
@@ -1009,6 +1052,7 @@ end
 local function dispatchAction(card, action, confirmed, source)
     nextActionToken = nextActionToken + 1
     local token = ("%s:%d"):format(runtimeId, nextActionToken)
+    pauseCardTimerForAction(card)
     card.actionInFlight = token
     card.actionInFlightId = action.id
     card.confirmAction = nil

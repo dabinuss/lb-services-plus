@@ -11,6 +11,97 @@ local categories = {} -- ordered list
 local companiesById = {}
 local companiesByJob = {}
 local numbersByCompany = {} -- companyId -> ordered list of numbers
+local brandingMediaPolicy = nil
+
+local function getBrandingMediaPolicy()
+    if brandingMediaPolicy == nil then
+        local ok, phoneConfig = pcall(function()
+            return exports["lb-phone"]:GetConfig()
+        end)
+        brandingMediaPolicy = ok and PeekPlusMediaPolicy.Build(phoneConfig) or false
+    end
+    return brandingMediaPolicy ~= false and brandingMediaPolicy or nil
+end
+
+AddEventHandler("onResourceStart", function(resourceName)
+    if resourceName ~= "lb-phone" then return end
+    brandingMediaPolicy = nil
+    if ServicesPlus and ServicesPlus.ready then
+        SetTimeout(500, function()
+            brandingMediaPolicy = nil
+            Companies.Reload()
+            Companies.NotifyDirectoryChanged(nil, false)
+        end)
+    end
+end)
+
+--- Normalizes optional remote company media. This is the single server-side
+--- boundary used by admin writes, seeds, cached rows and direct query results.
+---@param value any
+---@return string? normalized
+---@return boolean valid
+function Companies.NormalizeMediaUrl(value)
+    if value == nil or value == "" then return nil, true end
+    if type(value) ~= "string" then return nil, false end
+
+    value = value:match("^%s*(.-)%s*$")
+    if value == "" then return nil, true end
+    if #value > 255 or value:find("[%s%c]") or value:sub(1, 8):lower() ~= "https://" then
+        return nil, false
+    end
+
+    local authority = value:sub(9):match("^([^/%?#]+)")
+    if not authority or authority:find("@", 1, true) or authority:sub(1, 1) == "[" then
+        return nil, false
+    end
+
+    local hostname, port = authority:match("^([^:]+):(%d+)$")
+    if not hostname then
+        if authority:find(":", 1, true) then return nil, false end
+        hostname = authority
+    elseif tonumber(port) < 1 or tonumber(port) > 65535 then
+        return nil, false
+    end
+
+    hostname = hostname:lower()
+    if hostname == "localhost" or hostname:sub(-6) == ".local" or hostname:sub(-10) == ".localhost" then
+        return nil, false
+    end
+
+    local a, b, c, d = hostname:match("^(%d+)%.(%d+)%.(%d+)%.(%d+)$")
+    if a then
+        a, b, c, d = tonumber(a), tonumber(b), tonumber(c), tonumber(d)
+        if a > 255 or b > 255 or c > 255 or d > 255
+            or a == 0 or a == 10 or a == 127 or a >= 224
+            or (a == 100 and b >= 64 and b <= 127)
+            or (a == 169 and b == 254)
+            or (a == 172 and b >= 16 and b <= 31)
+            or (a == 192 and b == 168)
+            or (a == 198 and (b == 18 or b == 19)) then
+            return nil, false
+        end
+    else
+        if not hostname:find("[^%d%.]") then return nil, false end
+        if not hostname:find("%.") or hostname:sub(1, 1) == "." or hostname:sub(-1) == "."
+            or hostname:find("..", 1, true) or hostname:find("[^%w%.%-]") then
+            return nil, false
+        end
+        for label in hostname:gmatch("[^.]+") do
+            if #label > 63 or label:sub(1, 1) == "-" or label:sub(-1) == "-" then return nil, false end
+        end
+    end
+
+    local policy = getBrandingMediaPolicy()
+    if not policy or not PeekPlusMediaPolicy.IsAllowed(value, policy) then return nil, false end
+    return value, true
+end
+
+local function sanitizeCompanyMedia(company)
+    if type(company) ~= "table" then return company end
+    company.icon = Companies.NormalizeMediaUrl(company.icon)
+    company.background = Companies.NormalizeMediaUrl(company.background)
+    return company
+end
 
 local function seedIfEmpty()
     local categoryCount = MySQL.scalar.await("SELECT COUNT(*) FROM phone_services_plus_categories")
@@ -30,6 +121,12 @@ local function seedIfEmpty()
     if companyCount == 0 and #Config.DefaultCompanies > 0 then
         for i = 1, #Config.DefaultCompanies do
             local company = Config.DefaultCompanies[i]
+            local icon, iconValid = Companies.NormalizeMediaUrl(company.icon)
+            local background, backgroundValid = Companies.NormalizeMediaUrl(company.background)
+            if not iconValid or not backgroundValid then
+                print(("^3[services-plus] ignored disallowed media URL for default company '%s'^7")
+                    :format(tostring(company.job or company.name or i)))
+            end
             local categoryId = company.category and MySQL.scalar.await(
                 "SELECT id FROM phone_services_plus_categories WHERE `key` = ?", { company.category }
             ) or nil
@@ -39,7 +136,7 @@ local function seedIfEmpty()
             -- parameter binding.
             local companyId = MySQL.insert.await(
                 "INSERT INTO phone_services_plus_companies (job, name, category_id, icon, background, boss_grade) VALUES (?, ?, ?, ?, ?, ?)",
-                { company.job, company.name, categoryId or json.null, company.icon or json.null, company.background or json.null, company.bossGrade or 100 }
+                { company.job, company.name, categoryId or json.null, icon or json.null, background or json.null, company.bossGrade or 100 }
             )
 
             if company.mainNumber then
@@ -82,7 +179,7 @@ function Companies.Reload()
     end
 
     for i = 1, #companyRows do
-        local company = companyRows[i]
+        local company = sanitizeCompanyMedia(companyRows[i])
         companiesById[company.id] = company
         companiesByJob[company.job] = company
     end
@@ -111,6 +208,8 @@ function Companies.Refresh(companyId)
         numbersByCompany[id] = nil
         return true
     end
+
+    sanitizeCompanyMedia(company)
 
     MySQL.update.await([[
         UPDATE phone_services_plus_numbers

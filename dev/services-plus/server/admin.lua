@@ -119,22 +119,6 @@ adminCallback("admin:updateServiceSettings", function(_, reply, data)
     reply(true)
 end)
 
-local brandingMediaPolicy = nil
-
-local function getBrandingMediaPolicy()
-    if brandingMediaPolicy == nil then
-        local ok, phoneConfig = pcall(function()
-            return exports["lb-phone"]:GetConfig()
-        end)
-        brandingMediaPolicy = ok and PeekPlusMediaPolicy.Build(phoneConfig) or false
-    end
-    return brandingMediaPolicy ~= false and brandingMediaPolicy or nil
-end
-
-AddEventHandler("onResourceStart", function(resourceName)
-    if resourceName == "lb-phone" then brandingMediaPolicy = nil end
-end)
-
 -- Company branding is rendered directly by every player's NUI and can also
 -- become a PeekPlus icon. In addition to strict HTTPS/host validation, apply
 -- the exact same configured LB Phone media allow-/denylist policy.
@@ -142,64 +126,7 @@ end)
 ---@return string? normalized
 ---@return boolean valid
 local function optionalHttpsUrl(value)
-    if value == nil or value == "" then return nil, true end
-    if type(value) ~= "string" then return nil, false end
-
-    value = value:match("^%s*(.-)%s*$")
-    if value == "" then return nil, true end
-    if #value > 255 or value:find("[%s%c]") or value:sub(1, 8):lower() ~= "https://" then
-        return nil, false
-    end
-
-    local authority = value:sub(9):match("^([^/%?#]+)")
-    if not authority or authority:find("@", 1, true) or authority:sub(1, 1) == "[" then
-        return nil, false
-    end
-
-    local hostname, port = authority:match("^([^:]+):(%d+)$")
-    if not hostname then
-        if authority:find(":", 1, true) then return nil, false end
-        hostname = authority
-    elseif tonumber(port) < 1 or tonumber(port) > 65535 then
-        return nil, false
-    end
-
-    hostname = hostname:lower()
-    if hostname == "localhost" or hostname:sub(-6) == ".local" or hostname:sub(-10) == ".localhost" then
-        return nil, false
-    end
-
-    local a, b, c, d = hostname:match("^(%d+)%.(%d+)%.(%d+)%.(%d+)$")
-    if a then
-        a, b, c, d = tonumber(a), tonumber(b), tonumber(c), tonumber(d)
-        if a > 255 or b > 255 or c > 255 or d > 255
-            or a == 0 or a == 10 or a == 127 or a >= 224
-            or (a == 100 and b >= 64 and b <= 127)
-            or (a == 169 and b == 254)
-            or (a == 172 and b >= 16 and b <= 31)
-            or (a == 192 and b == 168)
-            or (a == 198 and (b == 18 or b == 19)) then
-            return nil, false
-        end
-    else
-        -- Reject abbreviated/legacy numeric host forms such as 127.1; URL
-        -- parsers can canonicalize those back to a private IPv4 address.
-        if not hostname:find("[^%d%.]") then return nil, false end
-
-        if not hostname:find("%.") or hostname:sub(1, 1) == "." or hostname:sub(-1) == "."
-            or hostname:find("..", 1, true) or hostname:find("[^%w%.%-]") then
-            return nil, false
-        end
-
-        for label in hostname:gmatch("[^.]+") do
-            if #label > 63 or label:sub(1, 1) == "-" or label:sub(-1) == "-" then return nil, false end
-        end
-    end
-
-    local policy = getBrandingMediaPolicy()
-    if not policy or not PeekPlusMediaPolicy.IsAllowed(value, policy) then return nil, false end
-
-    return value, true
+    return Companies.NormalizeMediaUrl(value)
 end
 
 -- ---------------------------------------------------------------------------

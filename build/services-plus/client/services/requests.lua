@@ -7,6 +7,7 @@ local journeyReporterRequestId = nil
 local journeyReporterToken = 0
 local customerPeekByRequest = {}
 local customerRequestByPeek = {}
+local pendingActionByRequest = {}
 local requestTypeTemplates = {}
 local requestTypeTemplateDefinitions = {}
 local rawJourneyConfig = type(Config.RequestJourneyTracking) == "table" and Config.RequestJourneyTracking or {}
@@ -88,6 +89,17 @@ local function requestIcon(payload)
     return categoryIcons[tostring(payload.category or "")] or payload.typeIcon or "request"
 end
 
+-- Branding is optional presentation. A stale DB row or old server payload
+-- must never suppress the gameplay notification when its image is rejected.
+local function companyIconUrl(value)
+    if type(value) ~= "string" or #value > 255 or value:find("[%s%c]")
+        or value:sub(1, 8):lower() ~= "https://" then return nil end
+    local authority = value:sub(9):match("^([^/%?#]+)")
+    if not authority or authority:find("@", 1, true)
+        or not PeekPlusLBPhone.IsMediaLinkAllowed(value) then return nil end
+    return value
+end
+
 local function requestId(payload)
     return payload and tonumber(payload.requestId)
 end
@@ -127,15 +139,27 @@ local function forgetRequest(id)
     local peekId = peekByRequest[id]
     if peekId then requestByPeek[peekId] = nil end
     peekByRequest[id] = nil
+    pendingActionByRequest[id] = nil
     if activeRequestId == id then
         activeRequestId = nil
         distanceToken = distanceToken + 1
     end
 end
 
-local function removeRequest(id, reason)
+local function removeRequest(id, reason, actionContext)
     local peekId = peekByRequest[id]
-    if peekId then PeekPlus.Remove(peekId, owner, nil, nil, reason) end
+    if peekId then
+        local removed = PeekPlus.Remove(
+            peekId,
+            owner,
+            actionContext and actionContext.revision or nil,
+            actionContext and actionContext.actionToken or nil,
+            reason
+        )
+        if not removed and actionContext then
+            PeekPlus.Remove(peekId, owner, nil, nil, reason)
+        end
+    end
     forgetRequest(id)
 end
 
@@ -147,7 +171,7 @@ local function pendingCard(payload)
         template = requestTemplate(payload, "pending"),
         layout = "details",
         icon = requestIcon(payload),
-        iconUrl = payload.companyIcon,
+        iconUrl = companyIconUrl(payload.companyIcon),
         title = tostring(payload.typeName or label(payload, "newRequest", "New request")),
         subtitle = tostring(payload.companyName or Config.App.name),
         description = tostring(payload.description or ""),
@@ -220,7 +244,7 @@ local function activeCard(payload)
         template = requestTemplate(payload, "active"),
         layout = "details",
         icon = requestIcon(payload),
-        iconUrl = payload.companyIcon,
+        iconUrl = companyIconUrl(payload.companyIcon),
         templateData = { statusLabel = label(payload, "activeRequest", "Active request") },
         title = tostring(payload.typeName or label(payload, "activeRequest", "Active request")),
         subtitle = tostring(payload.companyName or Config.App.name),
@@ -295,10 +319,18 @@ local function startJourneyReporter(payload)
     end)
 end
 
-local function upsertPeek(index, id, card)
+local function upsertPeek(index, id, card, actionContext)
     local peekId = index[id]
     if peekId and PeekPlus.Get(peekId, owner) then
-        return PeekPlus.Update(peekId, card, owner) and peekId or nil
+        local updated = PeekPlus.Update(
+            peekId,
+            card,
+            owner,
+            actionContext and actionContext.revision or nil,
+            actionContext and actionContext.actionToken or nil
+        )
+        if not updated and actionContext then updated = PeekPlus.Update(peekId, card, owner) end
+        return updated and peekId or nil
     end
     return PeekPlus.Show(card, owner)
 end
@@ -320,7 +352,10 @@ end
 local function showActive(payload)
     local id = requestId(payload)
     if not id then return false end
-    local peekId = upsertPeek(peekByRequest, id, activeCard(payload))
+    local actionContext = pendingActionByRequest[id]
+    if actionContext and actionContext.action ~= "accept" then actionContext = nil end
+    if actionContext then pendingActionByRequest[id] = nil end
+    local peekId = upsertPeek(peekByRequest, id, activeCard(payload), actionContext)
     if not peekId then return false end
 
     peekByRequest[id] = peekId
@@ -339,7 +374,7 @@ local function customerJourneyCard(payload)
         template = "services",
         layout = "details",
         icon = requestIcon(payload),
-        iconUrl = payload.companyIcon,
+        iconUrl = companyIconUrl(payload.companyIcon),
         title = tostring(payload.title),
         subtitle = tostring(payload.subtitle or Config.App.name),
         description = payload.description,
@@ -402,11 +437,15 @@ end)
 
 RegisterNetEvent("services-plus:client:requestAccepted", showActive)
 
-RegisterNetEvent("services-plus:client:requestEnded", function(id)
+RegisterNetEvent("services-plus:client:requestEnded", function(id, reason)
     id = tonumber(id)
     if id then
         stopJourneyReporter(id)
-        removeRequest(id, "ended")
+        local actionId = reason == "completed" and "complete" or reason == "cancelled" and "cancel" or nil
+        local actionContext = pendingActionByRequest[id]
+        if not actionContext or actionContext.action ~= actionId then actionContext = nil end
+        if actionContext then pendingActionByRequest[id] = nil end
+        removeRequest(id, reason or "ended", actionContext)
     end
 end)
 
@@ -428,30 +467,36 @@ PeekPlus.RegisterActionHandler(owner, function(data)
     local id = context.requestId
 
     if data.action == "decline" then
-        removeRequest(id, "declined")
+        removeRequest(id, "declined", data)
         return
     end
 
     if data.action == "accept" then
+        pendingActionByRequest[id] = data
         local ok, result = ServerCallback("acceptRequest", id)
-        if not (ok and result) and PeekPlus.Get(data.id, owner) then
-            PeekPlus.ReleaseAction(data.id, owner, data.actionToken)
+        if not (ok and result) then
+            if pendingActionByRequest[id] == data then pendingActionByRequest[id] = nil end
+            if PeekPlus.Get(data.id, owner) then PeekPlus.ReleaseAction(data.id, owner, data.actionToken) end
         end
         return
     end
 
     if data.action == "cancel" then
+        pendingActionByRequest[id] = data
         local ok, result = ServerCallback("cancelRequest", id)
-        if not (ok and result == true) and PeekPlus.Get(data.id, owner) then
-            PeekPlus.ReleaseAction(data.id, owner, data.actionToken)
+        if not (ok and result == true) then
+            if pendingActionByRequest[id] == data then pendingActionByRequest[id] = nil end
+            if PeekPlus.Get(data.id, owner) then PeekPlus.ReleaseAction(data.id, owner, data.actionToken) end
         end
         return
     end
 
     if data.action == "complete" then
+        pendingActionByRequest[id] = data
         local ok, result = ServerCallback("completeRequest", id)
-        if not (ok and result == true) and PeekPlus.Get(data.id, owner) then
-            PeekPlus.ReleaseAction(data.id, owner, data.actionToken)
+        if not (ok and result == true) then
+            if pendingActionByRequest[id] == data then pendingActionByRequest[id] = nil end
+            if PeekPlus.Get(data.id, owner) then PeekPlus.ReleaseAction(data.id, owner, data.actionToken) end
         end
         return
     end

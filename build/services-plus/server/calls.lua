@@ -342,5 +342,9 @@ RegisterCallback("getMyCalls", function(source, reply, rawCursor)
 
     local rows = MySQL.query.await(query, parameters)
 
+    for i = 1, #(rows or {}) do
+        rows[i].company_icon = Companies.NormalizeMediaUrl(rows[i].company_icon)
+    end
+
     reply(rows or {})
 end)

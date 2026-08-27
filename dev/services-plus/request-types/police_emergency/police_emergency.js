@@ -51,9 +51,12 @@
         body.appendChild(note)
 
         const footer = el('div', 'dispatch-footer')
-        const buttons = el('div', 'dispatch-buttons')
-        card.actions.forEach((action) => buttons.appendChild(button(payload, action)))
-        footer.appendChild(buttons)
+        const visibleActions = card.actions.filter((action) => action.presentation !== 'tap')
+        if (visibleActions.length > 0) {
+            const buttons = el('div', 'dispatch-buttons')
+            visibleActions.forEach((action) => buttons.appendChild(button(payload, action)))
+            footer.appendChild(buttons)
+        }
 
         surface.append(header, body, footer)
         root.replaceChildren(surface)

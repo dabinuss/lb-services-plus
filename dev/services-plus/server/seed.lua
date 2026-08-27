@@ -24,6 +24,10 @@ function SeedTestData.Run()
 
     for i = 1, #companies do
         local entry = companies[i]
+        local background, backgroundValid = Companies.NormalizeMediaUrl(entry.background)
+        if not backgroundValid then
+            print(("^3[Services+] Ignoring disallowed dummy background for '%s'.^0"):format(entry.job))
+        end
         local categoryId = MySQL.scalar.await(
             "SELECT id FROM phone_services_plus_categories WHERE `key` = ?",
             { entry.category }
@@ -37,7 +41,7 @@ function SeedTestData.Run()
                         (job, name, category_id, boss_grade, background, enabled, calls_enabled, messages_enabled, requests_enabled)
                     VALUES (?, ?, ?, 100, ?, 1, 1, 1, 1)
                 ]],
-                { entry.job, entry.name, categoryId, entry.background },
+                { entry.job, entry.name, categoryId, background or json.null },
             },
             {
                 [[

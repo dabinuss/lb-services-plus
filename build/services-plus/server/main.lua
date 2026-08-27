@@ -1071,7 +1071,7 @@ RegisterCallback("getActivity", function(source, reply, rawCursor)
         rows[i].company = rows[i].company_name and {
             id = rows[i].company_id,
             name = rows[i].company_name,
-            icon = rows[i].company_icon,
+            icon = Companies.NormalizeMediaUrl(rows[i].company_icon),
         } or nil
         rows[i].company_name = nil
         rows[i].company_icon = nil

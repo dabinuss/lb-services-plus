@@ -99,7 +99,6 @@ window.Dispatch = (function () {
     function button(payload, action) {
         const primary = action.id === 'accept' || action.id === 'complete'
         const armed = payload.card.confirmAction === action.id
-        const labels = { decline: 'Decline', accept: 'Accept', cancel: 'Cancel', complete: 'Complete' }
         const b = el('button', `dispatch-btn ${primary ? 'primary' : 'secondary'}`)
         const inFlight = payload.card.actionInFlightId === action.id
         b.type = 'button'
@@ -110,11 +109,21 @@ window.Dispatch = (function () {
             b.setAttribute('aria-busy', 'true')
             b.appendChild(el('span', 'dispatch-action-spinner'))
         } else {
-            b.append(icon(primary ? 'check' : 'close'), el('span', null, armed ? (action.confirm?.label || 'Confirm?') : (labels[action.id] || action.label)))
+            b.append(icon(primary ? 'check' : 'close'), el('span', null, armed ? (action.confirm?.label || 'Confirm?') : action.label))
         }
         b.addEventListener('click', () => {
             b.disabled = true
-            runAction(payload, action.id)
+            runAction(payload, action.id, (accepted) => {
+                if (accepted !== true && b.isConnected) {
+                    b.disabled = false
+                    b.animate?.([
+                        { transform: 'translateX(0)' },
+                        { transform: 'translateX(-4px)', offset: .3 },
+                        { transform: 'translateX(4px)', offset: .6 },
+                        { transform: 'translateX(0)' },
+                    ], { duration: 220, easing: 'ease-out' })
+                }
+            })
         })
         return b
     }
@@ -153,15 +162,20 @@ window.Dispatch = (function () {
     }
 
     async function runAction(payload, actionId, onSettled) {
+        let accepted = false
         try {
-            await fetch(payload.actionEndpoint, {
+            const response = await fetch(payload.actionEndpoint, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json; charset=UTF-8' },
                 body: JSON.stringify({ id: payload.card.id, revision: payload.card.revision, action: actionId }),
             })
+            accepted = response.ok && await response.json() === true
+        } catch {
+            accepted = false
         } finally {
-            if (onSettled) onSettled()
+            if (onSettled) onSettled(accepted)
         }
+        return accepted
     }
 
     // Ticks a local countdown starting from a "remaining ms as of receipt"

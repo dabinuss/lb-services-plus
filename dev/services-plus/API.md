@@ -121,7 +121,7 @@ and internal routing data are intentionally omitted.
         id = 1,
         job = "ambulance",
         name = "EMS",
-        icon = "https://example.com/icon.png",
+        icon = "https://cdn.fivemanage.com/company/icon.png",
     }, -- nil until a competition request is accepted
 
     requesterNumber = "5551234",
@@ -181,14 +181,18 @@ Result:
     job = "ambulance",
     name = "EMS",
     categoryId = 2,
-    icon = "https://example.com/icon.png",
-    background = "https://example.com/background.png",
+    icon = "https://cdn.fivemanage.com/company/icon.png",
+    background = "https://cdn.fivemanage.com/company/background.png",
     available = true,
     callsEnabled = true,
     messagesEnabled = true,
     requestsEnabled = true,
 }
 ```
+
+Remote company media is returned only when it is a valid HTTPS URL accepted
+by LB Phone's configured media hostname/domain policy. Disallowed legacy or
+seed values are exposed as `nil`; the stored database value is not deleted.
 
 ### IsCompanyAvailable
 

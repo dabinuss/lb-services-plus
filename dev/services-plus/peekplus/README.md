@@ -77,7 +77,10 @@ Card options:
   held card. The held card returns without another sound.
 - `actions`: up to the configured maximum. Version 1 supports the optional
   keys `RETURN` and `BACK`. An action may provide `successLabel` for the
-  short success confirmation; otherwise its normal label is used.
+  short success confirmation; otherwise its normal label is used. Its optional
+  `presentation` is `button` by default. Set it to `tap` to keep the action in
+  the secure action registry without rendering a button in PeekPlus' built-in
+  and shipped request templates.
 - `tapAction`: optional ID of one of the card's declared `actions`. Tapping
   the notification invokes that action through the normal revision, action
   token, lock and confirmation path. Set it to `false` in an update to remove
@@ -117,6 +120,19 @@ non-HTTPS values return `invalid_image_url`.
 - `progress`: `{ value, max, label }` for a progress layout.
 - `timer`: `{ elapsed, duration, countdown, label }`, using milliseconds.
 
+A tap-only notification still declares its action, but hides its button:
+
+```lua
+exports["services-plus"]:ShowPeek({
+    title = "New mail",
+    description = "Tap to open the conversation",
+    tapAction = "open",
+    actions = {
+        { id = "open", label = "Open", successLabel = "Opened", presentation = "tap" },
+    },
+})
+```
+
 PeekPlus registers `PeekPlus: Primäraktion ausführen` and `PeekPlus:
 Benachrichtigung ablehnen/abbrechen` in FiveM's key binding settings. Their defaults are
 `ENTER` and `BACKSPACE`. Consumers use the PeekPlus actions and must not register
@@ -154,8 +170,9 @@ end)
 PeekPlus locks the card after dispatch so double-clicks and key repeat cannot
 send the same action twice. `GetPeek()` and custom template payloads expose
 `actionInFlightId` while the operation is pending, allowing the triggering
-button to show progress while its siblings remain disabled. After the
-authoritative operation succeeds,
+button to show progress while its siblings remain disabled. A finite card's
+expiry timer is paused while the action is pending and resumes with its
+remaining time when the action settles. After the authoritative operation succeeds,
 update or remove the card. On failure, release the action lock:
 
 ```lua
@@ -202,7 +219,10 @@ exports["services-plus"]:ClearPeekHistory(historyId) -- omit id to clear own his
 A consumer can only access its own cards. Updates advance the card revision
 and reject invalid state transitions. When responding to an action, pass its
 revision and token as shown so a delayed response cannot overwrite or remove a
-newer card state. Both arguments are optional for non-action-driven updates.
+newer card state. Only the matching token produces action-success feedback.
+Both arguments are optional for non-action-driven updates; if one supersedes a
+pending action, the UI lock is cleared neutrally and the old action response is
+rejected by its stale revision. `ReleasePeekAction` requires the matching token.
 Stopping a consumer automatically clears only that consumer's cards.
 `RemovePeek` accepts an optional fourth `reason` argument after revision and
 action token. It is recorded in history and emitted through lifecycle events.

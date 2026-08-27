@@ -2,7 +2,7 @@
 // .full-phone tree and owns LB's native .phoneVisbility peek position. It
 // does not enqueue an LB notification or edit any LB Phone files.
 ;(function () {
-    const CONTROLLER_VERSION = 'peekplus-1.8.0'
+    const CONTROLLER_VERSION = 'peekplus-1.8.2'
     const resourceName = typeof GetParentResourceName === 'function' ? GetParentResourceName() : 'services-plus'
     const OVERLAY_ID = 'services-plus-overlay'
     const STYLE_ID = 'services-plus-overlay-styles'
@@ -707,11 +707,14 @@
         if (payload.layout === 'progress') renderProgress(targetDocument, element, payload.progress)
         if (payload.layout === 'timer') renderTimer(targetDocument, element, payload.timer, payload.id)
         if (payload.layout === 'custom') renderCustomTemplate(targetDocument, element, payload, reusableFrame)
-        if (!Array.isArray(payload.actions) || payload.actions.length === 0) return
+        const visibleActions = Array.isArray(payload.actions)
+            ? payload.actions.filter((action) => action.presentation !== 'tap')
+            : []
+        if (visibleActions.length === 0) return
 
         const buttons = targetDocument.createElement('div')
         buttons.className = 'sp-buttons'
-        payload.actions.forEach((action) => {
+        visibleActions.forEach((action) => {
             const button = targetDocument.createElement('button')
             button.className = `sp-btn ${action.color || 'default'}`
             button.dataset.actionId = action.id
@@ -745,7 +748,15 @@
                     revision: payload.revision,
                     action: action.id,
                 }).then((accepted) => {
-                    if (accepted !== true && button.isConnected) button.disabled = false
+                    if (accepted !== true && button.isConnected) {
+                        button.disabled = false
+                        runAnimation(button, [
+                            { transform: 'translateX(0)' },
+                            { transform: 'translateX(-4px)', offset: .3 },
+                            { transform: 'translateX(4px)', offset: .6 },
+                            { transform: 'translateX(0)' },
+                        ], { duration: 220, easing: 'ease-out' })
+                    }
                 })
             }
             buttons.appendChild(button)
@@ -887,7 +898,7 @@
                 // Cross-origin templates remain interactive, but gestures
                 // must begin on the surrounding PeekPlus card.
             }
-        }, { once: true })
+        })
     }
 
     function installTapAction(card) {
@@ -908,7 +919,15 @@
                 action: payload.tapAction,
                 source: 'tap',
             }).then((accepted) => {
-                if (accepted !== true && card.isConnected) card.dataset.tapPending = 'false'
+                if (accepted !== true && card.isConnected) {
+                    card.dataset.tapPending = 'false'
+                    runAnimation(card, [
+                        { transform: 'translateX(0)' },
+                        { transform: 'translateX(-4px)', offset: .3 },
+                        { transform: 'translateX(4px)', offset: .6 },
+                        { transform: 'translateX(0)' },
+                    ], { duration: 220, easing: 'ease-out' })
+                }
             })
         }
 
@@ -930,7 +949,7 @@
                 // Cross-origin templates can still use the advertised action
                 // endpoint and tapAction from their trusted card payload.
             }
-        }, { once: true })
+        })
     }
 
     function verticalOffset(container, fallback, lockscreen) {

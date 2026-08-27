@@ -428,7 +428,7 @@ local function sanitizeRequestRow(row)
             id = row.company_id,
             job = row.company_job,
             name = row.company_name,
-            icon = row.company_icon,
+            icon = Companies.NormalizeMediaUrl(row.company_icon),
         } or nil,
         requesterNumber = row.requester_number,
         employeeSource = employeeSource,
@@ -519,7 +519,7 @@ function Requests.SuspendActiveForSource(source)
     activeAssignments[source] = nil
 
     if assignment and assignment.requestId then
-        TriggerClientEvent("services-plus:client:requestEnded", source, assignment.requestId)
+        TriggerClientEvent("services-plus:client:requestEnded", source, assignment.requestId, "employee_disconnected")
     end
 
     MySQL.update.await([[
@@ -588,7 +588,7 @@ local function loadJourney(requestId)
         x = tonumber(row.pos_x),
         y = tonumber(row.pos_y),
         companyName = row.company_name or Config.App.name,
-        companyIcon = row.company_icon,
+        companyIcon = Companies.NormalizeMediaUrl(row.company_icon),
         typeIdentifier = row.type_identifier,
         typeName = row.type_name,
         category = row.category_key,
@@ -1163,11 +1163,11 @@ function Requests.Complete(requestId, actorSource)
 
     if before.employeeSource then
         activeAssignments[before.employeeSource] = nil
-        TriggerClientEvent("services-plus:client:requestEnded", before.employeeSource, id)
+        TriggerClientEvent("services-plus:client:requestEnded", before.employeeSource, id, "completed")
     end
     if actorSource and actorSource ~= before.employeeSource then
         activeAssignments[actorSource] = nil
-        TriggerClientEvent("services-plus:client:requestEnded", actorSource, id)
+        TriggerClientEvent("services-plus:client:requestEnded", actorSource, id, "completed")
     end
 
     endCustomerJourney(id, before.requesterNumber, "completed")
@@ -1228,10 +1228,10 @@ function Requests.Cancel(requestId, actorSource)
     clearNotifications(id)
     if before.employeeSource then
         activeAssignments[before.employeeSource] = nil
-        TriggerClientEvent("services-plus:client:requestEnded", before.employeeSource, id)
+        TriggerClientEvent("services-plus:client:requestEnded", before.employeeSource, id, "cancelled")
     end
     if actorSource and actorSource ~= before.employeeSource then
-        TriggerClientEvent("services-plus:client:requestEnded", actorSource, id)
+        TriggerClientEvent("services-plus:client:requestEnded", actorSource, id, "cancelled")
     end
 
     endCustomerJourney(id, before.requesterNumber, "cancelled")
@@ -1342,6 +1342,10 @@ RegisterCallback("getMyRequests", function(source, reply, rawCursor)
     parameters[#parameters + 1] = Config.PageSize.requests
 
     local rows = MySQL.query.await(query, parameters)
+
+    for i = 1, #(rows or {}) do
+        rows[i].company_icon = Companies.NormalizeMediaUrl(rows[i].company_icon)
+    end
 
     reply(rows or {})
 end)
