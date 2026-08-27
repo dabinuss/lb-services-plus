@@ -158,8 +158,20 @@ local function pendingCard(payload)
         sound = true,
         priority = 0,
         actions = {
-            { id = "decline", label = ("Backspace · %s"):format(label(payload, "decline", "Decline")), key = "BACK", color = "danger" },
-            { id = "accept", label = ("Enter · %s"):format(label(payload, "accept", "Accept")), key = "RETURN", color = "success" },
+            {
+                id = "decline",
+                label = ("Backspace · %s"):format(label(payload, "decline", "Decline")),
+                successLabel = label(payload, "declined", "Declined"),
+                key = "BACK",
+                color = "danger",
+            },
+            {
+                id = "accept",
+                label = ("Enter · %s"):format(label(payload, "accept", "Accept")),
+                successLabel = label(payload, "accepted", "Accepted"),
+                key = "RETURN",
+                color = "success",
+            },
         },
     }
 end
@@ -223,6 +235,7 @@ local function activeCard(payload)
             {
                 id = "cancel",
                 label = label(payload, "cancel", "Cancel"),
+                successLabel = label(payload, "cancelled", "Cancelled"),
                 key = "BACK",
                 color = "danger",
                 confirm = { label = label(payload, "confirm", "Confirm?"), timeout = 5000 },
@@ -230,6 +243,7 @@ local function activeCard(payload)
             {
                 id = "complete",
                 label = ("Enter · %s"):format(label(payload, "completeRequest", "Complete request")),
+                successLabel = label(payload, "completed", "Completed"),
                 key = "RETURN",
                 color = "success",
                 confirm = { label = label(payload, "confirmCompletion", "Confirm completion?"), timeout = 5000 },
@@ -420,7 +434,9 @@ PeekPlus.RegisterActionHandler(owner, function(data)
 
     if data.action == "accept" then
         local ok, result = ServerCallback("acceptRequest", id)
-        if not (ok and result) then removeRequest(id, "accept_failed") end
+        if not (ok and result) and PeekPlus.Get(data.id, owner) then
+            PeekPlus.ReleaseAction(data.id, owner, data.actionToken)
+        end
         return
     end
 

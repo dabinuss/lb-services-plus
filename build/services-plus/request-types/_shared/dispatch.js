@@ -101,9 +101,17 @@ window.Dispatch = (function () {
         const armed = payload.card.confirmAction === action.id
         const labels = { decline: 'Decline', accept: 'Accept', cancel: 'Cancel', complete: 'Complete' }
         const b = el('button', `dispatch-btn ${primary ? 'primary' : 'secondary'}`)
+        const inFlight = payload.card.actionInFlightId === action.id
         b.type = 'button'
         b.disabled = payload.card.actionInFlight || payload.presentation.callPriority
-        b.append(icon(primary ? 'check' : 'close'), el('span', null, armed ? (action.confirm?.label || 'Confirm?') : (labels[action.id] || action.label)))
+        if (inFlight) {
+            b.dataset.inFlight = 'true'
+            b.setAttribute('aria-label', action.label)
+            b.setAttribute('aria-busy', 'true')
+            b.appendChild(el('span', 'dispatch-action-spinner'))
+        } else {
+            b.append(icon(primary ? 'check' : 'close'), el('span', null, armed ? (action.confirm?.label || 'Confirm?') : (labels[action.id] || action.label)))
+        }
         b.addEventListener('click', () => {
             b.disabled = true
             runAction(payload, action.id)

@@ -35,10 +35,14 @@ local function overlayLabels(phoneNumber)
         reportedLocation = LForNumber(phoneNumber, "requests.reportedLocation"),
         distance = LForNumber(phoneNumber, "requests.distance"),
         decline = LForNumber(phoneNumber, "requests.decline"),
+        declined = LForNumber(phoneNumber, "requests.declined"),
         accept = LForNumber(phoneNumber, "requests.accept"),
+        accepted = LForNumber(phoneNumber, "requests.accepted"),
         cancel = LForNumber(phoneNumber, "requests.cancel"),
+        cancelled = LForNumber(phoneNumber, "requests.cancelled"),
         confirm = LForNumber(phoneNumber, "requests.confirm"),
         completeRequest = LForNumber(phoneNumber, "requests.completeRequest"),
+        completed = LForNumber(phoneNumber, "requests.completed"),
         confirmCompletion = LForNumber(phoneNumber, "requests.confirmCompletion"),
     }
 end

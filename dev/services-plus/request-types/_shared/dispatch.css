@@ -115,6 +115,14 @@ html, body { width: 100%; margin: 0; padding: 10px 12px; box-sizing: border-box;
 .dispatch-btn.secondary { color: var(--dispatch-text); background: rgba(255, 255, 255, .08); }
 .dispatch-btn.primary { color: var(--dispatch-accent-ink); background: linear-gradient(180deg, rgba(255, 255, 255, 0.12), transparent), var(--dispatch-accent); box-shadow: 0 3px 8px rgba(var(--dispatch-accent-rgb), 0.35); }
 .dispatch-btn:disabled { cursor: default; filter: saturate(.55); opacity: .55; }
+.dispatch-btn[data-in-flight='true'] { filter: none; opacity: 1; }
+.dispatch-action-spinner {
+    width: 15px; height: 15px; box-sizing: border-box; border-radius: 50%;
+    border: 2px solid currentColor; border-right-color: transparent;
+    animation: dispatch-action-spin .7s linear infinite;
+}
+@keyframes dispatch-action-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .dispatch-action-spinner { animation: none; } }
 
 .dispatch-info { margin-top: 7px; display: flex; align-items: center; justify-content: center; gap: 5px; font-size: 10.5px; font-weight: 650; color: var(--dispatch-dim-2); }
 .dispatch-info .dispatch-icon { width: 11px; height: 11px; }

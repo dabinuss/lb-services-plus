@@ -52,7 +52,7 @@ local peekId, err = exports["services-plus"]:ShowPeek({
     dismissible = true,
     actions = {
         { id = "decline", label = "Decline", key = "BACK", color = "danger" },
-        { id = "accept", label = "Accept", key = "RETURN", color = "success" },
+        { id = "accept", label = "Accept", successLabel = "Accepted", key = "RETURN", color = "success" },
     },
 })
 ```
@@ -73,7 +73,8 @@ Card options:
 - `interrupt`: only a strictly higher-priority card may temporarily suspend a
   held card. The held card returns without another sound.
 - `actions`: up to the configured maximum. Version 1 supports the optional
-  keys `RETURN` and `BACK`.
+  keys `RETURN` and `BACK`. An action may provide `successLabel` for the
+  short success confirmation; otherwise its normal label is used.
 - `dismissible`: enables a presentation-only swipe dismissal. With the phone
   closed, swipe the card upward; on the open lockscreen, swipe it horizontally.
   It defaults to `false` so existing interactive cards remain opt-in.
@@ -133,7 +134,10 @@ end)
 ```
 
 PeekPlus locks the card after dispatch so double-clicks and key repeat cannot
-send the same action twice. After the authoritative operation succeeds,
+send the same action twice. `GetPeek()` and custom template payloads expose
+`actionInFlightId` while the operation is pending, allowing the triggering
+button to show progress while its siblings remain disabled. After the
+authoritative operation succeeds,
 update or remove the card. On failure, release the action lock:
 
 ```lua

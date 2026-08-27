@@ -135,6 +135,12 @@ local function validateActions(actions)
         if key and not defaults.allowedKeys[key] then return nil, "invalid_action_key" end
         local color = action.color or "default"
         if not defaults.allowedColors[color] then return nil, "invalid_action_color" end
+        local successLabel, successLabelError = cleanText(
+            action.successLabel,
+            limits.textLimits.actionLabel,
+            false
+        )
+        if successLabelError then return nil, successLabelError end
 
         local confirm = nil
         if action.confirm ~= nil then
@@ -150,7 +156,14 @@ local function validateActions(actions)
             confirm = { label = confirmLabel, timeout = timeout }
         end
 
-        result[index] = { id = id, label = label, key = key, color = color, confirm = confirm }
+        result[index] = {
+            id = id,
+            label = label,
+            successLabel = successLabel,
+            key = key,
+            color = color,
+            confirm = confirm,
+        }
     end
     return result
 end
@@ -349,6 +362,7 @@ local function publicCard(card)
         createdAt = card.createdAt,
         expiresAt = card.expiresAt,
         actionInFlight = card.actionInFlight ~= nil,
+        actionInFlightId = card.actionInFlightId,
         confirmAction = card.confirmAction,
     }
 end
@@ -663,6 +677,7 @@ function PeekPlus.Update(id, patch, owner, expectedRevision, actionToken)
     card.dismissible = nextDismissible == true
     card.revision = card.revision + 1
     card.actionInFlight = nil
+    card.actionInFlightId = nil
     card.confirmAction = nil
     if normalized.duration ~= nil or normalized.hold ~= nil then
         card.suspendedRemaining = nil
@@ -810,6 +825,7 @@ function PeekPlus.ReleaseAction(id, owner, actionToken)
     if actionToken and card.actionInFlight ~= actionToken then return false, "stale_action" end
     local actionFailed = card.actionInFlight ~= nil
     card.actionInFlight = nil
+    card.actionInFlightId = nil
     card.confirmAction = nil
     card.revision = card.revision + 1
     scheduleExpiry(card)
@@ -952,6 +968,7 @@ local function dispatchAction(card, action, confirmed, source)
     nextActionToken = nextActionToken + 1
     local token = ("%s:%d"):format(runtimeId, nextActionToken)
     card.actionInFlight = token
+    card.actionInFlightId = action.id
     card.confirmAction = nil
     local revision = card.revision
     renderVisible(false)

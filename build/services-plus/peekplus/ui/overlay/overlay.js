@@ -2,7 +2,7 @@
 // .full-phone tree and owns LB's native .phoneVisbility peek position. It
 // does not enqueue an LB notification or edit any LB Phone files.
 ;(function () {
-    const CONTROLLER_VERSION = 'peekplus-1.5.0'
+    const CONTROLLER_VERSION = 'peekplus-1.6.0'
     const resourceName = typeof GetParentResourceName === 'function' ? GetParentResourceName() : 'services-plus'
     const OVERLAY_ID = 'services-plus-overlay'
     const STYLE_ID = 'services-plus-overlay-styles'
@@ -349,11 +349,20 @@
         #${OVERLAY_ID} .sp-card[data-appearance='services'] .sp-btn.danger { background: linear-gradient(180deg, #ff5a52, #e63b34); color: #fff; box-shadow: 0 .18rem .5rem rgba(255,69,58,.16); }
         #${OVERLAY_ID} .sp-card[data-appearance='services'] .sp-btn.primary { background: #0a84ff; color: #fff; }
         #${OVERLAY_ID} .sp-btn:disabled { cursor: default; opacity: .55; }
+        #${OVERLAY_ID} .sp-btn[data-in-flight='true'] { opacity: 1; }
+        #${OVERLAY_ID} .sp-action-spinner {
+            display: inline-block; width: .82rem; height: .82rem; box-sizing: border-box;
+            border: .12rem solid currentColor; border-right-color: transparent; border-radius: 50%;
+            animation: peekplus-spin .7s linear infinite;
+        }
+        @keyframes peekplus-spin { to { transform: rotate(360deg); } }
+        @media (prefers-reduced-motion: reduce) { #${OVERLAY_ID} .sp-action-spinner { animation: none; } }
         #${OVERLAY_ID} .sp-btn:active:not(:disabled) { transform: scale(.96); filter: brightness(1.08); }
         #${OVERLAY_ID} .sp-motion-result {
             position: absolute; inset: 0; z-index: 3; display: grid; place-items: center;
             border-radius: inherit; pointer-events: none; color: #fff;
-            background: rgba(18, 22, 27, .42); font-size: 2.1rem; font-weight: 800;
+            background: rgba(18, 22, 27, .68); padding: 1rem; text-align: center;
+            font-size: 1rem; font-weight: 800;
         }
         #${OVERLAY_ID}[data-host='phone'] .sp-card[data-full-card='true'] { max-height: 20rem; }
         /* LB Phone itself uses this (misspelled) wrapper to move the complete
@@ -598,6 +607,7 @@
                 details: payload.details || [],
                 actions: payload.actions || [],
                 actionInFlight: payload.actionInFlight === true,
+                actionInFlightId: payload.actionInFlightId || null,
                 confirmAction: payload.confirmAction,
                 // Milliseconds left before this card auto-expires, measured
                 // against the iframe's own clock (-1 = held/no expiry). Lets
@@ -678,9 +688,23 @@
         payload.actions.forEach((action) => {
             const button = targetDocument.createElement('button')
             button.className = `sp-btn ${action.color || 'default'}`
-            button.textContent = payload.confirmAction === action.id
+            button.dataset.actionId = action.id
+            button.dataset.actionLabel = action.successLabel || action.label
+            const inFlight = payload.actionInFlightId === action.id
+            button.dataset.inFlight = inFlight ? 'true' : 'false'
+            const label = payload.confirmAction === action.id
                 ? action.confirm?.label || 'Confirm?'
                 : action.label
+            if (inFlight) {
+                const spinner = targetDocument.createElement('span')
+                spinner.className = 'sp-action-spinner'
+                spinner.setAttribute('aria-hidden', 'true')
+                button.appendChild(spinner)
+                button.setAttribute('aria-label', action.label)
+                button.setAttribute('aria-busy', 'true')
+            } else {
+                button.textContent = label
+            }
             button.disabled = payload.actionInFlight === true || callHasPriority || isNativeBannerActive()
             button.onclick = () => {
                 if (button.disabled) return
@@ -844,37 +868,61 @@
         return container?.dataset.host === 'lockscreen' ? lockscreen : fallback
     }
 
-    function animateResult(card, motion) {
+    function readActionFeedback(card) {
+        const actionId = card?.dataset.actionInFlightId
+        if (!actionId) return null
+        const button = Array.from(card.querySelectorAll('.sp-btn')).find((entry) => entry.dataset.actionId === actionId)
+        return {
+            id: actionId,
+            label: card.dataset.actionInFlightLabel || button?.dataset.actionLabel || actionId,
+        }
+    }
+
+    function displayActionLabel(value) {
+        return String(value || '').replace(/^(?:enter|return|backspace)\s*·\s*/i, '')
+    }
+
+    function actionFeedbackLabel(payload) {
+        const action = payload.actions?.find((entry) => entry.id === payload.actionInFlightId)
+        return action?.successLabel || action?.label || ''
+    }
+
+    function animateResult(card, motion, feedback) {
         if (motion !== 'action-success' && motion !== 'action-failed') return Promise.resolve()
-        const result = card.ownerDocument.createElement('span')
-        result.className = 'sp-motion-result'
-        result.textContent = motion === 'action-success' ? '✓' : '×'
-        card.appendChild(result)
         const success = motion === 'action-success'
-        const cardFrames = success
-            ? [
-                { transform: 'scale(1)', filter: 'brightness(1)' },
-                { transform: 'scale(1.025)', filter: 'brightness(1.12)', offset: .5 },
-                { transform: 'scale(1)', filter: 'brightness(1)' },
-            ]
-            : [
+        if (!success) {
+            const button = feedback?.id
+                ? Array.from(card.querySelectorAll('.sp-btn')).find((entry) => entry.dataset.actionId === feedback.id)
+                : null
+            return runAnimation(button || card, [
                 { transform: 'translateX(0)' },
                 { transform: 'translateX(-5px)', offset: .3 },
                 { transform: 'translateX(5px)', offset: .6 },
                 { transform: 'translateX(0)' },
-            ]
+            ], { duration: 260, easing: 'ease-out' })
+        }
+
+        const result = card.ownerDocument.createElement('span')
+        result.className = 'sp-motion-result'
+        const label = displayActionLabel(feedback?.label)
+        result.textContent = label ? `✓ ${label}` : '✓'
+        card.appendChild(result)
         const resultAnimation = runAnimation(result, [
             { opacity: 0, transform: 'scale(.7)' },
             { opacity: 1, transform: 'scale(1)', offset: .42 },
             { opacity: 0, transform: 'scale(1.08)' },
-        ], { duration: success ? 320 : 280, easing: 'ease-out' })
+        ], { duration: 520, easing: 'ease-out' })
         return Promise.all([
             resultAnimation,
-            runAnimation(card, cardFrames, { duration: success ? 300 : 260, easing: 'ease-out' }),
+            runAnimation(card, [
+                { transform: 'scale(1)', filter: 'brightness(1)' },
+                { transform: 'scale(1.025)', filter: 'brightness(1.12)', offset: .5 },
+                { transform: 'scale(1)', filter: 'brightness(1)' },
+            ], { duration: 360, easing: 'ease-out' }),
         ]).finally(() => result.remove())
     }
 
-    function animateCardIn(card, container, motion) {
+    function animateCardIn(card, container, motion, feedback) {
         if (!motion) return Promise.resolve()
         if (motion === 'update') {
             return runAnimation(card, [
@@ -882,7 +930,7 @@
                 { opacity: 1, transform: 'translateY(0) scale(1)' },
             ], { duration: 220, easing: 'cubic-bezier(.2,.8,.2,1)' })
         }
-        if (motion === 'action-success' || motion === 'action-failed') return animateResult(card, motion)
+        if (motion === 'action-success' || motion === 'action-failed') return animateResult(card, motion, feedback)
         const distance = motion === 'resume'
             ? verticalOffset(container, -24, -20)
             : verticalOffset(container, -50, -40)
@@ -927,9 +975,10 @@
 
     async function replaceCard(container, card, existingCard, motion, outgoingMotion, sequence) {
         const sameCard = existingCard?.dataset.cardId === card.dataset.cardId
+        const feedback = readActionFeedback(existingCard)
         const previousHeight = sameCard ? existingCard.getBoundingClientRect().height : 0
         if (existingCard && !sameCard) {
-            await animateResult(existingCard, outgoingMotion)
+            await animateResult(existingCard, outgoingMotion, feedback)
             await animateCardOut(existingCard, container, outgoingMotion)
             if (sequence !== motionSequence) return
         }
@@ -946,10 +995,10 @@
         else if (sameCard && motion === 'action-success') {
             await Promise.all([
                 animateCardUpdate(card, container, previousHeight),
-                animateResult(card, motion),
+                animateResult(card, motion, feedback),
             ])
         }
-        else await animateCardIn(card, container, motion)
+        else await animateCardIn(card, container, motion, feedback)
     }
 
     function render() {
@@ -989,14 +1038,17 @@
         if (reusableFullCard) {
             motionSequence += 1
             cancelAnimations(container)
+            const feedback = readActionFeedback(existingCard)
             existingCard.dataset.variant = lastState.card.variant || 'neutral'
             existingCard.dataset.state = lastState.card.state || 'pending'
             existingCard.dataset.template = lastState.card.template || 'default'
             existingCard.dataset.appearance = cardAppearance(lastState.card)
             existingCard.dataset.fullCard = 'true'
             existingCard.dataset.dismissible = lastState.card.dismissible === true ? 'true' : 'false'
+            existingCard.dataset.actionInFlightId = lastState.card.actionInFlightId || ''
+            existingCard.dataset.actionInFlightLabel = actionFeedbackLabel(lastState.card)
             renderCard(container.ownerDocument, existingCard, lastState.card, reusableFrame)
-            animateCardIn(existingCard, container, motion)
+            animateCardIn(existingCard, container, motion, feedback)
             return
         }
 
@@ -1009,6 +1061,8 @@
         card.dataset.cardId = String(lastState.card.id)
         card.dataset.fullCard = lastState.card.templateDefinition?.fullCard === true ? 'true' : 'false'
         card.dataset.dismissible = lastState.card.dismissible === true ? 'true' : 'false'
+        card.dataset.actionInFlightId = lastState.card.actionInFlightId || ''
+        card.dataset.actionInFlightLabel = actionFeedbackLabel(lastState.card)
         renderCard(container.ownerDocument, card, lastState.card, reusableFrame)
         installSwipeGesture(card, container)
         const sequence = ++motionSequence
@@ -1116,7 +1170,7 @@
         const card = container?.querySelector('.sp-card')
         cancelAnimations(container)
         if (!immediate && card) {
-            await animateResult(card, motion)
+            await animateResult(card, motion, readActionFeedback(card))
             await animateCardOut(card, container, motion)
         }
         if (sequence !== motionSequence) return
