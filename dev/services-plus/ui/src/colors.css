@@ -16,24 +16,31 @@
 
   /* Default to dark mode tokens if LB Phone passes an unknown custom theme */
   --sp-bg-primary: #010101; /* Prevent FiveM CEF pure-black chroma-key transparency bug */
-  --sp-bg-secondary: #121214;
-  --sp-bg-highlight: rgb(28, 28, 30);
-  --sp-separator: rgba(84, 84, 88, 0.4);
-  --sp-border-color: #000000;
+  --sp-bg-secondary: #141414;
+  --sp-bg-highlight: #191919;
+  --sp-separator: rgba(150, 150, 150, 0.2);
+  --sp-border-color: rgba(150, 150, 150, 0.2);
   --sp-border-default: 1px solid var(--sp-border-color);
 
   --sp-text-primary: #f2f2f7;
-  --sp-text-secondary: #9a9a9e;
+  --sp-text-secondary: #6f6f6f;
   --sp-text-tertiary: #6f6f6f;
 }
 
 [data-theme='light'] {
-  --sp-bg-primary: #f2f2f7;
+  /* Mirrors LB Phone Settings: #ececec page, white grouped surfaces and
+     borderless controls separated only where the native app uses dividers. */
+  --sp-bg-primary: #ececec;
   --sp-bg-secondary: #ffffff;
-  --sp-bg-highlight: #e9e9ee;
-  --sp-separator: rgba(60, 60, 67, 0.15);
+  --sp-bg-highlight: #f0f0f0;
+  --sp-separator: rgba(200, 200, 200, 0.4);
+  --sp-border-color: transparent;
 
   --sp-text-primary: #000000;
-  --sp-text-secondary: #6b6b70;
-  --sp-text-tertiary: #a5a5aa;
+  --sp-text-secondary: #8e8e93;
+  --sp-text-tertiary: #8e8e93;
+
+  --sp-danger: #ff3b30;
+  --sp-success: #32d74b;
+  --sp-warning: #ff9d0a;
 }

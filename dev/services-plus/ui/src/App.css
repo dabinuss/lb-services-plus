@@ -2415,7 +2415,8 @@ button:disabled {
   opacity: var(--sp-disabled-opacity);
 }
 
-/* Selected controls keep their black border and use fill/outline for state. */
+/* Selected controls use fill/outline for state without forcing an ornamental
+   border onto LB Phone's flat light surfaces. */
 .category-chip.active,
 .language-switcher button.active,
 .nav-item.active {
@@ -2505,7 +2506,7 @@ button:disabled {
   content: '';
   width: var(--sp-icon-lg);
   height: var(--sp-icon-lg);
-  border: 2px solid #000;
+  border: 2px solid var(--sp-border-color);
   border-radius: var(--sp-radius-pill);
   background: var(--sp-accent);
   box-shadow: inset 0 0 0 0.25rem var(--sp-bg-secondary);

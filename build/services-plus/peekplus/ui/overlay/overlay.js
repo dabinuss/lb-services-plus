@@ -2,7 +2,7 @@
 // .full-phone tree and owns LB's native .phoneVisbility peek position. It
 // does not enqueue an LB notification or edit any LB Phone files.
 ;(function () {
-    const CONTROLLER_VERSION = 'peekplus-1.9.1'
+    const CONTROLLER_VERSION = 'peekplus-1.9.2'
     const resourceName = typeof GetParentResourceName === 'function' ? GetParentResourceName() : 'services-plus'
     const OVERLAY_ID = 'services-plus-overlay'
     const STYLE_ID = 'services-plus-overlay-styles'
@@ -507,7 +507,7 @@
             width: 1.25rem;
             height: 1.25rem;
             overflow: hidden;
-            border: 1px solid rgba(255, 255, 255, .45);
+            border: 0;
             border-radius: .3125rem;
             color: var(--phone-text-primary, #fff);
             background: var(--notification-secondary, #39393b);
@@ -630,6 +630,64 @@
         #${OVERLAY_ID} .sp-card[data-appearance='services'] .sp-btn.danger { color: #ff453a; background: var(--controlcentre-opacity2, rgba(127, 127, 127, .22)); box-shadow: none; }
         #${OVERLAY_ID} .sp-btn.primary,
         #${OVERLAY_ID} .sp-card[data-appearance='services'] .sp-btn.primary { color: #0a84ff; background: var(--controlcentre-opacity2, rgba(127, 127, 127, .22)); box-shadow: none; }
+        /* LB Phone's light apps (Settings in particular) use clean white
+           grouped surfaces on #ececec, secondary gray text, and no ornamental
+           outlines. Keep that language for PeekPlus instead of tinting the
+           light card like a dark translucent banner. */
+        #${OVERLAY_ID}[data-theme='light'] .sp-card:not([data-full-card='true']),
+        #${OVERLAY_ID}[data-theme='light'] .sp-card[data-appearance='services']:not([data-full-card='true']),
+        #${OVERLAY_ID}[data-theme='light'] .sp-card[data-appearance='services'][data-state='active']:not([data-full-card='true']) {
+            color: var(--phone-text-primary, #000);
+            background: var(--app-secondary, #fff);
+            border: 0;
+            outline: 0;
+            box-shadow: none;
+            backdrop-filter: none;
+        }
+        #${OVERLAY_ID}[data-theme='light'] .sp-content { background: var(--app-secondary, #fff); }
+        #${OVERLAY_ID}[data-theme='light'] .sp-card-icon {
+            color: var(--phone-text-secondary, #8e8e93);
+            background: var(--phone-color-highlight2, #f0f0f0);
+            border: 0;
+            box-shadow: none;
+        }
+        #${OVERLAY_ID}[data-theme='light'] .sp-avatar-app-icon {
+            color: var(--phone-text-secondary, #8e8e93);
+            background: var(--app-secondary, #fff);
+            border: 0;
+            box-shadow: 0 .08rem .2rem rgba(0, 0, 0, .14);
+        }
+        #${OVERLAY_ID}[data-theme='light'] .sp-time,
+        #${OVERLAY_ID}[data-theme='light'] .sp-sub,
+        #${OVERLAY_ID}[data-theme='light'] .sp-detail-label,
+        #${OVERLAY_ID}[data-theme='light'] .sp-detail-icon {
+            color: var(--phone-text-secondary, #8e8e93);
+            opacity: 1;
+        }
+        #${OVERLAY_ID}[data-theme='light'] .sp-meta { color: var(--phone-text-primary, #000); opacity: .78; }
+        #${OVERLAY_ID}[data-theme='light'] .sp-details.iconic .sp-detail + .sp-detail {
+            border-left: 0;
+            padding-left: 0;
+        }
+        #${OVERLAY_ID}[data-theme='light'] .sp-progress-track { background: var(--phone-color-highlight3, #dcdcdc); }
+        #${OVERLAY_ID}[data-theme='light'] .sp-buttons {
+            background: var(--app-secondary2, #ececec);
+            border: 0;
+            box-shadow: none;
+        }
+        #${OVERLAY_ID}[data-theme='light'] .sp-btn,
+        #${OVERLAY_ID}[data-theme='light'] .sp-btn.default,
+        #${OVERLAY_ID}[data-theme='light'] .sp-btn.success,
+        #${OVERLAY_ID}[data-theme='light'] .sp-btn.danger,
+        #${OVERLAY_ID}[data-theme='light'] .sp-btn.primary,
+        #${OVERLAY_ID}[data-theme='light'] .sp-card[data-appearance='services'] .sp-btn.success,
+        #${OVERLAY_ID}[data-theme='light'] .sp-card[data-appearance='services'] .sp-btn.danger,
+        #${OVERLAY_ID}[data-theme='light'] .sp-card[data-appearance='services'] .sp-btn.primary {
+            background: var(--app-secondary, #fff);
+            border: 0;
+            box-shadow: none;
+        }
+        #${OVERLAY_ID}[data-theme='light'] .sp-thumbnail { border: 0; box-shadow: none; }
         #${OVERLAY_ID}[data-host='phone'] .sp-card[data-full-card='true'] { max-height: 20rem; }
         /* LB Phone itself uses this (misspelled) wrapper to move the complete
            device: closed = 60rem, notification = 45rem. Owning this single
