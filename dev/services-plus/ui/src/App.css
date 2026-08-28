@@ -2822,10 +2822,10 @@ button:disabled {
 
 .message-row .bubble {
   max-width: 100%;
-  padding: 0.62rem 0.86rem;
-  border-radius: 1.15rem;
+  padding: 0.75rem 1rem;
+  border-radius: 1.25rem;
   box-shadow: none;
-  font-size: 0.93rem;
+  font-size: 1.125rem;
   line-height: 1.28;
 }
 
@@ -3048,6 +3048,7 @@ button:disabled {
   min-width: 0;
   height: auto;
   padding: 0.35rem 0;
+  font-size: 1rem;
   background: transparent;
   border: 0;
   border-radius: 0;

@@ -63,26 +63,42 @@ function Messages.Send(company, number, channel, senderNumber, senderType, conte
     local preview = TruncateUtf8(content, 100)
     if not preview then return false end
 
-    local messageId
-    local success = MySQL.startTransaction(function(query)
-        local inserted = query(
+    local insertOk, messageId = pcall(function()
+        return MySQL.insert.await(
             "INSERT INTO phone_services_plus_messages (channel_id, company_id, sender, sender_identifier, sender_type, content, pos_x, pos_y) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             {
                 channel.id, company.id, senderNumber, senderIdentifier or json.null, senderType, content,
                 posX or json.null, posY or json.null,
             }
         )
-        if not inserted or not inserted.insertId then return false end
+    end)
+    messageId = tonumber(messageId)
+    if not insertOk or not messageId or messageId < 1 then return false end
 
-        local updated = query(
+    local updateOk, updated = pcall(function()
+        return MySQL.update.await(
             "UPDATE phone_services_plus_channels SET last_message = ?, archived_by_contact = 0, archived_by_company = 0 WHERE id = ?",
             { preview, channel.id }
         )
-        if not updated then return false end
-
-        messageId = inserted.insertId
     end)
-    if not success or not messageId then return false end
+
+    if not updateOk or updated == nil then
+        -- Keep both records consistent if the second write fails. oxmysql's
+        -- stable transaction API cannot expose the insertId needed below, so
+        -- this compensating delete is preferable to its experimental callback
+        -- transaction API and prevents an orphaned visible message.
+        local cleanupOk, cleaned = pcall(function()
+            return MySQL.update.await(
+                "DELETE FROM phone_services_plus_messages WHERE id = ? AND channel_id = ?",
+                { messageId, channel.id }
+            )
+        end)
+        if not cleanupOk or cleaned == nil then
+            print(("^1[services-plus] Failed to roll back message %d after its channel update failed.^7")
+                :format(messageId))
+        end
+        return false
+    end
 
     local payload = {
         channelId = channel.id,
@@ -157,6 +173,44 @@ for i = 1, #REACTION_EMOJIS do
     REACTION_ALLOWED[REACTION_EMOJIS[i]] = true
 end
 
+local reactionSchemaState = "unknown"
+
+--- Keeps conversations usable when an existing installation has not applied
+--- migration 009 yet. The migration remains the normal upgrade path; this is
+--- an idempotent safety net for servers that update the resource first.
+local function ensureReactionSchema()
+    if reactionSchemaState == "ready" then return true end
+    if reactionSchemaState == "unavailable" then return false end
+
+    if reactionSchemaState == "checking" then
+        while reactionSchemaState == "checking" do Wait(0) end
+        return reactionSchemaState == "ready"
+    end
+
+    reactionSchemaState = "checking"
+    local ok, err = pcall(function()
+        MySQL.query.await([[
+            CREATE TABLE IF NOT EXISTS `phone_services_plus_message_reactions` (
+                `message_id` INT UNSIGNED NOT NULL,
+                `reactor_key` VARCHAR(120) NOT NULL,
+                `emoji` VARCHAR(16) NOT NULL,
+                `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (`message_id`, `reactor_key`, `emoji`),
+                KEY `message_emoji` (`message_id`, `emoji`),
+                CONSTRAINT `fk_sp_msg_reactions_message_id_v009`
+                    FOREIGN KEY (`message_id`) REFERENCES `phone_services_plus_messages` (`id`) ON DELETE CASCADE
+            ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+        ]])
+    end)
+
+    reactionSchemaState = ok and "ready" or "unavailable"
+    if not ok then
+        print(("^3[services-plus] Reactions disabled: migration 009 could not be applied automatically (%s).^7")
+            :format(tostring(err)))
+    end
+    return ok
+end
+
 local function reactionViewerKey(viewerRole, ownerKey)
     if (viewerRole == "customer" or viewerRole == "employee") and ownerKey then
         return viewerRole .. ":" .. ownerKey
@@ -165,6 +219,8 @@ local function reactionViewerKey(viewerRole, ownerKey)
 end
 
 local function reactionSummary(messageId, reactorKey)
+    if not ensureReactionSchema() then return {} end
+
     local rows = MySQL.query.await([[
         SELECT emoji, COUNT(*) AS reaction_count,
                MAX(CASE WHEN reactor_key = ? THEN 1 ELSE 0 END) AS reacted
@@ -205,6 +261,7 @@ local function attachMessageReactions(messages, channelId, reactorKey)
         end
     end
     if not minId or not reactorKey then return end
+    if not ensureReactionSchema() then return end
 
     local rows = MySQL.query.await([[
         SELECT r.message_id, r.emoji, COUNT(*) AS reaction_count,
@@ -1195,6 +1252,7 @@ RegisterCallback("toggleMessageReaction", function(source, reply, rawMessageId, 
     local ownerKey, viewerRole = resolveConversationViewer(source, message.channel_id)
     local reactorKey = reactionViewerKey(viewerRole, ownerKey)
     if not reactorKey then return reply(false) end
+    if not ensureReactionSchema() then return reply(false) end
 
     local removed = MySQL.update.await([[
         DELETE FROM phone_services_plus_message_reactions
