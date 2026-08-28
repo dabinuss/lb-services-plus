@@ -103,6 +103,7 @@ export default function ConversationScreen({ target, incoming, onClose }) {
   // (plan review round 4 §3).
   const [viewerRole, setViewerRole] = useState(target.viewerRole || null)
   const listRef = useRef(null)
+  const sendingRef = useRef(false)
   // Prepending older messages must not trigger the scroll-to-bottom effect
   // below (that's only for "a new message just arrived") - this flag tells
   // that effect to instead restore the pre-prepend scroll offset.
@@ -229,9 +230,11 @@ export default function ConversationScreen({ target, incoming, onClose }) {
   }
 
   const send = async () => {
+    const rawText = text
     const content = text.trim()
-    if (!content || !channelId || sending) return
+    if (!content || !channelId || sendingRef.current) return
 
+    sendingRef.current = true
     setSending(true)
     try {
       const message = await fetchNui('sendMessage', { channelId, content })
@@ -239,7 +242,7 @@ export default function ConversationScreen({ target, incoming, onClose }) {
         setMessagesEnabled(false)
         showToast(t('Messages are disabled for this phone number.'), 'error')
       } else if (message) {
-        setText('')
+        setText((current) => current === rawText ? '' : current)
         setMessages((prev) => [...(prev || []), message])
       } else {
         showToast(t('Message could not be sent.'), 'error')
@@ -247,8 +250,16 @@ export default function ConversationScreen({ target, incoming, onClose }) {
     } catch {
       showToast(t('Message could not be sent.'), 'error')
     } finally {
+      sendingRef.current = false
       setSending(false)
     }
+  }
+
+  const handleComposerKey = (event) => {
+    if (event.key !== 'Enter' || event.nativeEvent?.isComposing) return
+    event.preventDefault()
+    event.stopPropagation()
+    if (event.type === 'keydown' && !event.repeat) send()
   }
 
   const sendLocation = async () => {
@@ -454,9 +465,10 @@ export default function ConversationScreen({ target, incoming, onClose }) {
             placeholder={t(messagesEnabled ? 'Text Message' : 'Messages are disabled for this phone number.')}
             value={text}
             maxLength={1000}
-            disabled={sending || !messagesEnabled}
+            disabled={!messagesEnabled}
             onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && send()}
+            onKeyDown={handleComposerKey}
+            onKeyUp={handleComposerKey}
           />
           {text.trim() && (
             <button className="send-button" onClick={send} disabled={sending || !messagesEnabled} aria-label={t('Send')} aria-busy={sending}>

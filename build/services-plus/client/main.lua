@@ -7,6 +7,37 @@
 
 local resourceName = GetCurrentResourceName()
 local ACTIVE_COMPANY_KVP = "servicesPlusActiveCompany"
+local appRegistered = false
+local registrationLoopActive = false
+local pendingAppMessages = {}
+local lastRegistrationError
+
+local function sendAppMessage(payload)
+    if not appRegistered then
+        if #pendingAppMessages >= 64 then table.remove(pendingAppMessages, 1) end
+        pendingAppMessages[#pendingAppMessages + 1] = payload
+        return false
+    end
+
+    exports["lb-phone"]:SendCustomAppMessage(Config.App.identifier, payload)
+    return true
+end
+
+local function flushAppMessages()
+    if not appRegistered or #pendingAppMessages == 0 then return end
+
+    local queued = pendingAppMessages
+    pendingAppMessages = {}
+    for index = 1, #queued do
+        if not appRegistered then
+            for remaining = index, #queued do
+                pendingAppMessages[#pendingAppMessages + 1] = queued[remaining]
+            end
+            return
+        end
+        exports["lb-phone"]:SendCustomAppMessage(Config.App.identifier, queued[index])
+    end
+end
 
 local function getActiveCompanyId()
     return tonumber(GetResourceKvpString(ACTIVE_COMPANY_KVP))
@@ -21,32 +52,58 @@ local function clearActiveCompanyId()
 end
 
 local function registerApp()
-    local added, errorMessage = exports["lb-phone"]:AddCustomApp({
-        identifier = Config.App.identifier,
+    if appRegistered then return true end
 
-        name = Config.App.name,
-        description = Config.App.description,
-        developer = Config.App.developer,
-        icon = ("https://cfx-nui-%s/ui/dist/icon.svg"):format(resourceName),
+    local exportOk, added, errorMessage = pcall(function()
+        return exports["lb-phone"]:AddCustomApp({
+            identifier = Config.App.identifier,
 
-        defaultApp = Config.App.defaultApp,
-        size = Config.App.size,
+            name = Config.App.name,
+            description = Config.App.description,
+            developer = Config.App.developer,
+            icon = ("https://cfx-nui-%s/ui/dist/icon.svg"):format(resourceName),
 
-        ui = ("%s/ui/dist/index.html"):format(resourceName),
-        fixBlur = true, -- our CSS uses rem/em, not px
-    })
+            defaultApp = Config.App.defaultApp,
+            size = Config.App.size,
 
-    if not added then
-        print(("^1[services-plus] could not register app: %s^7"):format(errorMessage))
+            ui = ("%s/ui/dist/index.html"):format(resourceName),
+            fixBlur = true, -- our CSS uses rem/em, not px
+        })
+    end)
+
+    if not exportOk or not added then
+        local reason = tostring(exportOk and errorMessage or added)
+        if reason ~= lastRegistrationError then
+            print(("^1[services-plus] could not register app: %s; retrying.^7"):format(reason))
+            lastRegistrationError = reason
+        end
+        return false
     end
 
+    appRegistered = true
+    lastRegistrationError = nil
+    flushAppMessages()
+    return true
+end
+
+local function startRegistrationLoop()
+    if registrationLoopActive or appRegistered then return end
+    registrationLoopActive = true
+
+    CreateThread(function()
+        while GetResourceState("lb-phone") == "started" and not appRegistered do
+            if registerApp() then break end
+            Wait(1000)
+        end
+        registrationLoopActive = false
+    end)
 end
 
 -- Realtime delta for an already-open conversation (plan review §15).
 -- SendCustomAppMessage is a client-only export - it always targets the
 -- caller's own NUI - so the server just tells this one client to relay it.
 RegisterNetEvent("services-plus:client:newMessage", function(payload)
-    exports["lb-phone"]:SendCustomAppMessage(Config.App.identifier, {
+    sendAppMessage({
         type = "newMessage",
         channelId = payload.channelId,
         message = payload,
@@ -56,7 +113,7 @@ end)
 -- Same relay pattern, for a colleague's status/hotline change (plan review
 -- round 5 §8) - keeps the Team view in sync without polling.
 RegisterNetEvent("services-plus:client:employeeStateChanged", function(payload)
-    exports["lb-phone"]:SendCustomAppMessage(Config.App.identifier, {
+    sendAppMessage({
         type = "employeeStateChanged",
         member = payload,
     })
@@ -71,14 +128,14 @@ CreateThread(function()
     -- "started" to finish its own boot before registering against it
     -- (plan review round 3 §12).
     Wait(500)
-    registerApp()
+    startRegistrationLoop()
 end)
 
 -- lb-phone forgets dynamically-registered apps across its own restarts.
 AddEventHandler("onResourceStart", function(resource)
     if resource == "lb-phone" then
         Wait(500)
-        registerApp()
+        startRegistrationLoop()
     end
 end)
 
@@ -183,7 +240,7 @@ CreateThread(function()
 end)
 
 RegisterNetEvent("services-plus:client:reactionChanged", function(payload)
-    exports["lb-phone"]:SendCustomAppMessage(Config.App.identifier, {
+    sendAppMessage({
         type = "reactionChanged",
         channelId = payload.channelId,
         messageId = payload.messageId,
@@ -208,7 +265,7 @@ RegisterNetEvent("services-plus:client:employeeDutyChanged", function(payload)
     -- that may still be held from the old job's Busy/Pause/off-duty state.
     syncNativeCompanyCalls(shouldRelease and { release = true, loggedIn = false } or employee)
 
-    exports["lb-phone"]:SendCustomAppMessage(Config.App.identifier, {
+    sendAppMessage({
         type = "employeeDutyChanged",
         employee = employee or false,
         jobChanged = payload and payload.jobChanged == true,
@@ -219,6 +276,10 @@ end)
 -- resource restart, so merely removing the custom app used to leave a
 -- Services+-set ToggleCompanyCalls(false) active until a later state change.
 AddEventHandler("onResourceStop", function(resource)
+    if resource == "lb-phone" then
+        appRegistered = false
+        return
+    end
     if resource ~= resourceName then return end
 
     local prior = getPriorNativeCompanyCalls()
@@ -256,7 +317,7 @@ end)
 -- button until the app is reopened, even though the server already rejects
 -- the action.
 RegisterNetEvent("services-plus:client:companiesChanged", function(payload)
-    exports["lb-phone"]:SendCustomAppMessage(Config.App.identifier, {
+    sendAppMessage({
         type = "companiesChanged",
         companies = payload and payload.companies or nil,
         companyId = payload and payload.companyId or nil,
@@ -379,7 +440,7 @@ RegisterNUICallback("markConversationRead", function(data, cb)
 end)
 
 local function relayRequestQueueChanged(requestId, status, unreadDelta)
-    exports["lb-phone"]:SendCustomAppMessage(Config.App.identifier, {
+    sendAppMessage({
         type = "requestQueueChanged",
         requestId = tonumber(requestId),
         status = status,
@@ -405,7 +466,7 @@ end)
 RegisterNetEvent("services-plus:client:requestUpdated", function(payload)
     local unreadDelta = tonumber(payload and payload.unreadDelta) or 0
     if payload then payload.unreadDelta = nil end
-    exports["lb-phone"]:SendCustomAppMessage(Config.App.identifier, {
+    sendAppMessage({
         type = "requestUpdated",
         request = payload,
         unreadDelta = unreadDelta,
@@ -413,7 +474,7 @@ RegisterNetEvent("services-plus:client:requestUpdated", function(payload)
 end)
 
 RegisterNetEvent("services-plus:client:callChanged", function(payload)
-    exports["lb-phone"]:SendCustomAppMessage(Config.App.identifier, {
+    sendAppMessage({
         type = "callChanged",
         scope = payload and payload.scope or nil,
         unreadDelta = payload and tonumber(payload.unreadDelta) or 0,
@@ -425,7 +486,7 @@ end)
 -- Relay the same arrival to the app as a small realtime delta so the
 -- Company/Requests badges and an already-open request list stay current.
 RegisterNetEvent("services-plus:client:requestNotification", function(payload)
-    exports["lb-phone"]:SendCustomAppMessage(Config.App.identifier, {
+    sendAppMessage({
         type = "newRequest",
         request = payload,
     })
