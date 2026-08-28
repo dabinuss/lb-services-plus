@@ -25,11 +25,13 @@ export default function CompanyCard({ company, categoryName, onCall, onMessage, 
 
   return (
     <div className={`company-card${company.available ? '' : ' unavailable'}`}>
-      <div className="company-banner">
+      <div className={`company-banner${company.background ? ' has-background' : ''}`}>
         {company.background && (
-          <div className="company-banner-bg" style={{ backgroundImage: `url(${company.background})` }} />
+          <>
+            <div className="company-banner-bg" style={{ backgroundImage: `url(${company.background})` }} />
+            <div className="company-banner-scrim" />
+          </>
         )}
-        <div className="company-banner-scrim" />
 
         <div className="company-logo">
           {company.icon ? <img src={company.icon} alt="" /> : <span>{company.name[0]}</span>}

@@ -754,7 +754,12 @@ async function fetchNuiFixture(action, data) {
  */
 export function fetchNui(action, data = {}) {
   if (devMode) return fetchNuiFixture(action, data)
-  return window.fetchNui(action, data)
+  // Explicitly target this resource instead of relying on LB Phone's
+  // automatic custom-app ownership lookup. The app tile can outlive a
+  // dynamic registration across resource/phone restarts; in that stale
+  // state the iframe still opens, but automatic routing sends callbacks to
+  // no resource and the initial bootstrap remains pending forever.
+  return window.fetchNui(action, data, 'services-plus')
 }
 
 export function getSettings() {

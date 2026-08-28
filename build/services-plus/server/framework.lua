@@ -38,15 +38,22 @@ end
 
 Framework.name = detect()
 
+local function frameworkIsStarting()
+    return GetResourceState("es_extended") == "starting"
+        or GetResourceState("qbx_core") == "starting"
+        or GetResourceState("qb-core") == "starting"
+end
+
 CreateThread(function()
-    -- Resource start order is not guaranteed. In auto mode, give an
-    -- explicitly configured framework a short startup window before
-    -- committing to standalone for this resource run.
-    if Config.Framework == "auto" and Framework.name == "standalone" then
-        for _ = 1, 100 do
+    -- Do not impose a blanket startup delay on standalone servers. Only
+    -- wait while a supported framework is actually in its `starting`
+    -- state; a stopped framework must be ordered before Services+ (or set
+    -- explicitly in Config.Framework) instead of delaying every bootstrap.
+    if Config.Framework == "auto" and Framework.name == "standalone" and frameworkIsStarting() then
+        for _ = 1, 20 do
             Wait(100)
             Framework.name = detect()
-            if Framework.name ~= "standalone" then break end
+            if Framework.name ~= "standalone" or not frameworkIsStarting() then break end
         end
     end
 

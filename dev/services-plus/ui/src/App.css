@@ -368,7 +368,6 @@
   align-items: center;
   gap: 0.6rem;
   background-color: var(--sp-bg-highlight);
-  background-image: linear-gradient(135deg, var(--sp-bg-highlight), var(--sp-bg-secondary));
 }
 
 /* Blurred, not a sharp photo directly as the banner's own background - a
@@ -440,17 +439,25 @@
 
 .company-banner-text .company-name {
   font-size: 1rem;
-  color: #fff;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  color: var(--sp-text-primary);
 }
 
 .company-subtitle {
   font-size: 0.72rem;
-  color: rgba(255, 255, 255, 0.85);
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  color: var(--sp-text-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.company-banner.has-background .company-name {
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+
+.company-banner.has-background .company-subtitle {
+  color: rgba(255, 255, 255, 0.85);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
 }
 
 .company-actions-row {
