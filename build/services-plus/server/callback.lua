@@ -34,6 +34,8 @@ local GLOBAL_LIMIT = { capacity = 30, refill = 15 } -- generous burst, ~15/s sus
 local ADMIN_WRITE_LIMIT = { capacity = 10, refill = 2 }
 local ACTION_LIMITS = {
     sendMessage = { capacity = 5, refill = 1 },
+    sendLocation = { capacity = 3, refill = 0.2 },
+    toggleMessageReaction = { capacity = 8, refill = 2 },
     createRequest = { capacity = 3, refill = 0.1 },
     updateCompanySettings = { capacity = 3, refill = 1 },
     updateNumberSettings = { capacity = 3, refill = 1 },

@@ -19,7 +19,12 @@ export default function MessagesTab({ onOpenConversation, onReadConversation, re
   const open = (conversation) => {
     onReadConversation?.(conversation.channel_id, conversation.unread_count)
     setConversations((current) => current?.map((item) => item.channel_id === conversation.channel_id ? { ...item, unread_count: 0 } : item))
-    onOpenConversation({ channelId: conversation.channel_id, title: `${conversation.contact_number} (${conversation.label})` })
+    onOpenConversation({
+      channelId: conversation.channel_id,
+      title: conversation.contact_number,
+      phoneNumber: conversation.contact_number,
+      viewerRole: 'employee',
+    })
   }
 
   return (

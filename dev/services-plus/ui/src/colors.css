@@ -18,6 +18,10 @@
   --sp-bg-primary: #010101; /* Prevent FiveM CEF pure-black chroma-key transparency bug */
   --sp-bg-secondary: #141414;
   --sp-bg-highlight: #191919;
+  --sp-chat-input-bg: #010101;
+  --sp-chat-toolbar-bg: #141414;
+  --sp-chat-action-bg: #333333;
+  --sp-chat-incoming-bg: #212121;
   --sp-separator: rgba(150, 150, 150, 0.2);
   --sp-border-color: rgba(150, 150, 150, 0.2);
   --sp-border-default: 1px solid var(--sp-border-color);
@@ -33,6 +37,10 @@
   --sp-bg-primary: #ececec;
   --sp-bg-secondary: #ffffff;
   --sp-bg-highlight: #f0f0f0;
+  --sp-chat-input-bg: #ffffff;
+  --sp-chat-toolbar-bg: #ececec;
+  --sp-chat-action-bg: #ffffff;
+  --sp-chat-incoming-bg: #ffffff;
   --sp-separator: rgba(200, 200, 200, 0.4);
   --sp-border-color: transparent;
 

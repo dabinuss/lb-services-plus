@@ -30,7 +30,13 @@ export default function MessagesTab({ onOpen, onReadConversation, refreshToken }
   const open = (entry) => {
     onReadConversation?.(entry.channel_id, entry.unread_count)
     setEntries((current) => current?.map((item) => item.channel_id === entry.channel_id ? { ...item, unread_count: 0 } : item))
-    onOpen({ channelId: entry.channel_id, title: entry.company?.name || t('Conversation'), icon: entry.company?.icon })
+    onOpen({
+      channelId: entry.channel_id,
+      numberId: entry.number_id,
+      companyId: entry.company?.id,
+      title: entry.company?.name || t('Conversation'),
+      icon: entry.company?.icon,
+    })
   }
 
   return (

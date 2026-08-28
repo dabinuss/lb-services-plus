@@ -274,7 +274,12 @@ export default function App() {
   }
 
   const openConversationFor = (company, number) => {
-    setConversation({ numberId: number.id, title: `${company.name} (${number.label})`, icon: company.icon })
+    setConversation({
+      numberId: number.id,
+      companyId: company.id,
+      title: company.name,
+      icon: company.icon,
+    })
     setNumberPicker(null)
   }
 

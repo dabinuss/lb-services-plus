@@ -182,6 +182,15 @@ CreateThread(function()
     end
 end)
 
+RegisterNetEvent("services-plus:client:reactionChanged", function(payload)
+    exports["lb-phone"]:SendCustomAppMessage(Config.App.identifier, {
+        type = "reactionChanged",
+        channelId = payload.channelId,
+        messageId = payload.messageId,
+        reactions = payload.reactions,
+    })
+end)
+
 -- Framework-side duty/job changes can happen without going through this
 -- app's NUI callbacks. The server pushes the resulting employee snapshot so
 -- native company calls and an already-open app both follow those external
@@ -275,6 +284,14 @@ end)
 
 RegisterNUICallback("sendMessage", function(data, cb)
     cb(bridge("sendMessage", data.channelId, data.content))
+end)
+
+RegisterNUICallback("sendLocation", function(data, cb)
+    cb(bridge("sendLocation", data.channelId))
+end)
+
+RegisterNUICallback("toggleMessageReaction", function(data, cb)
+    cb(bridge("toggleMessageReaction", data.messageId, data.emoji))
 end)
 
 RegisterNUICallback("getMessages", function(data, cb)

@@ -220,6 +220,13 @@ let fixtureMessages = Array.from({ length: 32 }, (_, i) => {
   }
 })
 
+fixtureMessages[fixtureMessages.length - 4] = {
+  ...fixtureMessages[fixtureMessages.length - 4],
+  content: 'Shared location',
+  x: 428.9,
+  y: -984.5,
+}
+
 // Own conversations across every company, for Activity > Messages.
 let fixtureActivity = [
   {
@@ -504,6 +511,36 @@ async function fetchNuiFixture(action, data) {
       fixtureMessages.push(message)
       const { sender: _sender, ...withoutSender } = message
       return withoutSender
+    }
+    case 'sendLocation': {
+      const message = {
+        id: fixtureMessages.length + 1,
+        sender: fixtures.bootstrap.myNumber,
+        sender_type: 'customer',
+        content: 'Shared location',
+        x: 428.9,
+        y: -984.5,
+        created_at: new Date().toISOString(),
+      }
+      fixtureMessages.push(message)
+      const { sender: _sender, ...withoutSender } = message
+      return withoutSender
+    }
+    case 'toggleMessageReaction': {
+      const message = fixtureMessages.find((item) => item.id === Number(data.messageId))
+      if (!message || !['❤️', '👍', '👎', '😂'].includes(data.emoji)) return false
+      const reactions = [...(message.reactions || [])]
+      const index = reactions.findIndex((reaction) => reaction.emoji === data.emoji)
+      if (index >= 0 && reactions[index].mine) {
+        reactions[index] = { ...reactions[index], count: reactions[index].count - 1, mine: false }
+        if (reactions[index].count <= 0) reactions.splice(index, 1)
+      } else if (index >= 0) {
+        reactions[index] = { ...reactions[index], count: reactions[index].count + 1, mine: true }
+      } else {
+        reactions.push({ emoji: data.emoji, count: 1, mine: true })
+      }
+      message.reactions = reactions
+      return { channelId: 1, messageId: message.id, reactions }
     }
     case 'getActivity':
       return paginateAfter(fixtureActivity, data.cursor, 'channel_id')

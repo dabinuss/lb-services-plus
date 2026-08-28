@@ -45,10 +45,20 @@ end
 ---@param senderType "company"|"customer"
 ---@param content string
 ---@param senderIdentifier string? Stable employee identity; nil for customers/company-level exports
+---@param posX number? Optional server-authoritative shared location
+---@param posY number? Optional server-authoritative shared location
 ---@return table|false
-function Messages.Send(company, number, channel, senderNumber, senderType, content, senderIdentifier)
+function Messages.Send(company, number, channel, senderNumber, senderType, content, senderIdentifier, posX, posY)
     if not IsValidUtf8Length(content, 1, 1000) then return false end
     if not company or not number or not channel or not senderNumber then return false end
+
+    local hasLocation = type(posX) == "number" and type(posY) == "number"
+        and posX == posX and posY == posY
+        and math.abs(posX) <= 100000 and math.abs(posY) <= 100000
+    if not hasLocation then
+        posX = nil
+        posY = nil
+    end
 
     local preview = TruncateUtf8(content, 100)
     if not preview then return false end
@@ -56,8 +66,11 @@ function Messages.Send(company, number, channel, senderNumber, senderType, conte
     local messageId
     local success = MySQL.startTransaction(function(query)
         local inserted = query(
-            "INSERT INTO phone_services_plus_messages (channel_id, company_id, sender, sender_identifier, sender_type, content) VALUES (?, ?, ?, ?, ?, ?)",
-            { channel.id, company.id, senderNumber, senderIdentifier or json.null, senderType, content }
+            "INSERT INTO phone_services_plus_messages (channel_id, company_id, sender, sender_identifier, sender_type, content, pos_x, pos_y) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            {
+                channel.id, company.id, senderNumber, senderIdentifier or json.null, senderType, content,
+                posX or json.null, posY or json.null,
+            }
         )
         if not inserted or not inserted.insertId then return false end
 
@@ -71,7 +84,16 @@ function Messages.Send(company, number, channel, senderNumber, senderType, conte
     end)
     if not success or not messageId then return false end
 
-    local payload = { channelId = channel.id, id = messageId, sender_type = senderType, content = content }
+    local payload = {
+        channelId = channel.id,
+        id = messageId,
+        sender_type = senderType,
+        content = content,
+        created_at = os.date("!%Y-%m-%dT%H:%M:%SZ"),
+        x = posX,
+        y = posY,
+        reactions = {},
+    }
 
     if senderType == "company" then
         local contactSource = ResolvePhoneSource(channel.contact_number)
@@ -127,6 +149,93 @@ function Messages.SendCompanyMessage(companyJob, targetNumber, content)
     if not channel then return false end
 
     return Messages.Send(company, number, channel, number.number, "company", content)
+end
+
+local REACTION_EMOJIS = { "❤️", "👍", "👎", "😂" }
+local REACTION_ALLOWED = {}
+for i = 1, #REACTION_EMOJIS do
+    REACTION_ALLOWED[REACTION_EMOJIS[i]] = true
+end
+
+local function reactionViewerKey(viewerRole, ownerKey)
+    if (viewerRole == "customer" or viewerRole == "employee") and ownerKey then
+        return viewerRole .. ":" .. ownerKey
+    end
+    return nil
+end
+
+local function reactionSummary(messageId, reactorKey)
+    local rows = MySQL.query.await([[
+        SELECT emoji, COUNT(*) AS reaction_count,
+               MAX(CASE WHEN reactor_key = ? THEN 1 ELSE 0 END) AS reacted
+        FROM phone_services_plus_message_reactions
+        WHERE message_id = ?
+        GROUP BY emoji
+    ]], { reactorKey, messageId })
+
+    local byEmoji = {}
+    for i = 1, #(rows or {}) do
+        byEmoji[rows[i].emoji] = {
+            emoji = rows[i].emoji,
+            count = tonumber(rows[i].reaction_count) or 0,
+            mine = DatabaseBoolean(rows[i].reacted),
+        }
+    end
+
+    local reactions = {}
+    for i = 1, #REACTION_EMOJIS do
+        local reaction = byEmoji[REACTION_EMOJIS[i]]
+        if reaction and reaction.count > 0 then reactions[#reactions + 1] = reaction end
+    end
+    return reactions
+end
+
+local function attachMessageReactions(messages, channelId, reactorKey)
+    if not messages or #messages == 0 then return end
+
+    local byId = {}
+    local minId, maxId
+    for i = 1, #messages do
+        local messageId = tonumber(messages[i].id)
+        messages[i].reactions = {}
+        if messageId then
+            byId[messageId] = messages[i]
+            minId = not minId and messageId or math.min(minId, messageId)
+            maxId = not maxId and messageId or math.max(maxId, messageId)
+        end
+    end
+    if not minId or not reactorKey then return end
+
+    local rows = MySQL.query.await([[
+        SELECT r.message_id, r.emoji, COUNT(*) AS reaction_count,
+               MAX(CASE WHEN r.reactor_key = ? THEN 1 ELSE 0 END) AS reacted
+        FROM phone_services_plus_message_reactions r
+        JOIN phone_services_plus_messages m ON m.id = r.message_id
+        WHERE m.channel_id = ? AND r.message_id BETWEEN ? AND ?
+        GROUP BY r.message_id, r.emoji
+    ]], { reactorKey, channelId, minId, maxId })
+
+    local grouped = {}
+    for i = 1, #(rows or {}) do
+        local messageId = tonumber(rows[i].message_id)
+        if byId[messageId] and REACTION_ALLOWED[rows[i].emoji] then
+            grouped[messageId] = grouped[messageId] or {}
+            grouped[messageId][rows[i].emoji] = {
+                emoji = rows[i].emoji,
+                count = tonumber(rows[i].reaction_count) or 0,
+                mine = DatabaseBoolean(rows[i].reacted),
+            }
+        end
+    end
+
+    for messageId, reactionsByEmoji in pairs(grouped) do
+        local ordered = {}
+        for i = 1, #REACTION_EMOJIS do
+            local reaction = reactionsByEmoji[REACTION_EMOJIS[i]]
+            if reaction and reaction.count > 0 then ordered[#ordered + 1] = reaction end
+        end
+        byId[messageId].reactions = ordered
+    end
 end
 
 -- ---------------------------------------------------------------------------
@@ -894,9 +1003,10 @@ RegisterCallback("openConversation", function(source, reply, numberId, page)
     -- number for no reason. Still stored in the table itself for
     -- logging/audit, just never read back out to a client.
     local messages = MySQL.query.await(
-        "SELECT id, sender_type, content, created_at FROM phone_services_plus_messages WHERE channel_id = ? ORDER BY created_at DESC, id DESC LIMIT ?, ?",
+        "SELECT id, sender_type, content, pos_x AS x, pos_y AS y, created_at FROM phone_services_plus_messages WHERE channel_id = ? ORDER BY created_at DESC, id DESC LIMIT ?, ?",
         { channel.id, ClampPage(page) * Config.PageSize.messages, Config.PageSize.messages }
     )
+    attachMessageReactions(messages, channel.id, reactionViewerKey("customer", contactNumber))
 
     -- Always the customer here - a fresh/reopened conversation only ever
     -- starts from openConversation(numberId) on the customer's own side,
@@ -911,24 +1021,20 @@ RegisterCallback("openConversation", function(source, reply, numberId, page)
     })
 end)
 
-RegisterCallback("sendMessage", function(source, reply, channelId, content)
-    if not IsValidUtf8Length(content, 1, 1000) then
-        return reply(false)
-    end
-
+local function resolveMessageSender(source, channelId)
     local channel = MySQL.single.await("SELECT * FROM phone_services_plus_channels WHERE id = ?", { channelId })
-    if not channel then return reply(false) end
+    if not channel then return nil end
 
     local number = MySQL.single.await("SELECT * FROM phone_services_plus_numbers WHERE id = ?", { channel.number_id })
-    if not number then return reply(false) end
+    if not number then return nil end
     if not DatabaseBoolean(number.enabled) or not DatabaseBoolean(number.messages_enabled)
         or not DatabaseBoolean(number.mailbox_enabled) then
-        return reply({ error = "messages_disabled" })
+        return nil, "messages_disabled"
     end
 
     local company = Companies.GetById(number.company_id)
     if not company or not DatabaseBoolean(company.admin_messages_allowed) then
-        return reply({ error = "messages_disabled" })
+        return nil, "messages_disabled"
     end
 
     local senderNumber = Framework.GetPhoneNumber(source)
@@ -939,7 +1045,7 @@ RegisterCallback("sendMessage", function(source, reply, channelId, content)
     -- the company, sails straight through to the INSERT with `sender` bound
     -- to SQL NULL - a constraint violation the caller never sees a clean
     -- `false` for, just a generic server_error.
-    if not senderNumber then return reply(false) end
+    if not senderNumber then return nil end
 
     local isEmployee = senderNumber ~= channel.contact_number
 
@@ -949,12 +1055,12 @@ RegisterCallback("sendMessage", function(source, reply, channelId, content)
 
         if not job or job.name ~= company.job or not Employees.IsLoggedIn(source, company.id)
             or not Framework.GetOnDuty(source) then
-            return reply(false)
+            return nil
         end
     elseif not Config.MessageOffline and not Companies.IsAvailable(company.id) then
         -- Same rule as openConversation (plan review round 4 §6) - only
         -- gates the customer sending in, not an employee replying.
-        return reply(false)
+        return nil
     end
 
     -- The customer's own personal number used to be the only signal the UI
@@ -964,9 +1070,49 @@ RegisterCallback("sendMessage", function(source, reply, channelId, content)
     -- every other client in that chat (plan review round 4 §3). sender is
     -- kept for logging/debugging, sender_type is what the UI actually uses.
     local senderType = isEmployee and "company" or "customer"
-
     local senderIdentifier = isEmployee and Framework.GetIdentifier(source) or nil
-    reply(Messages.Send(company, number, channel, senderNumber, senderType, content, senderIdentifier))
+
+    return {
+        company = company,
+        number = number,
+        channel = channel,
+        senderNumber = senderNumber,
+        senderType = senderType,
+        senderIdentifier = senderIdentifier,
+    }
+end
+
+RegisterCallback("sendMessage", function(source, reply, channelId, content)
+    if not IsValidUtf8Length(content, 1, 1000) then
+        return reply(false)
+    end
+
+    local context, reason = resolveMessageSender(source, channelId)
+    if reason == "messages_disabled" then return reply({ error = reason }) end
+    if not context then return reply(false) end
+
+    reply(Messages.Send(
+        context.company, context.number, context.channel, context.senderNumber,
+        context.senderType, content, context.senderIdentifier
+    ))
+end)
+
+RegisterCallback("sendLocation", function(source, reply, channelId)
+    local context, reason = resolveMessageSender(source, channelId)
+    if reason == "messages_disabled" then return reply({ error = reason }) end
+    if not context then return reply(false) end
+
+    local ped = GetPlayerPed(source)
+    if not ped or ped <= 0 then return reply(false) end
+
+    local coords = GetEntityCoords(ped)
+    local x, y = coords and tonumber(coords.x), coords and tonumber(coords.y)
+    if not x or not y or x ~= x or y ~= y then return reply(false) end
+
+    reply(Messages.Send(
+        context.company, context.number, context.channel, context.senderNumber,
+        context.senderType, "Shared location", context.senderIdentifier, x, y
+    ))
 end)
 
 -- `beforeId`, not a page number (plan review round 5 §6): OFFSET-based
@@ -995,12 +1141,12 @@ RegisterCallback("getMessages", function(source, reply, channelId, beforeId)
 
     if cursorId then
         messages = MySQL.query.await(
-            "SELECT id, sender_type, content, created_at FROM phone_services_plus_messages WHERE channel_id = ? AND id < ? ORDER BY id DESC LIMIT ?",
+            "SELECT id, sender_type, content, pos_x AS x, pos_y AS y, created_at FROM phone_services_plus_messages WHERE channel_id = ? AND id < ? ORDER BY id DESC LIMIT ?",
             { channelId, cursorId, Config.PageSize.messages }
         )
     else
         messages = MySQL.query.await(
-            "SELECT id, sender_type, content, created_at FROM phone_services_plus_messages WHERE channel_id = ? ORDER BY id DESC LIMIT ?",
+            "SELECT id, sender_type, content, pos_x AS x, pos_y AS y, created_at FROM phone_services_plus_messages WHERE channel_id = ? ORDER BY id DESC LIMIT ?",
             { channelId, Config.PageSize.messages }
         )
     end
@@ -1011,6 +1157,9 @@ RegisterCallback("getMessages", function(source, reply, channelId, beforeId)
     -- than the one who actually sent it opened the same company chat (plan
     -- review round 4 §3).
     local viewerRole = myNum == channel.contact_number and "customer" or "employee"
+    local reactionOwner = viewerRole == "customer" and myNum or Framework.GetIdentifier(source)
+    local reactorKey = reactionViewerKey(viewerRole, reactionOwner)
+    attachMessageReactions(messages, channelId, reactorKey)
     local messagesEnabled = number ~= nil and company ~= nil
         and DatabaseBoolean(number.enabled)
         and DatabaseBoolean(number.messages_enabled)
@@ -1026,6 +1175,77 @@ RegisterCallback("getMessages", function(source, reply, channelId, beforeId)
     })
 end)
 
+RegisterCallback("toggleMessageReaction", function(source, reply, rawMessageId, emoji)
+    local messageId = tonumber(rawMessageId)
+    if not messageId or messageId ~= math.floor(messageId) or messageId < 1
+        or type(emoji) ~= "string" or not REACTION_ALLOWED[emoji] then
+        return reply(false)
+    end
+
+    local message = MySQL.single.await([[
+        SELECT m.id, m.channel_id, c.contact_number, n.company_id
+        FROM phone_services_plus_messages m
+        JOIN phone_services_plus_channels c ON c.id = m.channel_id
+        JOIN phone_services_plus_numbers n ON n.id = c.number_id
+        WHERE m.id = ?
+    ]], { messageId })
+    if not message then return reply(false) end
+
+    local company = Companies.GetById(message.company_id)
+    local ownerKey, viewerRole = resolveConversationViewer(source, message.channel_id)
+    local reactorKey = reactionViewerKey(viewerRole, ownerKey)
+    if not reactorKey then return reply(false) end
+
+    local removed = MySQL.update.await([[
+        DELETE FROM phone_services_plus_message_reactions
+        WHERE message_id = ? AND reactor_key = ? AND emoji = ?
+    ]], { messageId, reactorKey, emoji })
+
+    if not removed or removed == 0 then
+        MySQL.insert.await([[
+            INSERT IGNORE INTO phone_services_plus_message_reactions (message_id, reactor_key, emoji)
+            VALUES (?, ?, ?)
+        ]], { messageId, reactorKey, emoji })
+    end
+
+    local payload = {
+        channelId = tonumber(message.channel_id),
+        messageId = messageId,
+        reactions = reactionSummary(messageId, reactorKey),
+    }
+
+    local contactSource = ResolvePhoneSource(message.contact_number)
+    if contactSource and contactSource ~= source then
+        local customerKey = reactionViewerKey("customer", message.contact_number)
+        local customerPayload = {
+            channelId = payload.channelId,
+            messageId = messageId,
+            reactions = reactionSummary(messageId, customerKey),
+        }
+        TriggerClientEvent("services-plus:client:reactionChanged", contactSource, customerPayload)
+    end
+
+    if company then
+        local staff = Framework.GetPlayersByJob(company.job)
+        for i = 1, #staff do
+            local staffSource = staff[i]
+            if staffSource ~= source and Employees.IsLoggedIn(staffSource, company.id)
+                and Framework.GetOnDuty(staffSource) then
+                local staffKey = reactionViewerKey("employee", Framework.GetIdentifier(staffSource))
+                if staffKey then
+                    TriggerClientEvent("services-plus:client:reactionChanged", staffSource, {
+                        channelId = payload.channelId,
+                        messageId = messageId,
+                        reactions = reactionSummary(messageId, staffKey),
+                    })
+                end
+            end
+        end
+    end
+
+    reply(payload)
+end)
+
 -- ---------------------------------------------------------------------------
 -- Activity (plan §39-41): a compact personal history, own conversations only.
 -- ---------------------------------------------------------------------------
@@ -1035,7 +1255,7 @@ RegisterCallback("getActivity", function(source, reply, rawCursor)
 
     local cursor = NormalizeListCursor(rawCursor)
     local query = [[
-        SELECT c.id AS channel_id, c.last_message, c.updated_at,
+        SELECT c.id AS channel_id, c.number_id, c.last_message, c.updated_at,
                UNIX_TIMESTAMP(c.updated_at) AS cursor_time, n.company_id, n.label,
                (
                    SELECT COUNT(*) FROM phone_services_plus_messages m

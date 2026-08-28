@@ -137,6 +137,19 @@ CREATE TABLE IF NOT EXISTS `phone_services_plus_messages` (
     FOREIGN KEY (`channel_id`) REFERENCES `phone_services_plus_channels`(`id`) ON DELETE CASCADE
 ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
+-- Emoji reactions are separate from message content so they can be toggled
+-- independently and counted without rewriting the original message row.
+CREATE TABLE IF NOT EXISTS `phone_services_plus_message_reactions` (
+    `message_id` INT UNSIGNED NOT NULL,
+    `reactor_key` VARCHAR(120) NOT NULL,
+    `emoji` VARCHAR(16) NOT NULL,
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (`message_id`, `reactor_key`, `emoji`),
+    KEY `message_emoji` (`message_id`, `emoji`),
+    FOREIGN KEY (`message_id`) REFERENCES `phone_services_plus_messages`(`id`) ON DELETE CASCADE
+) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
 -- Call history (plan §38). Populated passively from lb-phone's own
 -- lb-phone:newCall/callAnswered/callEnded events (see server/calls.lua) -
 -- Services+ never places calls itself, it only logs the ones it resolved a

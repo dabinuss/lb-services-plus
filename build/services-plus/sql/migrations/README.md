@@ -21,6 +21,8 @@ that has not yet been applied:
    presentation icons and enforces their uniqueness.
 8. `008_billable_service_tracking.sql` starts fare calculation at the actual
    service phase and stores sampled journey distance.
+9. `009_message_reactions.sql` adds persistent per-user emoji reactions to
+   Services+ messages.
 
 Unread activity events deliberately have no age-only cleanup; see
 `UNREAD_RETENTION.md` before adding a retention job.
